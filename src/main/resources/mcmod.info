@@ -1,0 +1,22 @@
+[
+	{
+		"modid": "ghosttap",
+		"name": "GhostTap",
+		"description": "An easy-to-use auto clicker focused on customization and undetectable performance",
+		"version": "${version}",
+		"mcversion": "${mcversion}",
+		"url": "",
+		"updateUrl": "",
+		"authorList": [
+			"IcySnex"
+		],
+		"credits": "",
+		"logoFile": "",
+		"screenshots": [
+
+		],
+		"dependencies": [
+
+		]
+	}
+]
