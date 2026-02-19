@@ -3,15 +3,21 @@ buildscript {
         mavenCentral()
         maven {
             name = "forge"
-            url = 'https://maven.minecraftforge.net/'
+            url = "https://maven.minecraftforge.net/"
+        }
+        maven {
+            url "https://repo.spongepowered.org/maven"
         }
     }
     dependencies {
-        classpath 'net.minecraftforge.gradle:ForgeGradle:2.1-SNAPSHOT'
+        classpath "net.minecraftforge.gradle:ForgeGradle:2.1-SNAPSHOT"
     }
 }
-apply plugin: 'net.minecraftforge.gradle.forge'
+apply plugin: "net.minecraftforge.gradle.forge"
+apply plugin: "java"
 
+
+// Project info
 version = "1.0"
 group = "com.icysnex.voidtap"
 archivesBaseName = "VoidTap"
@@ -19,6 +25,8 @@ archivesBaseName = "VoidTap"
 sourceCompatibility = 1.8
 targetCompatibility = 1.8
 
+
+// Forge setup
 minecraft {
     version = "1.8.9-11.15.1.2318-1.8.9"
     runDir = "run"
@@ -26,17 +34,44 @@ minecraft {
     makeObfSourceJar = false
 }
 
+repositories {
+    maven {
+        url "https://repo.spongepowered.org/maven/"
+    }
+}
+
 dependencies {
+    compile "org.spongepowered:mixin:0.7.10-SNAPSHOT"
 }
 
 processResources {
     inputs.property "version", project.version
     inputs.property "mcversion", project.minecraft.version
+
     from(sourceSets.main.resources.srcDirs) {
         include 'mcmod.info'
         expand 'version': project.version, 'mcversion': project.minecraft.version
     }
+
     from(sourceSets.main.resources.srcDirs) {
         exclude 'mcmod.info'
     }
 }
+
+jar {
+    manifest {
+        attributes(
+                "FMLCorePlugin": "com.icysnex.ghosttap.mixin.MixinLoader",
+                "ModSide": "CLIENT",
+                "ForceLoadAsMod": true,
+                "FMLCorePluginContainsFMLMod": true
+        )
+    }
+}
+
+task copyModsToRun(type: Copy) {
+    from "build/libs"
+    into "run/mods"
+    include "*.jar"
+}
+copyModsToRun.dependsOn build
