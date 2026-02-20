@@ -1,6 +1,7 @@
 package com.icysnex.ghosttap.events;
 
-import com.icysnex.ghosttap.core.MouseInput;
+import com.icysnex.ghosttap.core.Clicker;
+import com.icysnex.ghosttap.core.InputMouse;
 import net.minecraft.client.settings.KeyBinding;
 import net.minecraftforge.fml.client.registry.ClientRegistry;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
@@ -26,14 +27,16 @@ public class ExampleKeybindListener {
         // Check ON key
         boolean isOnPressed = onKeybind.isPressed();
         if (isOnPressed && !wasOnPressed) {
-            MouseInput.keyDown(0);
+//            InputMouse.downLeft();
+            Clicker.setEnabled(true);
         }
         wasOnPressed = isOnPressed;
 
         // Check OFF key
         boolean isOffPressed = offKeybind.isPressed();
         if (isOffPressed && !wasOffPressed) {
-            MouseInput.keyUp(0);
+//            InputMouse.upLeft();
+            Clicker.setEnabled(false);
         }
         wasOffPressed = isOffPressed;
     }

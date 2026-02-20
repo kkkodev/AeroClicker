@@ -5,7 +5,9 @@
 	"refmap": "mixin.ghosttap.refmap.json",
 	"compatibilityLevel": "JAVA_8",
 	"client": [
-		"MixinLwjglInputMouse"
+		"MixinLwjglInputMouseAccessor",
+		"MixinLwjglInputMouseInject",
+		"MixinMinecraft"
 	],
 	"injectors": {
 		"defaultRequire": 1
