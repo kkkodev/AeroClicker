@@ -9,3 +9,7 @@ out
 build
 run
 .gradle
+
+# tools
+tools/analytics/*.csv
+tools/plots/*.png
