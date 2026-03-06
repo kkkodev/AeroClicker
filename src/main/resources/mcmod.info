@@ -2,7 +2,7 @@
 	{
 		"modid": "ghosttap",
 		"name": "GhostTap",
-		"description": "An easy-to-use auto clicker focused on customization and undetectable performance",
+		"description": "A lightweight internal auto‑clicker focused on customization and undetectability",
 		"version": "${version}",
 		"mcversion": "${mcversion}",
 		"url": "",
