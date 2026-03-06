@@ -3,7 +3,7 @@ package com.icysnex.ghosttap;
 import com.icysnex.ghosttap.commands.ExampleCommand;
 import com.icysnex.ghosttap.config.ConfigHandler;
 import com.icysnex.ghosttap.events.ExampleKeybindListener;
-import com.icysnex.ghosttap.hud.ExampleHUD;
+import com.icysnex.ghosttap.hud.ClickerHUD;
 import net.minecraftforge.client.ClientCommandHandler;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.Mod;
@@ -29,6 +29,6 @@ public class GhostTap {
         ClientCommandHandler.instance.registerCommand(new ExampleCommand());
 
         MinecraftForge.EVENT_BUS.register(new ExampleKeybindListener());
-        MinecraftForge.EVENT_BUS.register(new ExampleHUD());
+        MinecraftForge.EVENT_BUS.register(new ClickerHUD());
     }
 }
