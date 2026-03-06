@@ -4,9 +4,11 @@ import com.icysnex.ghosttap.core.InputMouse;
 import org.lwjgl.input.Mouse;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.nio.ByteBuffer;
 
@@ -16,41 +18,88 @@ public abstract class MixinLwjglInputMouseInject {
     @Shadow(remap = false)
     private static ByteBuffer buttons;
 
-    private static byte prevRealLeft = InputMouse.BUTTON_UP;
-    private static byte prevRealRight = InputMouse.BUTTON_UP;
+    @Unique
+    private static byte ghostTap$prevRealLeft = InputMouse.STATE_UP;
+    @Unique
+    private static byte ghostTap$prevRealRight = InputMouse.STATE_UP;
 
     @Inject(method = "poll", at = @At("RETURN"), remap = false)
     private static void afterPoll(CallbackInfo ci) {
-        // 1. Process LEFT Click (Index 0)
+        // Left
         final byte realLeft = buttons.get(0);
 
-        byte combinedLeft = (byte)(realLeft | InputMouse.spoofedLeft);
-        if (prevRealLeft == InputMouse.BUTTON_DOWN && realLeft == InputMouse.BUTTON_UP) {
-            combinedLeft = InputMouse.BUTTON_UP;
+        byte currentSpoofLeft = InputMouse.spoofedLeft;
+        if (InputMouse.pollLeftLatch.getAndSet(false)) {
+            currentSpoofLeft = InputMouse.STATE_DOWN;
+        }
 
-            if (InputMouse.spoofedLeft == InputMouse.BUTTON_DOWN)
+        byte combinedLeft = (byte)(realLeft | currentSpoofLeft);
+
+        if (ghostTap$prevRealLeft == InputMouse.STATE_DOWN && realLeft == InputMouse.STATE_UP) {
+            combinedLeft = InputMouse.STATE_UP;
+
+            if (InputMouse.spoofedLeft == InputMouse.STATE_DOWN)
                 InputMouse.upLeft();
+
+            InputMouse.pollLeftLatch.set(false);
         }
 
         if (realLeft != combinedLeft)
             buttons.put(0, combinedLeft);
-        prevRealLeft = realLeft;
+        ghostTap$prevRealLeft = realLeft;
 
-        // 2. Process RIGHT Click (Index 1)
+        // Right
         final byte realRight = buttons.get(1);
 
-        byte combinedRight = (byte)(realRight | InputMouse.spoofedRight);
-        if (prevRealRight == InputMouse.BUTTON_DOWN && realRight == InputMouse.BUTTON_UP) {
-            combinedRight = InputMouse.BUTTON_UP;
+        byte currentSpoofRight = InputMouse.spoofedRight;
+        if (InputMouse.pollRightLatch.getAndSet(false)) {
+            currentSpoofRight = InputMouse.STATE_DOWN;
+        }
 
-            if (InputMouse.spoofedRight == InputMouse.BUTTON_DOWN)
+        byte combinedRight = (byte)(realRight | currentSpoofRight);
+
+        if (ghostTap$prevRealRight == InputMouse.STATE_DOWN && realRight == InputMouse.STATE_UP) {
+            combinedRight = InputMouse.STATE_UP;
+
+            if (InputMouse.spoofedRight == InputMouse.STATE_DOWN)
                 InputMouse.upRight();
+
+            InputMouse.pollRightLatch.set(false);
         }
 
         if (realRight != combinedRight)
             buttons.put(1, combinedRight);
-        prevRealRight = realRight;
+        ghostTap$prevRealRight = realRight;
+    }
 
+
+    @Shadow(remap = false)
+    private static ByteBuffer readBuffer;
+
+    @Inject(method = "next", at = @At("HEAD"), remap = false)
+    private static void onNext(CallbackInfoReturnable<Boolean> cir) {
+        InputMouse.Event event = InputMouse.pendingEvents.poll();
+        if (event == null)
+            return;
+
+        // Save old position
+        int oldPos = readBuffer.position();
+
+        // Write at end
+        readBuffer.position(readBuffer.limit());
+        readBuffer.limit(readBuffer.capacity());
+
+        readBuffer.put(event.button);
+        readBuffer.put(event.state);
+
+        readBuffer.putInt(Mouse.getX());
+        readBuffer.putInt(Mouse.getY());
+
+        readBuffer.putInt(0);
+        readBuffer.putLong(System.nanoTime());
+
+        // restore for reading
+        readBuffer.limit(readBuffer.position());
+        readBuffer.position(oldPos);
     }
 }
-
