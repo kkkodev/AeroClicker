@@ -51,10 +51,10 @@ public class GuiGhostTap extends GuiScreen {
         contentX = left + 12;
         contentW = PANEL_W - 24;
         contentTop = top + TITLE_H + TAB_H + 4;
-        // Viewport reaches near the bottom border; the breathing gap is added only
-        // as trailing scroll room (BOTTOM_PAD), so it shows when scrolled to the
-        // end without shrinking the usable area.
-        contentBottom = top + PANEL_H - 4;
+        // Viewport reaches the bottom edge (no fixed margin); the breathing gap is
+        // added only as trailing scroll room (BOTTOM_PAD), so it shows when
+        // scrolled to the end without shrinking the usable area.
+        contentBottom = top + PANEL_H;
         contentH = contentBottom - contentTop;
 
         tabRows.clear();
@@ -76,7 +76,7 @@ public class GuiGhostTap extends GuiScreen {
         r.add(slider("Std deviation", 0, 6, 2, false,
                 "How much the speed randomly varies around the Mean.\nHigher = more human, less consistent.",
                 () -> c.cpsStandardDeviation, v -> c.cpsStandardDeviation = v));
-        r.add(slider("Min", 1, 25, 1, false,
+        r.add(slider("Min", 1, 30, 1, false,
                 "Lowest allowed click speed. Pushes Max and Mean up if needed.",
                 () -> c.cpsMin, v -> { c.cpsMin = v; if (c.cpsMax < v) c.cpsMax = v; if (c.cpsMean < v) c.cpsMean = v; }));
         r.add(slider("Max", 1, 30, 1, false,
@@ -115,7 +115,7 @@ public class GuiGhostTap extends GuiScreen {
         r.add(slider("Std deviation", 0, 30, 1, false,
                 "How much the hold time randomly varies.",
                 () -> c.holdMsStandardDeviation, v -> c.holdMsStandardDeviation = v));
-        r.add(slider("Min", 1, 150, 1, false,
+        r.add(slider("Min", 1, 200, 1, false,
                 "Shortest allowed hold time (ms).",
                 () -> c.holdMsMin, v -> { c.holdMsMin = v; if (c.holdMsMax < v) c.holdMsMax = v; if (c.holdMsMean < v) c.holdMsMean = v; }));
         r.add(slider("Max", 1, 200, 1, false,
@@ -126,7 +126,7 @@ public class GuiGhostTap extends GuiScreen {
         r.add(slider("Chance", 0, 0.2, 1, true,
                 "Chance per click of an occasional extra-long hold.",
                 () -> c.holdMsHeavyChance, v -> c.holdMsHeavyChance = v));
-        r.add(slider("Min", 0, 60, 1, false,
+        r.add(slider("Min", 0, 80, 1, false,
                 "Smallest extra time a heavy hold adds (ms).",
                 () -> c.holdMsHeavyMin, v -> { c.holdMsHeavyMin = v; if (c.holdMsHeavyMax < v) c.holdMsHeavyMax = v; }));
         r.add(slider("Max", 0, 80, 1, false,
