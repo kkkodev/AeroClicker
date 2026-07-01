@@ -3,6 +3,7 @@ package com.icysnex.ghosttap.mixin;
 import com.icysnex.ghosttap.core.Clicker;
 import com.icysnex.ghosttap.core.Cps;
 import com.icysnex.ghosttap.core.InputMouse;
+import net.minecraft.client.Minecraft;
 import org.lwjgl.input.Mouse;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -39,6 +40,10 @@ public abstract class MixinLwjglInputMouseInject {
 
     @Inject(method = "poll", at = @At("RETURN"), remap = false)
     private static void afterPoll(CallbackInfo ci) {
+        // Clicks made while a screen is open (inventory, chat, menus) aren't
+        // gameplay clicks, so they don't count towards CPS or analytics.
+        final boolean count = Minecraft.getMinecraft().currentScreen == null;
+
         // Left
         final byte realLeft = buttons.get(0);
         InputMouse.realLeft = realLeft;
@@ -77,7 +82,7 @@ public abstract class MixinLwjglInputMouseInject {
         if (buttons.get(0) != combinedLeft)
             buttons.put(0, combinedLeft);
 
-        if (ghostTap$prevOutLeft == InputMouse.STATE_UP && combinedLeft == InputMouse.STATE_DOWN) {
+        if (count && ghostTap$prevOutLeft == InputMouse.STATE_UP && combinedLeft == InputMouse.STATE_DOWN) {
             Cps.hit(InputMouse.BUTTON_LEFT);
             // Real (physical) click: the spoofer records its own clicks in run().
             if (InputMouse.spoofedLeft != InputMouse.STATE_DOWN) {
@@ -123,7 +128,7 @@ public abstract class MixinLwjglInputMouseInject {
         if (buttons.get(1) != combinedRight)
             buttons.put(1, combinedRight);
 
-        if (ghostTap$prevOutRight == InputMouse.STATE_UP && combinedRight == InputMouse.STATE_DOWN) {
+        if (count && ghostTap$prevOutRight == InputMouse.STATE_UP && combinedRight == InputMouse.STATE_DOWN) {
             Cps.hit(InputMouse.BUTTON_RIGHT);
             if (InputMouse.spoofedRight != InputMouse.STATE_DOWN) {
                 long now = System.nanoTime();
