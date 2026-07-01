@@ -5,15 +5,17 @@ import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.stream.Stream;
 
+// One tracker per clicker, so left and right keep separate history. The enabled
+// flag stays global: a single master switch for all recording.
 public class Tracker {
 
     public static boolean enabled = true;
 
 
-    static final ConcurrentLinkedQueue<ClickData> history = new ConcurrentLinkedQueue<>();
-     static final ConcurrentLinkedQueue<Long> window = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<ClickData> history = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<Long> window = new ConcurrentLinkedQueue<>();
 
-    public static void record(double targetCps, long hold, long interval, double trend) {
+    public void record(double targetCps, long hold, long interval, double trend) {
         if (!enabled)
             return;
 
@@ -27,27 +29,32 @@ public class Tracker {
     }
 
 
-    public static void clear() {
+    public void clear() {
         history.clear();
+        window.clear();
     }
 
-    public static int size() {
+    public int size() {
         return history.size();
     }
 
-    public static Stream<ClickData> stream() {
+    public Stream<ClickData> stream() {
         return history.stream();
     }
 
-    public static List<ClickData> copy() {
+    public List<ClickData> copy() {
         return new ArrayList<>(history);
     }
 
 
-    public static double getCurrentCps() {
+    public double getCurrentCps() {
         long now = System.currentTimeMillis();
 
         window.removeIf(timestamp -> now - timestamp > 1000);
         return window.size();
+    }
+
+    public double getAverageCps() {
+        return history.stream().mapToDouble(d -> d.actualCps).average().orElse(0.0);
     }
 }

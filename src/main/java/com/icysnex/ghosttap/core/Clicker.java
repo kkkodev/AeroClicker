@@ -6,54 +6,76 @@ import java.util.concurrent.locks.LockSupport;
 
 public class Clicker implements Runnable {
 
-    public static double CPS_MEAN = 12.0;
-    public static double CPS_STANDARDDEVIATION = 1.5;
-    public static double CPS_MIN = 8.0;
-    public static double CPS_MAX = 18.0;
-    public static double CPS_MINMAX_FALLOUT = 0.8;
-
-    public static double SPIKE_CHANCE = 0.04;
-    public static double SPIKE_MIN = 1;
-    public static double SPIKE_MAX = 3;
-
-    public static double STUTTER_CHANCE = 0.03;
-    public static double STUTTER_MIN = 4;
-    public static double STUTTER_MAX = 7;
-
-    public static double HOLD_MS_MEAN = 38;
-    public static double HOLD_MS_STANDARDDEVIATION = 6.5;
-    public static double HOLD_MS_MIN = 18;
-    public static double HOLD_MS_MAX = 75;
-
-    public static double HOLD_MS_HEAVY_CHANCE = 0.015;
-    public static double HOLD_MS_HEAVY_MIN = 15;
-    public static double HOLD_MS_HEAVY_MAX = 35;
-
-    public static double RHYTHM_VOLATILITY = 0.5;
-    public static double RHYTHM_TENSION = 0.04;
+    // Two independent clickers, one per mouse button. Each runs its own daemon
+    // thread and owns its own humanization parameters so left and right can be
+    // tuned separately.
+    public static final Clicker LEFT = new Clicker(InputMouse.BUTTON_LEFT);
+    public static final Clicker RIGHT = new Clicker(InputMouse.BUTTON_RIGHT);
 
 
-    static Thread thread;
+    public double cpsMean = 12.0;
+    public double cpsStandardDeviation = 1.5;
+    public double cpsMin = 8.0;
+    public double cpsMax = 18.0;
+    public double cpsMinMaxFallout = 0.8;
 
-    static {
-        thread = new Thread(new Clicker(), "GhostTap-Clicker-Thread");
+    public double spikeChance = 0.04;
+    public double spikeMin = 1;
+    public double spikeMax = 3;
 
+    public double stutterChance = 0.03;
+    public double stutterMin = 4;
+    public double stutterMax = 7;
+
+    public double holdMsMean = 38;
+    public double holdMsStandardDeviation = 6.5;
+    public double holdMsMin = 18;
+    public double holdMsMax = 75;
+
+    public double holdMsHeavyChance = 0.015;
+    public double holdMsHeavyMin = 15;
+    public double holdMsHeavyMax = 35;
+
+    public double rhythmVolatility = 0.5;
+    public double rhythmTension = 0.04;
+
+
+    public final Tracker tracker = new Tracker();
+
+    private final byte button;
+    private final Thread thread;
+
+    private volatile boolean enabled = false;
+    private double currentTrend = 0;
+
+
+    private Clicker(byte button) {
+        this.button = button;
+
+        String name = button == InputMouse.BUTTON_LEFT ? "Left" : "Right";
+        thread = new Thread(this, "GhostTap-Clicker-" + name);
         thread.setDaemon(true);
         thread.start();
     }
 
 
-    static volatile boolean enabled = false;
+    public boolean isEnabled() {
+        return enabled;
+    }
 
-    public static void setEnabled(boolean value) {
+    public void setEnabled(boolean value) {
         enabled = value;
 
         if (enabled) {
             LockSupport.unpark(thread);
         } else {
-            if (InputMouse.spoofedLeft == InputMouse.STATE_DOWN)
-                InputMouse.upLeft();
+            if (InputMouse.spoofed(button) == InputMouse.STATE_DOWN)
+                InputMouse.up(button);
         }
+    }
+
+    public void toggle() {
+        setEnabled(!enabled);
     }
 
 
@@ -76,7 +98,7 @@ public class Clicker implements Runnable {
                 continue;
 
             // --- CLICK START ---
-            InputMouse.downLeft();
+            InputMouse.down(button);
             long thisClickStartTime = System.nanoTime();
 
             nextPressAnchor = thisClickStartTime + intervalNanos;
@@ -84,10 +106,10 @@ public class Clicker implements Runnable {
             long holdNanos = calculateHoldNanos(intervalNanos);
             waitUntil(thisClickStartTime + holdNanos);
 
-            InputMouse.upLeft();
+            InputMouse.up(button);
             // --- CLICK END ---
 
-            Tracker.record(
+            tracker.record(
                     1_000_000_000.0 / intervalNanos,
                     holdNanos,
                     intervalNanos,
@@ -96,8 +118,6 @@ public class Clicker implements Runnable {
         }
     }
 
-
-    double currentTrend = 0;
 
     void waitUntil(long targetNanoTime) {
         long remaining;
@@ -110,36 +130,36 @@ public class Clicker implements Runnable {
     }
 
     long calculateNextIntervalNanos() {
-        currentTrend = Variance.trend(currentTrend, RHYTHM_VOLATILITY, RHYTHM_TENSION);
-        double cps = Variance.gaussian(CPS_MEAN + currentTrend, CPS_STANDARDDEVIATION);
+        currentTrend = Variance.trend(currentTrend, rhythmVolatility, rhythmTension);
+        double cps = Variance.gaussian(cpsMean + currentTrend, cpsStandardDeviation);
 
-        if (Variance.chance(SPIKE_CHANCE)) {
-            cps += Variance.range(SPIKE_MIN, SPIKE_MAX);
+        if (Variance.chance(spikeChance)) {
+            cps += Variance.range(spikeMin, spikeMax);
         }
 
-        if (Variance.chance(STUTTER_CHANCE)) {
-            cps -= Variance.range(STUTTER_MIN, STUTTER_MAX);
+        if (Variance.chance(stutterChance)) {
+            cps -= Variance.range(stutterMin, stutterMax);
         }
 
-        if (cps > CPS_MAX)
-            cps = CPS_MAX + (Variance.range(-CPS_MINMAX_FALLOUT, CPS_MINMAX_FALLOUT));
-        if (cps < CPS_MIN)
-            cps = CPS_MIN + (Variance.range(-CPS_MINMAX_FALLOUT, CPS_MINMAX_FALLOUT));
+        if (cps > cpsMax)
+            cps = cpsMax + (Variance.range(-cpsMinMaxFallout, cpsMinMaxFallout));
+        if (cps < cpsMin)
+            cps = cpsMin + (Variance.range(-cpsMinMaxFallout, cpsMinMaxFallout));
 
         return (long)(1_000_000_000.0 / cps);
     }
 
     long calculateHoldNanos(long intervalNanos) {
         double speedFactor = 1.0 - (1_000_000_000.0 / intervalNanos / 25.0);
-        double adjustedMean = HOLD_MS_MEAN * Math.max(0.8, speedFactor);
+        double adjustedMean = holdMsMean * Math.max(0.8, speedFactor);
 
-        double hold = Variance.gaussian(adjustedMean, HOLD_MS_STANDARDDEVIATION);
+        double hold = Variance.gaussian(adjustedMean, holdMsStandardDeviation);
 
-        if (Variance.chance(HOLD_MS_HEAVY_CHANCE)) {
-            hold += Variance.range(HOLD_MS_HEAVY_MIN, HOLD_MS_HEAVY_MAX);
+        if (Variance.chance(holdMsHeavyChance)) {
+            hold += Variance.range(holdMsHeavyMin, holdMsHeavyMax);
         }
 
-        hold = Math.max(HOLD_MS_MIN, Math.min(HOLD_MS_MAX, hold));
+        hold = Math.max(holdMsMin, Math.min(holdMsMax, hold));
 
         long holdTarget = (long)(hold * 1_000_000L);
         long maxPossibleHold = (long)(intervalNanos * 0.85);

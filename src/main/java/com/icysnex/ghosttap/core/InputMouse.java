@@ -16,8 +16,8 @@ public abstract class InputMouse {
         public byte state;
     }
 
-    static final byte BUTTON_LEFT = 0;
-    static final byte BUTTON_RIGHT = 1;
+    public static final byte BUTTON_LEFT = 0;
+    public static final byte BUTTON_RIGHT = 1;
 
     public static final byte STATE_DOWN = 1;
     public static final byte STATE_UP = 0;
@@ -52,5 +52,21 @@ public abstract class InputMouse {
     public static void upRight() {
         pendingEvents.add(new Event(BUTTON_RIGHT, STATE_UP));
         spoofedRight = STATE_UP;
+    }
+
+
+    // Generic dispatch by button, used by the Clicker so one code path drives both.
+    public static void down(byte button) {
+        if (button == BUTTON_LEFT) downLeft();
+        else downRight();
+    }
+
+    public static void up(byte button) {
+        if (button == BUTTON_LEFT) upLeft();
+        else upRight();
+    }
+
+    public static byte spoofed(byte button) {
+        return button == BUTTON_LEFT ? spoofedLeft : spoofedRight;
     }
 }
