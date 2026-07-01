@@ -307,6 +307,7 @@ public class GuiGhostTap extends GuiScreen {
         r.add(toggle("Enabled", "Show the on-screen HUD (configure it on the HUD tab).",
                 () -> ConfigHandler.hudEnabled, v -> ConfigHandler.hudEnabled = v));
         r.add(new GuiButtonRow("Config",
+                button("Reset", "Restore HUD settings to their defaults.", ConfigHandler::resetHud),
                 button("Export", "Copy HUD settings to the clipboard.", this::exportHud),
                 button("Import", "Load HUD settings from the clipboard.", this::importHud)));
 

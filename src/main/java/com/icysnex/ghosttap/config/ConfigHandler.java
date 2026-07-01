@@ -57,6 +57,21 @@ public class ConfigHandler {
         sync(false);
     }
 
+    public static void resetHud() {
+        hudEnabled = true;
+        hudCpsLeft = true;
+        hudCpsRight = true;
+        hudShowStatus = false;
+        hudBackground = true;
+        hudPadding = 3;
+        hudTextColor = 0xFFFFFFFF;
+        hudBgColor = 0x90000000;
+        hudAnchor = HudAnchor.TOP_LEFT;
+        hudMargin = 4;
+        hudX = 4;
+        hudY = 4;
+    }
+
     // HUD settings as a shareable base64 token.
     public static String exportHud() {
         StringBuilder sb = new StringBuilder("ghosttap-hud\n");
