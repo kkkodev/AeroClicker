@@ -5,6 +5,7 @@ import com.icysnex.ghosttap.core.ActivationMode;
 import com.icysnex.ghosttap.core.Clicker;
 import com.icysnex.ghosttap.core.analytics.Analytics;
 import com.icysnex.ghosttap.core.analytics.Tracker;
+import com.icysnex.ghosttap.utils.Chat;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.ScaledResolution;
 import org.lwjgl.input.Keyboard;
@@ -142,6 +143,10 @@ public class GuiGhostTap extends GuiScreen {
                 "How strongly the pace is pulled back toward the Mean.\nHigher = steadier.",
                 () -> c.rhythmTension, v -> c.rhythmTension = v));
 
+        r.add("Reset");
+        r.add(button("Reset to defaults", "Restore this clicker's settings to their defaults.",
+                c::resetParams));
+
         return r;
     }
 
@@ -179,7 +184,30 @@ public class GuiGhostTap extends GuiScreen {
         r.add(keybind("Open menu", "Key that opens this config screen.",
                 () -> ConfigHandler.openGuiKey, v -> ConfigHandler.openGuiKey = v));
 
+        r.add("Config");
+        r.add(button("Export to clipboard", "Copy all settings to the clipboard to share.",
+                this::exportConfig));
+        r.add(button("Import from clipboard", "Load settings from a clipboard config.",
+                this::importConfig));
+
         return r;
+    }
+
+    private void exportConfig() {
+        String data = ConfigHandler.exportString();
+        if (data != null) {
+            setClipboardString(data);
+            Chat.message(mc.thePlayer, "Config", "Copied settings to clipboard.");
+        } else {
+            Chat.error(mc.thePlayer, "Config", "Export failed. Check console.");
+        }
+    }
+
+    private void importConfig() {
+        if (ConfigHandler.importString(getClipboardString()))
+            Chat.message(mc.thePlayer, "Config", "Loaded settings from clipboard.");
+        else
+            Chat.error(mc.thePlayer, "Config", "Clipboard has no valid config.");
     }
 
     private List<Object> buildAnalyticsRows() {
