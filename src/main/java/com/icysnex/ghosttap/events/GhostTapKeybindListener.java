@@ -66,15 +66,10 @@ public class GhostTapKeybindListener {
         boolean enabled = intent && context && Gates.pass(clicker.gates, button);
         clicker.setEnabled(enabled);
 
-        // Mask suppresses the real button.
-        //  - Mouse mode: the physical button is the trigger, so it's owned the
-        //    whole time we're armed. That keeps the hold from leaking through when
-        //    a gate (e.g. block-break) stops clicking — otherwise a held button
-        //    would still mine the block.
-        //  - Toggle/Hold: the physical button isn't the trigger, so only mask
-        //    while actually clicking to avoid desyncing the polled state.
-        boolean mask = mode == ActivationMode.MOUSE ? clicker.armed : enabled;
-        InputMouse.setMask(button, mask);
+        // Mask (suppress the real button) exactly while the spoofer is clicking.
+        // When a gate stops clicking, the mask lifts so the physical mouse behaves
+        // normally again (e.g. so you can mine a block yourself).
+        InputMouse.setMask(button, enabled);
     }
 
     private static class ButtonState {

@@ -44,8 +44,9 @@ public final class Gates {
         if (!categoryAllowed(g, player.getHeldItem()))
             return false;
 
-        // Block breaking only applies to the left button; right-click never mines.
-        if (button == InputMouse.BUTTON_LEFT && !g.allowBlockBreak && aimingBlock(mc))
+        // "Break blocks" (left only): pause the auto-clicker while aimed at a
+        // reachable block, so the physical mouse can mine it normally.
+        if (button == InputMouse.BUTTON_LEFT && g.allowBlockBreak && aimingBlock(mc))
             return false;
 
         return true;
