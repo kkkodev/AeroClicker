@@ -28,12 +28,12 @@ public class ConfigHandler {
 
     // Keybinds (LWJGL key codes). Rebindable from the GUI.
     public static int openGuiKey = Keyboard.KEY_RSHIFT;
-    public static int toggleLeftKey = Keyboard.KEY_R;
-    public static int toggleRightKey = Keyboard.KEY_H;
+    public static int toggleLeftKey = Keyboard.KEY_N;
+    public static int toggleRightKey = Keyboard.KEY_M;
 
     // Per-clicker activation mode.
-    public static ActivationMode leftMode = ActivationMode.TOGGLE;
-    public static ActivationMode rightMode = ActivationMode.TOGGLE;
+    public static ActivationMode leftMode = ActivationMode.MOUSE;
+    public static ActivationMode rightMode = ActivationMode.MOUSE;
 
     // On-screen HUD.
     public static boolean hudEnabled = true;
@@ -41,7 +41,7 @@ public class ConfigHandler {
     public static boolean hudCpsRight = true;
     public static boolean hudShowStatus = false;
     public static boolean hudBackground = true;
-    public static int hudPadding = 3;
+    public static int hudPadding = 5;
     public static int hudTextColor = 0xFFFFFFFF;
     public static int hudBgColor = 0x90000000;
     public static HudAnchor hudAnchor = HudAnchor.TOP_LEFT;
@@ -63,7 +63,7 @@ public class ConfigHandler {
         hudCpsRight = true;
         hudShowStatus = false;
         hudBackground = true;
-        hudPadding = 3;
+        hudPadding = 5;
         hudTextColor = 0xFFFFFFFF;
         hudBgColor = 0x90000000;
         hudAnchor = HudAnchor.TOP_LEFT;
