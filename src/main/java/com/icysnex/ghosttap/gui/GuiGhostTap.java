@@ -349,7 +349,24 @@ public class GuiGhostTap extends GuiScreen {
         r.add(cond(() -> !manualPos(), slider("Edge gap", 0, 40, 0, false, "Distance from the screen edge when anchored to a corner.",
                 () -> ConfigHandler.hudMargin, v -> ConfigHandler.hudMargin = (int) v)));
 
+        r.add("Config");
+        r.add(new GuiButtonRow("Config",
+                button("Export", "Copy HUD settings to the clipboard.", this::exportHud),
+                button("Import", "Load HUD settings from the clipboard.", this::importHud)));
+
         return r;
+    }
+
+    private void exportHud() {
+        setClipboardString(ConfigHandler.exportHud());
+        Notice.show("Copied HUD settings to clipboard.");
+    }
+
+    private void importHud() {
+        if (ConfigHandler.importHud(getClipboardString()))
+            Notice.show("Loaded HUD settings from clipboard.");
+        else
+            Notice.show("Clipboard has no valid HUD config.");
     }
 
     private static boolean manualPos() {

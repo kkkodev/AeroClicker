@@ -10,6 +10,10 @@ import net.minecraftforge.common.config.Property;
 import org.lwjgl.input.Keyboard;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.function.DoubleConsumer;
 import java.util.function.DoubleSupplier;
 
@@ -51,6 +55,81 @@ public class ConfigHandler {
         config.load();
 
         sync(false);
+    }
+
+    // HUD settings as a shareable base64 token.
+    public static String exportHud() {
+        StringBuilder sb = new StringBuilder("ghosttap-hud\n");
+        sb.append("enabled=").append(hudEnabled ? 1 : 0).append('\n');
+        sb.append("cpsLeft=").append(hudCpsLeft ? 1 : 0).append('\n');
+        sb.append("cpsRight=").append(hudCpsRight ? 1 : 0).append('\n');
+        sb.append("showStatus=").append(hudShowStatus ? 1 : 0).append('\n');
+        sb.append("background=").append(hudBackground ? 1 : 0).append('\n');
+        sb.append("padding=").append(hudPadding).append('\n');
+        sb.append("textColor=").append(hudTextColor).append('\n');
+        sb.append("bgColor=").append(hudBgColor).append('\n');
+        sb.append("anchor=").append(hudAnchor.name()).append('\n');
+        sb.append("margin=").append(hudMargin).append('\n');
+        sb.append("x=").append(hudX).append('\n');
+        sb.append("y=").append(hudY).append('\n');
+        return Base64.getEncoder().encodeToString(sb.toString().getBytes(StandardCharsets.UTF_8));
+    }
+
+    public static boolean importHud(String token) {
+        if (token == null)
+            return false;
+
+        String data;
+        try {
+            data = new String(Base64.getDecoder().decode(token.trim()), StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException e) {
+            data = token;
+        }
+        if (!data.trim().startsWith("ghosttap-hud"))
+            return false;
+
+        Map<String, String> m = new HashMap<>();
+        for (String line : data.split("\\r?\\n")) {
+            int eq = line.indexOf('=');
+            if (eq > 0)
+                m.put(line.substring(0, eq).trim(), line.substring(eq + 1).trim());
+        }
+
+        hudEnabled = flag(m, "enabled", hudEnabled);
+        hudCpsLeft = flag(m, "cpsLeft", hudCpsLeft);
+        hudCpsRight = flag(m, "cpsRight", hudCpsRight);
+        hudShowStatus = flag(m, "showStatus", hudShowStatus);
+        hudBackground = flag(m, "background", hudBackground);
+        hudPadding = num(m, "padding", hudPadding);
+        hudTextColor = num(m, "textColor", hudTextColor);
+        hudBgColor = num(m, "bgColor", hudBgColor);
+        hudMargin = num(m, "margin", hudMargin);
+        hudX = num(m, "x", hudX);
+        hudY = num(m, "y", hudY);
+        try {
+            if (m.containsKey("anchor"))
+                hudAnchor = HudAnchor.valueOf(m.get("anchor"));
+        } catch (IllegalArgumentException ignored) {
+        }
+        return true;
+    }
+
+    private static boolean flag(Map<String, String> m, String key, boolean current) {
+        String v = m.get(key);
+        if (v == null)
+            return current;
+        return v.equals("1") || v.equalsIgnoreCase("true");
+    }
+
+    private static int num(Map<String, String> m, String key, int current) {
+        String v = m.get(key);
+        if (v == null)
+            return current;
+        try {
+            return Integer.parseInt(v);
+        } catch (NumberFormatException e) {
+            return current;
+        }
     }
 
     public static void saveConfig() {
