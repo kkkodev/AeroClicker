@@ -108,13 +108,13 @@ public class GuiGhostTap extends GuiScreen {
     private Tab buildClickerTab(Clicker c) {
         boolean left = c == Clicker.LEFT;
         List<SubTab> subs = new ArrayList<>();
-        subs.add(new SubTab("Speed", buildSpeedRows(c)));
-        subs.add(new SubTab("Hold", buildHoldRows(c)));
-        subs.add(new SubTab("Filters", buildFilterRows(c, left)));
+        subs.add(new SubTab("CPS", buildCpsRows(c)));
+        subs.add(new SubTab("Fatigue", buildFatigueRows(c)));
+        subs.add(new SubTab("Filters", buildFiltersRows(c, left)));
         return new Tab(left ? "Left" : "Right", subs);
     }
 
-    private List<Object> buildSpeedRows(Clicker c) {
+    private List<Object> buildCpsRows(Clicker c) {
         List<Object> r = new ArrayList<>();
 
         r.add("CPS");
@@ -158,18 +158,10 @@ public class GuiGhostTap extends GuiScreen {
                 "Largest speed drop a stutter causes (in CPS).",
                 () -> c.stutterMax, v -> { c.stutterMax = v; if (c.stutterMin > v) c.stutterMin = v; }));
 
-        r.add("Rhythm");
-        r.add(slider("Volatility", 0, 3, 2, false,
-                "How quickly the click pace wanders over time.",
-                () -> c.rhythmVolatility, v -> c.rhythmVolatility = v));
-        r.add(slider("Tension", 0, 1, 3, false,
-                "How strongly the pace is pulled back toward the Mean.\nHigher = steadier.",
-                () -> c.rhythmTension, v -> c.rhythmTension = v));
-
         return r;
     }
 
-    private List<Object> buildHoldRows(Clicker c) {
+    private List<Object> buildFatigueRows(Clicker c) {
         List<Object> r = new ArrayList<>();
 
         r.add("Hold (ms)");
@@ -197,10 +189,18 @@ public class GuiGhostTap extends GuiScreen {
                 "Largest extra time a heavy hold adds (ms).",
                 () -> c.holdMsHeavyMax, v -> { c.holdMsHeavyMax = v; if (c.holdMsHeavyMin > v) c.holdMsHeavyMin = v; }));
 
+        r.add("Rhythm");
+        r.add(slider("Volatility", 0, 3, 2, false,
+                "How quickly the click pace wanders over time.",
+                () -> c.rhythmVolatility, v -> c.rhythmVolatility = v));
+        r.add(slider("Tension", 0, 1, 3, false,
+                "How strongly the pace is pulled back toward the Mean.\nHigher = steadier.",
+                () -> c.rhythmTension, v -> c.rhythmTension = v));
+
         return r;
     }
 
-    private List<Object> buildFilterRows(Clicker c, boolean left) {
+    private List<Object> buildFiltersRows(Clicker c, boolean left) {
         List<Object> r = new ArrayList<>();
 
         r.add("Hotbar slots");
@@ -219,7 +219,7 @@ public class GuiGhostTap extends GuiScreen {
         r.add("Rules");
         // Block breaking is a left-click concept only.
         if (left)
-            r.add(toggle("Break blocks", "Allow clicking while aimed at a block (mining).",
+            r.add(toggle("Break blocks", "Pause the auto-clicker while aimed at a reachable block.\nOnly really makes sense if 'Mouse' mode is set.",
                     () -> c.gates.allowBlockBreak, v -> c.gates.allowBlockBreak = v));
         r.add(toggle("In menus", "Allow clicking while a screen (inventory, chat) is open.",
                 () -> c.gates.allowInMenu, v -> c.gates.allowInMenu = v));
@@ -238,7 +238,7 @@ public class GuiGhostTap extends GuiScreen {
     }
 
     private GuiButtonRow configRow(Clicker c) {
-        return new GuiButtonRow(
+        return new GuiButtonRow("Config",
                 button("Reset", "Restore this clicker's settings to their defaults.", c::resetParams),
                 button("Export", "Copy this clicker's settings to the clipboard.", () -> exportClicker(c)),
                 button("Import", "Load this clicker's settings from the clipboard.", () -> importClicker(c)));
@@ -579,6 +579,8 @@ public class GuiGhostTap extends GuiScreen {
                 br.width = contentW;
                 if (draw) {
                     br.draw(fontRendererObj, mouseX, mouseY);
+                    if (br.label != null)
+                        captureHoverTitle(mouseX, mouseY, cursor + 3, br.label, br.tooltip);
                     for (GuiActionButton b : br.buttons)
                         captureHover(mouseX, mouseY, b.x, cursor, b.width, 16, b.tooltip);
                 }
