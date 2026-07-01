@@ -20,7 +20,7 @@ public final class Gates {
     private Gates() {
     }
 
-    public static boolean pass(ClickerGates g) {
+    public static boolean pass(ClickerGates g, byte button) {
         Minecraft mc = Minecraft.getMinecraft();
         EntityPlayerSP player = mc.thePlayer;
         if (player == null)
@@ -44,7 +44,8 @@ public final class Gates {
         if (!categoryAllowed(g, player.getHeldItem()))
             return false;
 
-        if (!g.allowBlockBreak && aimingBlock(mc))
+        // Block breaking only applies to the left button; right-click never mines.
+        if (button == InputMouse.BUTTON_LEFT && !g.allowBlockBreak && aimingBlock(mc))
             return false;
 
         return true;

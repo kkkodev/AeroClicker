@@ -63,7 +63,7 @@ public class GhostTapKeybindListener {
         }
         st.wasKeyDown = keyDown;
 
-        boolean enabled = intent && context && Gates.pass(clicker.gates);
+        boolean enabled = intent && context && Gates.pass(clicker.gates, button);
         clicker.setEnabled(enabled);
 
         // Mask (suppress the real button) exactly while the spoofer is clicking,
