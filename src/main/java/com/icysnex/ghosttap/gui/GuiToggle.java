@@ -12,7 +12,7 @@ public class GuiToggle {
 
     public static final int ROW_HEIGHT = 18;
 
-    private final String label;
+    final String label;
     private final BooleanSupplier getter;
     private final Consumer<Boolean> onChange;
 

@@ -51,7 +51,10 @@ public class GuiGhostTap extends GuiScreen {
         contentX = left + 12;
         contentW = PANEL_W - 24;
         contentTop = top + TITLE_H + TAB_H + 4;
-        contentBottom = top + PANEL_H - BOTTOM_PAD;
+        // Viewport reaches near the bottom border; the breathing gap is added only
+        // as trailing scroll room (BOTTOM_PAD), so it shows when scrolled to the
+        // end without shrinking the usable area.
+        contentBottom = top + PANEL_H - 4;
         contentH = contentBottom - contentTop;
 
         tabRows.clear();
@@ -65,10 +68,11 @@ public class GuiGhostTap extends GuiScreen {
         List<Object> r = new ArrayList<>();
 
         r.add("CPS");
-        // Mean is bounded by the live Min/Max so it can never sit outside the range.
-        r.add(slider("Mean", () -> c.cpsMin, () -> c.cpsMax, 1, false,
+        // Mean rides the full scale but is clamped to the live Min/Max, so its
+        // knob physically stops at the current Min and Max positions.
+        r.add(slider("Mean", 1, 30, 1, false,
                 "Average click speed. Always stays between Min and Max.",
-                () -> c.cpsMean, v -> c.cpsMean = v));
+                () -> c.cpsMean, v -> c.cpsMean = v, () -> c.cpsMin, () -> c.cpsMax));
         r.add(slider("Std deviation", 0, 6, 2, false,
                 "How much the speed randomly varies around the Mean.\nHigher = more human, less consistent.",
                 () -> c.cpsStandardDeviation, v -> c.cpsStandardDeviation = v));
@@ -105,9 +109,9 @@ public class GuiGhostTap extends GuiScreen {
                 () -> c.stutterMax, v -> { c.stutterMax = v; if (c.stutterMin > v) c.stutterMin = v; }));
 
         r.add("Hold (ms)");
-        r.add(slider("Mean", () -> c.holdMsMin, () -> c.holdMsMax, 1, false,
+        r.add(slider("Mean", 1, 200, 1, false,
                 "Average time the button stays held per click. Stays between Min and Max.",
-                () -> c.holdMsMean, v -> c.holdMsMean = v));
+                () -> c.holdMsMean, v -> c.holdMsMean = v, () -> c.holdMsMin, () -> c.holdMsMax));
         r.add(slider("Std deviation", 0, 30, 1, false,
                 "How much the hold time randomly varies.",
                 () -> c.holdMsStandardDeviation, v -> c.holdMsStandardDeviation = v));
@@ -190,8 +194,8 @@ public class GuiGhostTap extends GuiScreen {
         return s;
     }
 
-    private GuiSlider slider(String label, DoubleSupplier min, DoubleSupplier max, int dec, boolean pct, String tip, DoubleSupplier get, DoubleConsumer set) {
-        GuiSlider s = new GuiSlider(label, min, max, dec, pct, get, set);
+    private GuiSlider slider(String label, double min, double max, int dec, boolean pct, String tip, DoubleSupplier get, DoubleConsumer set, DoubleSupplier clampLo, DoubleSupplier clampHi) {
+        GuiSlider s = new GuiSlider(label, min, max, dec, pct, get, set, clampLo, clampHi);
         s.tooltip = tip;
         return s;
     }
@@ -261,14 +265,21 @@ public class GuiGhostTap extends GuiScreen {
             drawHoveringText(Arrays.asList(hoverTooltip.split("\n")), mouseX, mouseY);
     }
 
-    // Records the tooltip of whichever row the mouse is over, clipped to the
+    // Hover only the title text of a labelled widget, so the tooltip shows when
+    // pointing at the name rather than anywhere on the row.
+    private void captureHoverTitle(int mouseX, int mouseY, int titleTop, String label, String tip) {
+        int titleWidth = fontRendererObj.getStringWidth(label);
+        captureHover(mouseX, mouseY, contentX, titleTop, titleWidth, 9, tip);
+    }
+
+    // Records a tooltip if the mouse is inside the given rect, clipped to the
     // visible content region. Drawn later, after the scissor is disabled.
-    private void captureHover(int mouseX, int mouseY, int rowTop, int rowHeight, String tip) {
+    private void captureHover(int mouseX, int mouseY, int rx, int ry, int rw, int rh, String tip) {
         if (tip == null || tip.isEmpty())
             return;
         if (mouseY < contentTop || mouseY > contentBottom)
             return;
-        if (mouseX >= contentX && mouseX <= contentX + contentW && mouseY >= rowTop && mouseY <= rowTop + rowHeight)
+        if (mouseX >= rx && mouseX <= rx + rw && mouseY >= ry && mouseY <= ry + rh)
             hoverTooltip = tip;
     }
 
@@ -312,7 +323,7 @@ public class GuiGhostTap extends GuiScreen {
                 s.width = contentW;
                 if (draw) {
                     s.draw(fontRendererObj, mouseX, mouseY);
-                    captureHover(mouseX, mouseY, cursor, GuiSlider.ROW_HEIGHT, s.tooltip);
+                    captureHoverTitle(mouseX, mouseY, cursor, s.label, s.tooltip);
                 }
                 cursor += GuiSlider.ROW_HEIGHT;
             } else if (row instanceof GuiToggle) {
@@ -322,7 +333,7 @@ public class GuiGhostTap extends GuiScreen {
                 t.width = contentW;
                 if (draw) {
                     t.draw(fontRendererObj, mouseX, mouseY);
-                    captureHover(mouseX, mouseY, cursor, GuiToggle.ROW_HEIGHT, t.tooltip);
+                    captureHoverTitle(mouseX, mouseY, cursor + 3, t.label, t.tooltip);
                 }
                 cursor += GuiToggle.ROW_HEIGHT;
             } else if (row instanceof GuiKeybind) {
@@ -332,7 +343,7 @@ public class GuiGhostTap extends GuiScreen {
                 k.width = contentW;
                 if (draw) {
                     k.draw(fontRendererObj, mouseX, mouseY);
-                    captureHover(mouseX, mouseY, cursor, GuiKeybind.ROW_HEIGHT, k.tooltip);
+                    captureHoverTitle(mouseX, mouseY, cursor + 3, k.label, k.tooltip);
                 }
                 cursor += GuiKeybind.ROW_HEIGHT;
             } else if (row instanceof GuiStat) {
@@ -342,7 +353,7 @@ public class GuiGhostTap extends GuiScreen {
                 s.width = contentW;
                 if (draw) {
                     s.draw(fontRendererObj, mouseX, mouseY);
-                    captureHover(mouseX, mouseY, cursor, GuiStat.ROW_HEIGHT, s.tooltip);
+                    captureHoverTitle(mouseX, mouseY, cursor, s.label, s.tooltip);
                 }
                 cursor += GuiStat.ROW_HEIGHT;
             } else if (row instanceof GuiActionButton) {
@@ -352,7 +363,9 @@ public class GuiGhostTap extends GuiScreen {
                 b.width = contentW;
                 if (draw) {
                     b.draw(fontRendererObj, mouseX, mouseY);
-                    captureHover(mouseX, mouseY, cursor, GuiActionButton.ROW_HEIGHT, b.tooltip);
+                    // Buttons have centered text and no left title, so hover the
+                    // whole button.
+                    captureHover(mouseX, mouseY, contentX, cursor, contentW, 16, b.tooltip);
                 }
                 cursor += GuiActionButton.ROW_HEIGHT;
             }

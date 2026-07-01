@@ -10,7 +10,7 @@ public class GuiStat {
 
     public static final int ROW_HEIGHT = 13;
 
-    private final String label;
+    final String label;
     private final Supplier<String> value;
 
     public String tooltip;

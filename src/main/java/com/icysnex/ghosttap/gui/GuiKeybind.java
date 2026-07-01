@@ -13,7 +13,7 @@ public class GuiKeybind {
 
     public static final int ROW_HEIGHT = 18;
 
-    private final String label;
+    final String label;
     private final IntSupplier getter;
     private final IntConsumer onChange;
 

@@ -7,43 +7,46 @@ import java.util.function.DoubleConsumer;
 import java.util.function.DoubleSupplier;
 
 // Single-value horizontal slider. Reads and writes the backing value live
-// through the supplied getter/setter (no cached copy), so external clamps stay
-// reflected. Bounds are suppliers too, letting one slider constrain itself to
-// another value (e.g. Mean bounded by the live Min/Max).
+// through the getter/setter (no cached copy). The knob rides a fixed absolute
+// scale [absMin, absMax], but the value is confined to the live clamp bounds
+// [clampLo, clampHi] — so e.g. the Mean knob physically stops at the current
+// Min/Max positions instead of ranging the whole track.
 public class GuiSlider {
 
     public static final int ROW_HEIGHT = 24;
 
-    private final String label;
-    private final DoubleSupplier min;
-    private final DoubleSupplier max;
+    final String label;
+    private final double absMin;
+    private final double absMax;
     private final int decimals;
     private final boolean percent;
     private final DoubleSupplier getter;
     private final DoubleConsumer setter;
+    private final DoubleSupplier clampLo;
+    private final DoubleSupplier clampHi;
 
     public String tooltip;
     public boolean dragging;
     public int x, y, width;
 
     public GuiSlider(String label, double min, double max, int decimals, boolean percent, DoubleSupplier getter, DoubleConsumer setter) {
-        this(label, () -> min, () -> max, decimals, percent, getter, setter);
+        this(label, min, max, decimals, percent, getter, setter, () -> min, () -> max);
     }
 
-    public GuiSlider(String label, DoubleSupplier min, DoubleSupplier max, int decimals, boolean percent, DoubleSupplier getter, DoubleConsumer setter) {
+    public GuiSlider(String label, double min, double max, int decimals, boolean percent, DoubleSupplier getter, DoubleConsumer setter, DoubleSupplier clampLo, DoubleSupplier clampHi) {
         this.label = label;
-        this.min = min;
-        this.max = max;
+        this.absMin = min;
+        this.absMax = max;
         this.decimals = decimals;
         this.percent = percent;
         this.getter = getter;
         this.setter = setter;
+        this.clampLo = clampLo;
+        this.clampHi = clampHi;
     }
 
     public void draw(FontRenderer fr, int mouseX, int mouseY) {
-        double lo = min.getAsDouble();
-        double hi = max.getAsDouble();
-        double value = clamp(getter.getAsDouble(), lo, hi);
+        double value = clamp(getter.getAsDouble(), lo(), hi());
 
         int trackTop = y + 13;
         int trackBottom = y + 17;
@@ -54,8 +57,8 @@ public class GuiSlider {
 
         Gui.drawRect(x, trackTop, x + width, trackBottom, 0xFF2A2A2A);
 
-        double t = hi > lo ? (value - lo) / (hi - lo) : 0;
-        int knobX = x + (int) Math.round(t * width);
+        double t = (value - absMin) / (absMax - absMin);
+        int knobX = x + (int) Math.round(clamp(t, 0, 1) * width);
 
         Gui.drawRect(x, trackTop, knobX, trackBottom, 0xFF5A9BD4);
 
@@ -82,11 +85,18 @@ public class GuiSlider {
     }
 
     private void updateFromMouse(int mouseX) {
-        double lo = min.getAsDouble();
-        double hi = max.getAsDouble();
         double t = (mouseX - x) / (double) width;
-        double raw = lo + t * (hi - lo);
-        setter.accept(round(clamp(raw, lo, hi)));
+        double raw = absMin + t * (absMax - absMin);
+        setter.accept(clamp(round(raw), lo(), hi()));
+    }
+
+    // Effective bounds: absolute scale intersected with the live clamp bounds.
+    private double lo() {
+        return Math.max(absMin, clampLo.getAsDouble());
+    }
+
+    private double hi() {
+        return Math.min(absMax, clampHi.getAsDouble());
     }
 
     private boolean contains(int mouseX, int mouseY) {
@@ -98,8 +108,6 @@ public class GuiSlider {
     }
 
     private double round(double v) {
-        // Percent values are stored as fractions, so keep two extra digits of
-        // precision on the raw value behind the displayed percentage.
         double factor = Math.pow(10, percent ? decimals + 2 : decimals);
         return Math.round(v * factor) / factor;
     }
