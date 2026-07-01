@@ -1,5 +1,6 @@
 package com.icysnex.ghosttap.mixin;
 
+import com.icysnex.ghosttap.core.Cps;
 import com.icysnex.ghosttap.core.InputMouse;
 import org.lwjgl.input.Mouse;
 import org.spongepowered.asm.mixin.Mixin;
@@ -26,6 +27,10 @@ public abstract class MixinLwjglInputMouseInject {
     private static boolean ghostTap$prevMaskLeft = false;
     @Unique
     private static boolean ghostTap$prevMaskRight = false;
+    @Unique
+    private static byte ghostTap$prevOutLeft = InputMouse.STATE_UP;
+    @Unique
+    private static byte ghostTap$prevOutRight = InputMouse.STATE_UP;
 
     @Inject(method = "poll", at = @At("RETURN"), remap = false)
     private static void afterPoll(CallbackInfo ci) {
@@ -66,6 +71,10 @@ public abstract class MixinLwjglInputMouseInject {
 
         if (buttons.get(0) != combinedLeft)
             buttons.put(0, combinedLeft);
+
+        if (ghostTap$prevOutLeft == InputMouse.STATE_UP && combinedLeft == InputMouse.STATE_DOWN)
+            Cps.hit(InputMouse.BUTTON_LEFT);
+        ghostTap$prevOutLeft = combinedLeft;
         ghostTap$prevRealLeft = realLeft;
 
         // Right
@@ -101,6 +110,10 @@ public abstract class MixinLwjglInputMouseInject {
 
         if (buttons.get(1) != combinedRight)
             buttons.put(1, combinedRight);
+
+        if (ghostTap$prevOutRight == InputMouse.STATE_UP && combinedRight == InputMouse.STATE_DOWN)
+            Cps.hit(InputMouse.BUTTON_RIGHT);
+        ghostTap$prevOutRight = combinedRight;
         ghostTap$prevRealRight = realRight;
     }
 
