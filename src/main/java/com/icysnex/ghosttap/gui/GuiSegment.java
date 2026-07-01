@@ -28,47 +28,46 @@ public class GuiSegment {
         this.setIndex = setIndex;
     }
 
-    // Pills fill the width after the label, so wider option sets still fit.
+    // Pills fill the width after the label. Boundaries are computed exactly so the
+    // last pill reaches the right edge (no leftover gap from integer division).
     private int segX() {
         return x + LABEL_W;
     }
 
-    private int pillW() {
-        return (x + width - segX()) / options.length;
+    private int edge(int i) {
+        int segX = segX();
+        return segX + (x + width - segX) * i / options.length;
     }
 
     public void draw(FontRenderer fr, int mouseX, int mouseY) {
         fr.drawString(label, x, y + 3, 0xFFB8B8B8);
 
-        int segX = segX();
-        int pillW = pillW();
         int active = getIndex.getAsInt();
 
         for (int i = 0; i < options.length; i++) {
-            int px = segX + i * pillW;
+            int px = edge(i);
+            int pxEnd = edge(i + 1);
             boolean isActive = i == active;
-            boolean hover = mouseX >= px && mouseX <= px + pillW && mouseY >= y && mouseY <= y + 14;
+            boolean hover = mouseX >= px && mouseX <= pxEnd && mouseY >= y && mouseY <= y + 14;
 
             int bg = isActive ? 0xFF5A9BD4 : (hover ? 0xFF3A3A3A : 0xFF262626);
-            Gui.drawRect(px, y, px + pillW - 1, y + 14, bg);
+            Gui.drawRect(px, y, pxEnd - 1, y + 14, bg);
 
             int color = isActive ? 0xFFFFFFFF : 0xFFC8C8C8;
-            int textX = px + (pillW - fr.getStringWidth(options[i])) / 2;
+            int textX = px + (pxEnd - px - fr.getStringWidth(options[i])) / 2;
             fr.drawString(options[i], textX, y + 3, color);
         }
     }
 
     public boolean mouseClicked(int mouseX, int mouseY) {
-        int segX = segX();
-        int pillW = pillW();
-
-        if (mouseY < y || mouseY > y + 14 || mouseX < segX || mouseX > segX + pillW * options.length)
+        if (mouseY < y || mouseY > y + 14 || mouseX < segX() || mouseX > x + width)
             return false;
 
-        int i = (mouseX - segX) / pillW;
-        if (i >= 0 && i < options.length) {
-            setIndex.accept(i);
-            return true;
+        for (int i = 0; i < options.length; i++) {
+            if (mouseX >= edge(i) && mouseX < edge(i + 1)) {
+                setIndex.accept(i);
+                return true;
+            }
         }
         return false;
     }

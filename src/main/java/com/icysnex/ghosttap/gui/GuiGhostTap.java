@@ -93,9 +93,9 @@ public class GuiGhostTap extends GuiScreen {
         contentW = PANEL_W - 24;
 
         tabs.clear();
+        tabs.add(new Tab("General", single(buildGeneralRows())));
         tabs.add(buildClickerTab(Clicker.LEFT));
         tabs.add(buildClickerTab(Clicker.RIGHT));
-        tabs.add(new Tab("General", single(buildGeneralRows())));
         tabs.add(new Tab("HUD", single(buildHudRows())));
         tabs.add(new Tab("Analytics", single(buildAnalyticsRows())));
 
@@ -303,6 +303,12 @@ public class GuiGhostTap extends GuiScreen {
                 () -> ConfigHandler.toggleRightKey, v -> ConfigHandler.toggleRightKey = v));
         r.add(configRow(Clicker.RIGHT));
 
+        r.add("Modules");
+        r.add(toggle("HUD", "Show the on-screen HUD (configure it on the HUD tab).",
+                () -> ConfigHandler.hudEnabled, v -> ConfigHandler.hudEnabled = v));
+        r.add(toggle("Analytics", "Record click data for stats and export (Analytics tab).",
+                () -> Tracker.enabled, v -> Tracker.enabled = v));
+
         r.add("Menu");
         r.add(keybind("Open menu", "Key that opens this config screen.",
                 () -> ConfigHandler.openGuiKey, v -> ConfigHandler.openGuiKey = v));
@@ -314,8 +320,6 @@ public class GuiGhostTap extends GuiScreen {
         List<Object> r = new ArrayList<>();
 
         r.add("Display");
-        r.add(toggle("Enabled", "Show the on-screen HUD.",
-                () -> ConfigHandler.hudEnabled, v -> ConfigHandler.hudEnabled = v));
         r.add(toggle("CPS counter", "Show a clicks-per-second line.",
                 () -> ConfigHandler.hudShowCps, v -> ConfigHandler.hudShowCps = v));
         r.add(cond(() -> ConfigHandler.hudShowCps, toggle("Left CPS", "Include the left clicker in the CPS line.",
@@ -373,10 +377,6 @@ public class GuiGhostTap extends GuiScreen {
 
     private List<Object> buildAnalyticsRows() {
         List<Object> r = new ArrayList<>();
-
-        r.add("Tracking");
-        r.add(toggle("Enabled", "Record click timing data for stats and CSV export.",
-                () -> Tracker.enabled, v -> Tracker.enabled = v));
 
         r.add("Left");
         r.add(stat("Recorded", "Left clicks recorded this session.",
