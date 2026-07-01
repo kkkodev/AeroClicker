@@ -9,7 +9,7 @@ import java.util.stream.Stream;
 // flag stays global: a single master switch for all recording.
 public class Tracker {
 
-    public static boolean enabled = true;
+    public static boolean enabled = false;
 
 
     private final ConcurrentLinkedQueue<ClickData> history = new ConcurrentLinkedQueue<>();
