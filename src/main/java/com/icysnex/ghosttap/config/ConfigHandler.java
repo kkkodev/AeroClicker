@@ -2,6 +2,7 @@ package com.icysnex.ghosttap.config;
 
 import com.icysnex.ghosttap.core.ActivationMode;
 import com.icysnex.ghosttap.core.Clicker;
+import com.icysnex.ghosttap.core.ClickerGates;
 import com.icysnex.ghosttap.core.analytics.Tracker;
 import net.minecraftforge.common.config.Configuration;
 import net.minecraftforge.common.config.Property;
@@ -53,6 +54,9 @@ public class ConfigHandler {
         syncClicker(CAT_LEFT, Clicker.LEFT, save);
         syncClicker(CAT_RIGHT, Clicker.RIGHT, save);
 
+        syncGates(CAT_LEFT, Clicker.LEFT.gates, save);
+        syncGates(CAT_RIGHT, Clicker.RIGHT.gates, save);
+
         openGuiKey = key(CAT_KEYS, "openGui", openGuiKey, save);
         toggleLeftKey = key(CAT_KEYS, "toggleLeft", toggleLeftKey, save);
         toggleRightKey = key(CAT_KEYS, "toggleRight", toggleRightKey, save);
@@ -91,6 +95,33 @@ public class ConfigHandler {
 
         bind(cat, "rhythmVolatility", () -> c.rhythmVolatility, v -> c.rhythmVolatility = v, save);
         bind(cat, "rhythmTension", () -> c.rhythmTension, v -> c.rhythmTension = v, save);
+    }
+
+    private static void syncGates(String cat, ClickerGates g, boolean save) {
+        g.allowBlockBreak = bool(cat, "allowBlockBreak", g.allowBlockBreak, save);
+        g.allowInMenu = bool(cat, "allowInMenu", g.allowInMenu, save);
+        g.pauseWhileUsingItem = bool(cat, "pauseWhileUsingItem", g.pauseWhileUsingItem, save);
+
+        g.weapons = bool(cat, "catWeapons", g.weapons, save);
+        g.tools = bool(cat, "catTools", g.tools, save);
+        g.blocks = bool(cat, "catBlocks", g.blocks, save);
+        g.other = bool(cat, "catOther", g.other, save);
+
+        g.survival = bool(cat, "gmSurvival", g.survival, save);
+        g.creative = bool(cat, "gmCreative", g.creative, save);
+        g.adventure = bool(cat, "gmAdventure", g.adventure, save);
+
+        for (int i = 0; i < g.slots.length; i++)
+            g.slots[i] = bool(cat, "slot" + (i + 1), g.slots[i], save);
+    }
+
+    private static boolean bool(String cat, String key, boolean current, boolean save) {
+        Property p = config.get(cat, key, current);
+        if (save) {
+            p.set(current);
+            return current;
+        }
+        return p.getBoolean();
     }
 
     private static void bind(String cat, String key, DoubleSupplier get, DoubleConsumer set, boolean save) {
