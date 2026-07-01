@@ -33,9 +33,13 @@ public class ConfigHandler {
     // On-screen HUD.
     public static boolean hudEnabled = true;
     public static boolean hudShowCps = true;
+    public static boolean hudCpsLeft = true;
+    public static boolean hudCpsRight = true;
     public static boolean hudShowStatus = false;
     public static boolean hudBackground = true;
     public static int hudPadding = 3;
+    public static int hudTextColor = 0xFFFFFFFF;
+    public static int hudBgColor = 0x90000000;
     public static int hudX = 4;
     public static int hudY = 4;
 
@@ -80,9 +84,13 @@ public class ConfigHandler {
 
         hudEnabled = bool(CAT_HUD, "enabled", hudEnabled, save);
         hudShowCps = bool(CAT_HUD, "showCps", hudShowCps, save);
+        hudCpsLeft = bool(CAT_HUD, "cpsLeft", hudCpsLeft, save);
+        hudCpsRight = bool(CAT_HUD, "cpsRight", hudCpsRight, save);
         hudShowStatus = bool(CAT_HUD, "showStatus", hudShowStatus, save);
         hudBackground = bool(CAT_HUD, "background", hudBackground, save);
         hudPadding = integer(CAT_HUD, "padding", hudPadding, save);
+        hudTextColor = integer(CAT_HUD, "textColor", hudTextColor, save);
+        hudBgColor = integer(CAT_HUD, "bgColor", hudBgColor, save);
         hudX = integer(CAT_HUD, "x", hudX, save);
         hudY = integer(CAT_HUD, "y", hudY, save);
     }

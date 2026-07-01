@@ -7,15 +7,14 @@ import com.icysnex.ghosttap.core.Cps;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.Gui;
-import net.minecraft.util.EnumChatFormatting;
 import net.minecraftforge.client.event.RenderGameOverlayEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
 import java.util.ArrayList;
 import java.util.List;
 
-// Configurable overlay: a CPS counter and/or per-clicker status, drawn at a
-// user-set position with an optional background.
+// Configurable overlay: a classic "CPS: L | R" counter and/or per-clicker status,
+// drawn at a user-set position in a single chosen colour.
 public class ClickerHUD {
 
     @SubscribeEvent
@@ -43,37 +42,47 @@ public class ClickerHUD {
             int w = 0;
             for (String line : lines)
                 w = Math.max(w, fr.getStringWidth(line));
-            Gui.drawRect(x - pad, y - pad, x + w + pad, y + lines.size() * lineHeight - 1 + pad, 0x90000000);
+            // -2 (not -1) so the box hugs the glyphs evenly top and bottom; the
+            // font cell has an extra pixel below the visible text.
+            Gui.drawRect(x - pad, y - pad, x + w + pad, y + lines.size() * lineHeight - 2 + pad, ConfigHandler.hudBgColor);
         }
 
+        int color = 0xFF000000 | (ConfigHandler.hudTextColor & 0xFFFFFF);
         for (int i = 0; i < lines.size(); i++)
-            fr.drawStringWithShadow(lines.get(i), x, y + i * lineHeight, 0xFFFFFFFF);
+            fr.drawStringWithShadow(lines.get(i), x, y + i * lineHeight, color);
     }
 
     private List<String> buildLines() {
         List<String> lines = new ArrayList<>();
-        boolean status = ConfigHandler.hudShowStatus;
-        boolean cps = ConfigHandler.hudShowCps;
 
-        if (status) {
-            lines.add(statusLine("Left", Clicker.LEFT, ConfigHandler.leftMode, cps, Cps.left()));
-            lines.add(statusLine("Right", Clicker.RIGHT, ConfigHandler.rightMode, cps, Cps.right()));
-        } else if (cps) {
-            lines.add(EnumChatFormatting.AQUA + "CPS  "
-                    + EnumChatFormatting.GRAY + "L " + EnumChatFormatting.WHITE + Cps.left() + "  "
-                    + EnumChatFormatting.GRAY + "R " + EnumChatFormatting.WHITE + Cps.right());
+        if (ConfigHandler.hudShowCps) {
+            String cps = cpsText();
+            if (cps != null)
+                lines.add(cps);
+        }
+
+        if (ConfigHandler.hudShowStatus) {
+            lines.add(statusLine("Left", Clicker.LEFT, ConfigHandler.leftMode));
+            lines.add(statusLine("Right", Clicker.RIGHT, ConfigHandler.rightMode));
         }
 
         return lines;
     }
 
-    private String statusLine(String name, Clicker clicker, ActivationMode mode, boolean cps, int value) {
-        String state = clicker.isEnabled()
-                ? EnumChatFormatting.GREEN + "ON"
-                : EnumChatFormatting.DARK_GRAY + "OFF";
-        String line = EnumChatFormatting.WHITE + name + "  " + state + " " + EnumChatFormatting.DARK_GRAY + mode.label;
-        if (cps)
-            line += " " + EnumChatFormatting.AQUA + value;
-        return line;
+    private String cpsText() {
+        boolean left = ConfigHandler.hudCpsLeft;
+        boolean right = ConfigHandler.hudCpsRight;
+
+        if (left && right)
+            return "CPS: " + Cps.left() + " | " + Cps.right();
+        if (left)
+            return "CPS: " + Cps.left();
+        if (right)
+            return "CPS: " + Cps.right();
+        return null;
+    }
+
+    private String statusLine(String name, Clicker clicker, ActivationMode mode) {
+        return name + ": " + (clicker.isEnabled() ? "ON" : "OFF") + " (" + mode.label + ")";
     }
 }

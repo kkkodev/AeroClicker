@@ -302,22 +302,57 @@ public class GuiGhostTap extends GuiScreen {
         r.add("Display");
         r.add(toggle("Enabled", "Show the on-screen HUD.",
                 () -> ConfigHandler.hudEnabled, v -> ConfigHandler.hudEnabled = v));
-        r.add(toggle("CPS counter", "Show clicks per second (left and right).",
+        r.add(toggle("CPS counter", "Show a clicks-per-second line.",
                 () -> ConfigHandler.hudShowCps, v -> ConfigHandler.hudShowCps = v));
+        r.add(toggle("Left CPS", "Include the left clicker in the CPS line.",
+                () -> ConfigHandler.hudCpsLeft, v -> ConfigHandler.hudCpsLeft = v));
+        r.add(toggle("Right CPS", "Include the right clicker in the CPS line.",
+                () -> ConfigHandler.hudCpsRight, v -> ConfigHandler.hudCpsRight = v));
         r.add(toggle("Clicker status", "Show each clicker's on/off state and mode.",
                 () -> ConfigHandler.hudShowStatus, v -> ConfigHandler.hudShowStatus = v));
-        r.add(toggle("Background", "Draw a dark box behind the HUD for readability.",
+
+        r.add("Format");
+        r.add(colorSlider("Text R", "Text colour (red).", 16, () -> ConfigHandler.hudTextColor, v -> ConfigHandler.hudTextColor = v));
+        r.add(colorSlider("Text G", "Text colour (green).", 8, () -> ConfigHandler.hudTextColor, v -> ConfigHandler.hudTextColor = v));
+        r.add(colorSlider("Text B", "Text colour (blue).", 0, () -> ConfigHandler.hudTextColor, v -> ConfigHandler.hudTextColor = v));
+        r.add(toggle("Background", "Draw a box behind the HUD for readability.",
                 () -> ConfigHandler.hudBackground, v -> ConfigHandler.hudBackground = v));
-        r.add(slider("Padding", 0, 12, 0, false, "Space between the text and the background box edge.",
+        r.add(slider("Padding", 0, 12, 0, false, "Space between the text and the box edge.",
                 () -> ConfigHandler.hudPadding, v -> ConfigHandler.hudPadding = (int) v));
+        r.add(colorSlider("Back R", "Background colour (red).", 16, () -> ConfigHandler.hudBgColor, v -> ConfigHandler.hudBgColor = v));
+        r.add(colorSlider("Back G", "Background colour (green).", 8, () -> ConfigHandler.hudBgColor, v -> ConfigHandler.hudBgColor = v));
+        r.add(colorSlider("Back B", "Background colour (blue).", 0, () -> ConfigHandler.hudBgColor, v -> ConfigHandler.hudBgColor = v));
+        r.add(colorSlider("Back opacity", "Background transparency.", 24, () -> ConfigHandler.hudBgColor, v -> ConfigHandler.hudBgColor = v));
 
         r.add("Position");
-        r.add(slider("X", 0, 400, 0, false, "Horizontal position (pixels from the left).",
+        ScaledResolution sr = new ScaledResolution(mc);
+        int sw = sr.getScaledWidth();
+        int sh = sr.getScaledHeight();
+        r.add(slider("X", 0, sw, 0, false, "Horizontal position (pixels from the left).",
                 () -> ConfigHandler.hudX, v -> ConfigHandler.hudX = (int) v));
-        r.add(slider("Y", 0, 250, 0, false, "Vertical position (pixels from the top).",
+        r.add(slider("Y", 0, sh, 0, false, "Vertical position (pixels from the top).",
                 () -> ConfigHandler.hudY, v -> ConfigHandler.hudY = (int) v));
+        r.add(new GuiButtonRow("Preset",
+                button("TL", "Anchor to the top-left.", () -> setHudPos(2, 2)),
+                button("TR", "Anchor to the top-right.", () -> setHudPos(sw - 64, 2)),
+                button("BL", "Anchor to the bottom-left.", () -> setHudPos(2, sh - 20)),
+                button("BR", "Anchor to the bottom-right.", () -> setHudPos(sw - 64, sh - 20))));
 
         return r;
+    }
+
+    private void setHudPos(int x, int y) {
+        ConfigHandler.hudX = Math.max(0, x);
+        ConfigHandler.hudY = Math.max(0, y);
+    }
+
+    // Slider over one 8-bit colour channel (shift = bit offset in the ARGB int).
+    private GuiSlider colorSlider(String label, String tip, int shift, java.util.function.IntSupplier get, java.util.function.IntConsumer set) {
+        GuiSlider s = new GuiSlider(label, 0, 255, 0, false,
+                () -> (get.getAsInt() >> shift) & 0xFF,
+                v -> set.accept((get.getAsInt() & ~(0xFF << shift)) | (((int) v & 0xFF) << shift)));
+        s.tooltip = tip;
+        return s;
     }
 
     private List<Object> buildAnalyticsRows() {
