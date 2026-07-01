@@ -86,11 +86,9 @@ public class ClickerHUD {
     private List<String> buildLines() {
         List<String> lines = new ArrayList<>();
 
-        if (ConfigHandler.hudShowCps) {
-            String cps = cpsText();
-            if (cps != null)
-                lines.add(cps);
-        }
+        String cps = cpsText();
+        if (cps != null)
+            lines.add(cps);
 
         if (ConfigHandler.hudShowStatus) {
             lines.add(statusLine("Left", Clicker.LEFT, ConfigHandler.leftMode));

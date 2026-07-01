@@ -33,7 +33,6 @@ public class ConfigHandler {
 
     // On-screen HUD.
     public static boolean hudEnabled = true;
-    public static boolean hudShowCps = true;
     public static boolean hudCpsLeft = true;
     public static boolean hudCpsRight = true;
     public static boolean hudShowStatus = false;
@@ -86,7 +85,6 @@ public class ConfigHandler {
         else Tracker.enabled = analytics.getBoolean();
 
         hudEnabled = bool(CAT_HUD, "enabled", hudEnabled, save);
-        hudShowCps = bool(CAT_HUD, "showCps", hudShowCps, save);
         hudCpsLeft = bool(CAT_HUD, "cpsLeft", hudCpsLeft, save);
         hudCpsRight = bool(CAT_HUD, "cpsRight", hudCpsRight, save);
         hudShowStatus = bool(CAT_HUD, "showStatus", hudShowStatus, save);

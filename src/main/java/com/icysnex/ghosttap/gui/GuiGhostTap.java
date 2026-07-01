@@ -320,12 +320,10 @@ public class GuiGhostTap extends GuiScreen {
         List<Object> r = new ArrayList<>();
 
         r.add("Display");
-        r.add(toggle("CPS counter", "Show a clicks-per-second line.",
-                () -> ConfigHandler.hudShowCps, v -> ConfigHandler.hudShowCps = v));
-        r.add(cond(() -> ConfigHandler.hudShowCps, toggle("Left CPS", "Include the left clicker in the CPS line.",
-                () -> ConfigHandler.hudCpsLeft, v -> ConfigHandler.hudCpsLeft = v)));
-        r.add(cond(() -> ConfigHandler.hudShowCps, toggle("Right CPS", "Include the right clicker in the CPS line.",
-                () -> ConfigHandler.hudCpsRight, v -> ConfigHandler.hudCpsRight = v)));
+        r.add(toggle("Left CPS", "Show the left clicker's clicks per second.",
+                () -> ConfigHandler.hudCpsLeft, v -> ConfigHandler.hudCpsLeft = v));
+        r.add(toggle("Right CPS", "Show the right clicker's clicks per second.",
+                () -> ConfigHandler.hudCpsRight, v -> ConfigHandler.hudCpsRight = v));
         r.add(toggle("Clicker status", "Show each clicker's on/off state and mode.",
                 () -> ConfigHandler.hudShowStatus, v -> ConfigHandler.hudShowStatus = v));
 
