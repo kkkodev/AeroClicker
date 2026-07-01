@@ -4,9 +4,11 @@ import com.icysnex.ghosttap.config.ConfigHandler;
 import com.icysnex.ghosttap.core.ActivationMode;
 import com.icysnex.ghosttap.core.Clicker;
 import com.icysnex.ghosttap.core.Cps;
+import com.icysnex.ghosttap.core.HudAnchor;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.Gui;
+import net.minecraft.client.gui.ScaledResolution;
 import net.minecraftforge.client.event.RenderGameOverlayEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
@@ -33,23 +35,46 @@ public class ClickerHUD {
             return;
 
         FontRenderer fr = mc.fontRendererObj;
-        int x = ConfigHandler.hudX;
-        int y = ConfigHandler.hudY;
         int lineHeight = fr.FONT_HEIGHT + 1;
+
+        int w = 0;
+        for (String line : lines)
+            w = Math.max(w, fr.getStringWidth(line));
+        // Trailing char spacing / lower font-cell row aren't visible, so trim a
+        // pixel off the right and bottom to keep the padding even on all sides.
+        int textW = w - 1;
+        int textH = lines.size() * lineHeight - 2;
+
+        ScaledResolution sr = new ScaledResolution(mc);
+        int x = anchorX(textW, sr.getScaledWidth());
+        int y = anchorY(textH, sr.getScaledHeight());
 
         if (ConfigHandler.hudBackground) {
             int pad = ConfigHandler.hudPadding;
-            int w = 0;
-            for (String line : lines)
-                w = Math.max(w, fr.getStringWidth(line));
-            // -2 (not -1) so the box hugs the glyphs evenly top and bottom; the
-            // font cell has an extra pixel below the visible text.
-            Gui.drawRect(x - pad, y - pad, x + w + pad, y + lines.size() * lineHeight - 2 + pad, ConfigHandler.hudBgColor);
+            Gui.drawRect(x - pad, y - pad, x + textW + pad, y + textH + pad, ConfigHandler.hudBgColor);
         }
 
         int color = 0xFF000000 | (ConfigHandler.hudTextColor & 0xFFFFFF);
         for (int i = 0; i < lines.size(); i++)
             fr.drawStringWithShadow(lines.get(i), x, y + i * lineHeight, color);
+    }
+
+    private int anchorX(int textW, int screenW) {
+        HudAnchor a = ConfigHandler.hudAnchor;
+        if (a == HudAnchor.MANUAL)
+            return ConfigHandler.hudX;
+        if (a == HudAnchor.TOP_RIGHT || a == HudAnchor.BOTTOM_RIGHT)
+            return screenW - textW - 4;
+        return 4;
+    }
+
+    private int anchorY(int textH, int screenH) {
+        HudAnchor a = ConfigHandler.hudAnchor;
+        if (a == HudAnchor.MANUAL)
+            return ConfigHandler.hudY;
+        if (a == HudAnchor.BOTTOM_LEFT || a == HudAnchor.BOTTOM_RIGHT)
+            return screenH - textH - 4;
+        return 4;
     }
 
     private List<String> buildLines() {

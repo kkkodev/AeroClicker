@@ -3,6 +3,7 @@ package com.icysnex.ghosttap.config;
 import com.icysnex.ghosttap.core.ActivationMode;
 import com.icysnex.ghosttap.core.Clicker;
 import com.icysnex.ghosttap.core.ClickerGates;
+import com.icysnex.ghosttap.core.HudAnchor;
 import com.icysnex.ghosttap.core.analytics.Tracker;
 import net.minecraftforge.common.config.Configuration;
 import net.minecraftforge.common.config.Property;
@@ -40,6 +41,7 @@ public class ConfigHandler {
     public static int hudPadding = 3;
     public static int hudTextColor = 0xFFFFFFFF;
     public static int hudBgColor = 0x90000000;
+    public static HudAnchor hudAnchor = HudAnchor.TOP_LEFT;
     public static int hudX = 4;
     public static int hudY = 4;
 
@@ -91,6 +93,14 @@ public class ConfigHandler {
         hudPadding = integer(CAT_HUD, "padding", hudPadding, save);
         hudTextColor = integer(CAT_HUD, "textColor", hudTextColor, save);
         hudBgColor = integer(CAT_HUD, "bgColor", hudBgColor, save);
+
+        Property anchor = config.get(CAT_HUD, "anchor", hudAnchor.name());
+        if (save) anchor.set(hudAnchor.name());
+        else try {
+            hudAnchor = HudAnchor.valueOf(anchor.getString());
+        } catch (IllegalArgumentException ignored) {
+        }
+
         hudX = integer(CAT_HUD, "x", hudX, save);
         hudY = integer(CAT_HUD, "y", hudY, save);
     }
