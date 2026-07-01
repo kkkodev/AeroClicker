@@ -1,44 +1,73 @@
 package com.icysnex.ghosttap.hud;
 
+import com.icysnex.ghosttap.config.ConfigHandler;
+import com.icysnex.ghosttap.core.ActivationMode;
+import com.icysnex.ghosttap.core.Clicker;
+import com.icysnex.ghosttap.core.Cps;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.FontRenderer;
+import net.minecraft.client.gui.Gui;
 import net.minecraftforge.client.event.RenderGameOverlayEvent;
-import net.minecraftforge.event.entity.player.AttackEntityEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
-import net.minecraftforge.fml.common.gameevent.TickEvent;
+
 import java.util.ArrayList;
+import java.util.List;
 
+// Configurable overlay: a CPS counter and/or per-clicker status, drawn at a
+// user-set position with an optional background.
 public class ClickerHUD {
-
-    private final ArrayList<Long> clicks = new ArrayList<>();
-
-    @SubscribeEvent
-    public void onAttack(AttackEntityEvent event) {
-        if (event.entityPlayer.worldObj.isRemote && event.entityPlayer == Minecraft.getMinecraft().thePlayer) {
-            registerClick();
-        }
-    }
-
-    private void registerClick() {
-        long now = System.currentTimeMillis();
-
-        if (clicks.isEmpty() || now - clicks.get(clicks.size() - 1) > 5) {
-            clicks.add(now);
-        }
-    }
-
-    @SubscribeEvent
-    public void onClientTick(TickEvent.ClientTickEvent event) {
-        if (event.phase != TickEvent.Phase.START) return;
-
-        long now = System.currentTimeMillis();
-        clicks.removeIf(time -> now - time > 1000);
-    }
 
     @SubscribeEvent
     public void onRenderGameOverlay(RenderGameOverlayEvent.Post event) {
-        if (event.type == RenderGameOverlayEvent.ElementType.TEXT) {
-            int cps = clicks.size();
-            Minecraft.getMinecraft().fontRendererObj.drawStringWithShadow("CPS: " + cps, 5, 5, 0xFFFFFF);
+        if (event.type != RenderGameOverlayEvent.ElementType.TEXT)
+            return;
+        if (!ConfigHandler.hudEnabled)
+            return;
+
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc.thePlayer == null)
+            return;
+
+        List<String> lines = buildLines();
+        if (lines.isEmpty())
+            return;
+
+        FontRenderer fr = mc.fontRendererObj;
+        int x = ConfigHandler.hudX;
+        int y = ConfigHandler.hudY;
+        int lineHeight = fr.FONT_HEIGHT + 1;
+
+        if (ConfigHandler.hudBackground) {
+            int w = 0;
+            for (String line : lines)
+                w = Math.max(w, fr.getStringWidth(line));
+            Gui.drawRect(x - 3, y - 3, x + w + 3, y + lines.size() * lineHeight, 0x90000000);
         }
+
+        for (int i = 0; i < lines.size(); i++)
+            fr.drawStringWithShadow(lines.get(i), x, y + i * lineHeight, 0xFFFFFFFF);
+    }
+
+    private List<String> buildLines() {
+        List<String> lines = new ArrayList<>();
+        boolean status = ConfigHandler.hudShowStatus;
+        boolean cps = ConfigHandler.hudShowCps;
+
+        if (status) {
+            lines.add(statusLine("Left", Clicker.LEFT, ConfigHandler.leftMode, cps, Cps.left()));
+            lines.add(statusLine("Right", Clicker.RIGHT, ConfigHandler.rightMode, cps, Cps.right()));
+        } else if (cps) {
+            lines.add("§bCPS  §7L §f" + Cps.left() + "  §7R §f" + Cps.right());
+        }
+
+        return lines;
+    }
+
+    private String statusLine(String name, Clicker clicker, ActivationMode mode, boolean cps, int value) {
+        String state = clicker.isEnabled() ? "§aON" : "§8OFF";
+        String line = "§f" + name + "  " + state + " §8" + mode.label;
+        if (cps)
+            line += " §b" + value;
+        return line;
     }
 }

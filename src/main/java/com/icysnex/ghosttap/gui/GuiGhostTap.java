@@ -82,6 +82,7 @@ public class GuiGhostTap extends GuiScreen {
         tabs.add(buildClickerTab(Clicker.LEFT));
         tabs.add(buildClickerTab(Clicker.RIGHT));
         tabs.add(new Tab("General", single(buildGeneralRows())));
+        tabs.add(new Tab("HUD", single(buildHudRows())));
         tabs.add(new Tab("Analytics", single(buildAnalyticsRows())));
 
         layoutContent();
@@ -291,6 +292,28 @@ public class GuiGhostTap extends GuiScreen {
         r.add("Menu");
         r.add(keybind("Open menu", "Key that opens this config screen.",
                 () -> ConfigHandler.openGuiKey, v -> ConfigHandler.openGuiKey = v));
+
+        return r;
+    }
+
+    private List<Object> buildHudRows() {
+        List<Object> r = new ArrayList<>();
+
+        r.add("Display");
+        r.add(toggle("Enabled", "Show the on-screen HUD.",
+                () -> ConfigHandler.hudEnabled, v -> ConfigHandler.hudEnabled = v));
+        r.add(toggle("CPS counter", "Show clicks per second (left and right).",
+                () -> ConfigHandler.hudShowCps, v -> ConfigHandler.hudShowCps = v));
+        r.add(toggle("Clicker status", "Show each clicker's on/off state and mode.",
+                () -> ConfigHandler.hudShowStatus, v -> ConfigHandler.hudShowStatus = v));
+        r.add(toggle("Background", "Draw a dark box behind the HUD for readability.",
+                () -> ConfigHandler.hudBackground, v -> ConfigHandler.hudBackground = v));
+
+        r.add("Position");
+        r.add(slider("X", 0, 400, 0, false, "Horizontal position (pixels from the left).",
+                () -> ConfigHandler.hudX, v -> ConfigHandler.hudX = (int) v));
+        r.add(slider("Y", 0, 250, 0, false, "Vertical position (pixels from the top).",
+                () -> ConfigHandler.hudY, v -> ConfigHandler.hudY = (int) v));
 
         return r;
     }

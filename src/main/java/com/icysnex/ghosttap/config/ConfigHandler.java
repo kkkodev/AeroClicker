@@ -17,6 +17,7 @@ public class ConfigHandler {
     private static final String CAT_LEFT = "left_clicker";
     private static final String CAT_RIGHT = "right_clicker";
     private static final String CAT_KEYS = "keys";
+    private static final String CAT_HUD = "hud";
 
     private static Configuration config;
 
@@ -28,6 +29,14 @@ public class ConfigHandler {
     // Per-clicker activation mode.
     public static ActivationMode leftMode = ActivationMode.TOGGLE;
     public static ActivationMode rightMode = ActivationMode.TOGGLE;
+
+    // On-screen HUD.
+    public static boolean hudEnabled = true;
+    public static boolean hudShowCps = true;
+    public static boolean hudShowStatus = false;
+    public static boolean hudBackground = true;
+    public static int hudX = 4;
+    public static int hudY = 4;
 
 
     public static void loadConfig(File file) {
@@ -67,6 +76,13 @@ public class ConfigHandler {
         Property analytics = config.get(CAT_KEYS, "analyticsEnabled", Tracker.enabled, "Record click analytics for tuning/export");
         if (save) analytics.set(Tracker.enabled);
         else Tracker.enabled = analytics.getBoolean();
+
+        hudEnabled = bool(CAT_HUD, "enabled", hudEnabled, save);
+        hudShowCps = bool(CAT_HUD, "showCps", hudShowCps, save);
+        hudShowStatus = bool(CAT_HUD, "showStatus", hudShowStatus, save);
+        hudBackground = bool(CAT_HUD, "background", hudBackground, save);
+        hudX = integer(CAT_HUD, "x", hudX, save);
+        hudY = integer(CAT_HUD, "y", hudY, save);
     }
 
     private static void syncClicker(String cat, Clicker c, boolean save) {
@@ -122,6 +138,15 @@ public class ConfigHandler {
             return current;
         }
         return p.getBoolean();
+    }
+
+    private static int integer(String cat, String key, int current, boolean save) {
+        Property p = config.get(cat, key, current);
+        if (save) {
+            p.set(current);
+            return current;
+        }
+        return p.getInt();
     }
 
     private static void bind(String cat, String key, DoubleSupplier get, DoubleConsumer set, boolean save) {
