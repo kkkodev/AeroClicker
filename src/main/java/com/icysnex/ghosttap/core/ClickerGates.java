@@ -15,8 +15,9 @@ public class ClickerGates {
     public boolean blocks = true;
     public boolean other = true;
 
-    // Allow clicking while aimed at a block (mining). Off = combat-focused.
-    public boolean allowBlockBreak = true;
+    // When on, pause the (left) clicker while aimed at a reachable block so you
+    // can mine it yourself. Off by default = the clicker works everywhere.
+    public boolean allowBlockBreak = false;
     // Allow clicking while a screen (inventory, chat, ...) is open.
     public boolean allowInMenu = false;
     // Pause while the player is using an item (eating, bow, blocking).
