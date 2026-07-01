@@ -1,6 +1,7 @@
 package com.icysnex.ghosttap.gui;
 
 import com.icysnex.ghosttap.config.ConfigHandler;
+import com.icysnex.ghosttap.core.ActivationMode;
 import com.icysnex.ghosttap.core.Clicker;
 import com.icysnex.ghosttap.core.analytics.Analytics;
 import com.icysnex.ghosttap.core.analytics.Tracker;
@@ -147,13 +148,27 @@ public class GuiGhostTap extends GuiScreen {
     private List<Object> buildGeneralRows() {
         List<Object> r = new ArrayList<>();
 
-        r.add("Keybinds");
+        String modeTip = "Toggle: press key to switch on/off.\n"
+                + "Hold: clicks only while key is held.\n"
+                + "Mouse: press key to arm, then hold the real mouse button to click.";
+
+        r.add("Left clicker");
+        r.add(segment("Mode", modeTip,
+                () -> ConfigHandler.leftMode.ordinal(),
+                i -> { ConfigHandler.leftMode = ActivationMode.values()[i]; Clicker.LEFT.deactivate(); }));
+        r.add(keybind("Key", "Left clicker key (toggle / hold / arm depending on mode).",
+                () -> ConfigHandler.toggleLeftKey, v -> ConfigHandler.toggleLeftKey = v));
+
+        r.add("Right clicker");
+        r.add(segment("Mode", modeTip,
+                () -> ConfigHandler.rightMode.ordinal(),
+                i -> { ConfigHandler.rightMode = ActivationMode.values()[i]; Clicker.RIGHT.deactivate(); }));
+        r.add(keybind("Key", "Right clicker key (toggle / hold / arm depending on mode).",
+                () -> ConfigHandler.toggleRightKey, v -> ConfigHandler.toggleRightKey = v));
+
+        r.add("Menu");
         r.add(keybind("Open menu", "Key that opens this config screen.",
                 () -> ConfigHandler.openGuiKey, v -> ConfigHandler.openGuiKey = v));
-        r.add(keybind("Toggle left", "Key to switch the left clicker on/off.",
-                () -> ConfigHandler.toggleLeftKey, v -> ConfigHandler.toggleLeftKey = v));
-        r.add(keybind("Toggle right", "Key to switch the right clicker on/off.",
-                () -> ConfigHandler.toggleRightKey, v -> ConfigHandler.toggleRightKey = v));
 
         return r;
     }
@@ -204,6 +219,17 @@ public class GuiGhostTap extends GuiScreen {
         GuiKeybind k = new GuiKeybind(label, get, set);
         k.tooltip = tip;
         return k;
+    }
+
+    private GuiSegment segment(String label, String tip, java.util.function.IntSupplier get, java.util.function.IntConsumer set) {
+        ActivationMode[] modes = ActivationMode.values();
+        String[] names = new String[modes.length];
+        for (int i = 0; i < modes.length; i++)
+            names[i] = modes[i].label;
+
+        GuiSegment s = new GuiSegment(label, names, get, set);
+        s.tooltip = tip;
+        return s;
     }
 
     private GuiStat stat(String label, String tip, java.util.function.Supplier<String> value) {
@@ -340,6 +366,16 @@ public class GuiGhostTap extends GuiScreen {
                     captureHoverTitle(mouseX, mouseY, cursor + 3, k.label, k.tooltip);
                 }
                 cursor += GuiKeybind.ROW_HEIGHT;
+            } else if (row instanceof GuiSegment) {
+                GuiSegment sg = (GuiSegment) row;
+                sg.x = contentX;
+                sg.y = cursor;
+                sg.width = contentW;
+                if (draw) {
+                    sg.draw(fontRendererObj, mouseX, mouseY);
+                    captureHoverTitle(mouseX, mouseY, cursor + 3, sg.label, sg.tooltip);
+                }
+                cursor += GuiSegment.ROW_HEIGHT;
             } else if (row instanceof GuiStat) {
                 GuiStat s = (GuiStat) row;
                 s.x = contentX;
@@ -417,6 +453,9 @@ public class GuiGhostTap extends GuiScreen {
                     activeKeybind = k;
                     return;
                 }
+            } else if (row instanceof GuiSegment) {
+                if (((GuiSegment) row).mouseClicked(mouseX, mouseY))
+                    return;
             } else if (row instanceof GuiActionButton) {
                 if (((GuiActionButton) row).mouseClicked(mouseX, mouseY))
                     return;
