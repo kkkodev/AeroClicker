@@ -152,10 +152,13 @@ public class GuiGhostTap extends GuiScreen {
                 + "Hold: clicks only while key is held.\n"
                 + "Mouse: press key to arm, then hold the real mouse button to click.";
 
-        String enabledTip = "Turn the clicker on or off. In Hold and Mouse mode this follows your key/button.";
+        String enabledTip = "Turn the clicker on or off. In Hold mode this follows your key;\n"
+                + "in Mouse mode it arms/disarms the mouse-hold gate.";
 
         r.add("Left clicker");
-        r.add(toggle("Enabled", enabledTip, Clicker.LEFT::isEnabled, Clicker.LEFT::setEnabled));
+        r.add(toggle("Enabled", enabledTip,
+                () -> active(Clicker.LEFT, ConfigHandler.leftMode),
+                v -> setActive(Clicker.LEFT, ConfigHandler.leftMode, v)));
         r.add(segment("Mode", modeTip,
                 () -> ConfigHandler.leftMode.ordinal(),
                 i -> { ConfigHandler.leftMode = ActivationMode.values()[i]; Clicker.LEFT.deactivate(); }));
@@ -163,7 +166,9 @@ public class GuiGhostTap extends GuiScreen {
                 () -> ConfigHandler.toggleLeftKey, v -> ConfigHandler.toggleLeftKey = v));
 
         r.add("Right clicker");
-        r.add(toggle("Enabled", enabledTip, Clicker.RIGHT::isEnabled, Clicker.RIGHT::setEnabled));
+        r.add(toggle("Enabled", enabledTip,
+                () -> active(Clicker.RIGHT, ConfigHandler.rightMode),
+                v -> setActive(Clicker.RIGHT, ConfigHandler.rightMode, v)));
         r.add(segment("Mode", modeTip,
                 () -> ConfigHandler.rightMode.ordinal(),
                 i -> { ConfigHandler.rightMode = ActivationMode.values()[i]; Clicker.RIGHT.deactivate(); }));
@@ -202,6 +207,20 @@ public class GuiGhostTap extends GuiScreen {
         r.add(button("Clear data", "Delete all recorded data.", Analytics::clear));
 
         return r;
+    }
+
+
+    // The "Enabled" toggle targets the arm gate in Mouse mode (so you can drop
+    // back to a normal mouse) and the plain on/off state otherwise.
+    private static boolean active(Clicker c, ActivationMode mode) {
+        return mode == ActivationMode.MOUSE ? c.armed : c.isEnabled();
+    }
+
+    private static void setActive(Clicker c, ActivationMode mode, boolean value) {
+        if (mode == ActivationMode.MOUSE)
+            c.armed = value;
+        else
+            c.setEnabled(value);
     }
 
 
