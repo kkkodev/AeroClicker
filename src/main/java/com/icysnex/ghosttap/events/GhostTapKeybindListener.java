@@ -1,32 +1,71 @@
 package com.icysnex.ghosttap.events;
 
 import com.icysnex.ghosttap.config.ConfigHandler;
+import com.icysnex.ghosttap.core.ActivationMode;
 import com.icysnex.ghosttap.core.Clicker;
+import com.icysnex.ghosttap.core.InputMouse;
 import com.icysnex.ghosttap.gui.GuiGhostTap;
 import net.minecraft.client.Minecraft;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
-import net.minecraftforge.fml.common.gameevent.InputEvent;
+import net.minecraftforge.fml.common.gameevent.TickEvent;
 import org.lwjgl.input.Keyboard;
 
+// Polled every client tick rather than driven by key events, so Hold mode sees
+// releases reliably and Mouse mode can watch the real mouse button.
 public class GhostTapKeybindListener {
 
-    // KeyInputEvent only fires while no GUI is open, so this handles the in-world
-    // hotkeys only. The config screen manages its own key handling.
+    private final ButtonState left = new ButtonState();
+    private final ButtonState right = new ButtonState();
+    private boolean wasOpenDown = false;
+
     @SubscribeEvent
-    public void onKey(InputEvent.KeyInputEvent event) {
-        if (!Keyboard.getEventKeyState())
+    public void onClientTick(TickEvent.ClientTickEvent event) {
+        if (event.phase != TickEvent.Phase.END)
             return;
 
-        int key = Keyboard.getEventKey();
+        Minecraft mc = Minecraft.getMinecraft();
+        boolean inWorld = mc.currentScreen == null && mc.inGameHasFocus;
 
-        if (key == ConfigHandler.toggleLeftKey) {
-            Clicker.LEFT.toggle();
-        } else if (key == ConfigHandler.toggleRightKey) {
-            Clicker.RIGHT.toggle();
-        } else if (key == ConfigHandler.openGuiKey) {
-            Minecraft mc = Minecraft.getMinecraft();
-            if (mc.currentScreen == null)
-                mc.displayGuiScreen(new GuiGhostTap());
+        boolean openDown = inWorld && Keyboard.isKeyDown(ConfigHandler.openGuiKey);
+        if (openDown && !wasOpenDown)
+            mc.displayGuiScreen(new GuiGhostTap());
+        wasOpenDown = openDown;
+
+        process(Clicker.LEFT, ConfigHandler.toggleLeftKey, ConfigHandler.leftMode, InputMouse.BUTTON_LEFT, left, inWorld);
+        process(Clicker.RIGHT, ConfigHandler.toggleRightKey, ConfigHandler.rightMode, InputMouse.BUTTON_RIGHT, right, inWorld);
+    }
+
+    private void process(Clicker clicker, int key, ActivationMode mode, byte button, ButtonState st, boolean inWorld) {
+        boolean keyDown = inWorld && Keyboard.isKeyDown(key);
+
+        switch (mode) {
+            case TOGGLE:
+                if (keyDown && !st.wasKeyDown)
+                    clicker.toggle();
+                break;
+
+            case HOLD:
+                clicker.setEnabled(keyDown);
+                break;
+
+            case MOUSE:
+                if (keyDown && !st.wasKeyDown)
+                    clicker.armed = !clicker.armed;
+
+                boolean realDown = inWorld && InputMouse.real(button) == InputMouse.STATE_DOWN;
+                InputMouse.setMask(button, clicker.armed);
+                clicker.setEnabled(clicker.armed && realDown);
+                break;
         }
+
+        // Mask only matters in Mouse mode; make sure it never lingers otherwise.
+        if (mode != ActivationMode.MOUSE)
+            InputMouse.setMask(button, false);
+
+        st.wasKeyDown = keyDown;
+    }
+
+    private static class ButtonState {
+        boolean wasKeyDown;
     }
 }

@@ -1,5 +1,6 @@
 package com.icysnex.ghosttap.config;
 
+import com.icysnex.ghosttap.core.ActivationMode;
 import com.icysnex.ghosttap.core.Clicker;
 import com.icysnex.ghosttap.core.analytics.Tracker;
 import net.minecraftforge.common.config.Configuration;
@@ -22,6 +23,10 @@ public class ConfigHandler {
     public static int openGuiKey = Keyboard.KEY_RSHIFT;
     public static int toggleLeftKey = Keyboard.KEY_R;
     public static int toggleRightKey = Keyboard.KEY_H;
+
+    // Per-clicker activation mode.
+    public static ActivationMode leftMode = ActivationMode.TOGGLE;
+    public static ActivationMode rightMode = ActivationMode.TOGGLE;
 
 
     public static void loadConfig(File file) {
@@ -51,6 +56,9 @@ public class ConfigHandler {
         openGuiKey = key(CAT_KEYS, "openGui", openGuiKey, save);
         toggleLeftKey = key(CAT_KEYS, "toggleLeft", toggleLeftKey, save);
         toggleRightKey = key(CAT_KEYS, "toggleRight", toggleRightKey, save);
+
+        leftMode = mode(CAT_KEYS, "leftMode", leftMode, save);
+        rightMode = mode(CAT_KEYS, "rightMode", rightMode, save);
 
         Property analytics = config.get(CAT_KEYS, "analyticsEnabled", Tracker.enabled, "Record click analytics for tuning/export");
         if (save) analytics.set(Tracker.enabled);
@@ -98,5 +106,18 @@ public class ConfigHandler {
             return current;
         }
         return p.getInt();
+    }
+
+    private static ActivationMode mode(String cat, String name, ActivationMode current, boolean save) {
+        Property p = config.get(cat, name, current.name(), "Activation mode: TOGGLE, HOLD or MOUSE");
+        if (save) {
+            p.set(current.name());
+            return current;
+        }
+        try {
+            return ActivationMode.valueOf(p.getString());
+        } catch (IllegalArgumentException e) {
+            return current;
+        }
     }
 }
