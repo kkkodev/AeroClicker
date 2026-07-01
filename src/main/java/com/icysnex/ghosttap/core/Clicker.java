@@ -2,7 +2,11 @@ package com.icysnex.ghosttap.core;
 
 import com.icysnex.ghosttap.core.analytics.Tracker;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.locks.LockSupport;
+import java.util.function.DoubleConsumer;
+import java.util.function.DoubleSupplier;
 
 public class Clicker implements Runnable {
 
@@ -90,6 +94,71 @@ public class Clicker implements Runnable {
 
         rhythmVolatility = 0.5;
         rhythmTension = 0.04;
+    }
+
+
+    public interface ParamSink {
+        void accept(String name, DoubleSupplier get, DoubleConsumer set);
+    }
+
+    // Single table of every tunable param, used to serialize and deserialize a
+    // clicker without repeating the field list per operation.
+    public void params(ParamSink s) {
+        s.accept("cpsMean", () -> cpsMean, v -> cpsMean = v);
+        s.accept("cpsStandardDeviation", () -> cpsStandardDeviation, v -> cpsStandardDeviation = v);
+        s.accept("cpsMin", () -> cpsMin, v -> cpsMin = v);
+        s.accept("cpsMax", () -> cpsMax, v -> cpsMax = v);
+        s.accept("cpsMinMaxFallout", () -> cpsMinMaxFallout, v -> cpsMinMaxFallout = v);
+        s.accept("spikeChance", () -> spikeChance, v -> spikeChance = v);
+        s.accept("spikeMin", () -> spikeMin, v -> spikeMin = v);
+        s.accept("spikeMax", () -> spikeMax, v -> spikeMax = v);
+        s.accept("stutterChance", () -> stutterChance, v -> stutterChance = v);
+        s.accept("stutterMin", () -> stutterMin, v -> stutterMin = v);
+        s.accept("stutterMax", () -> stutterMax, v -> stutterMax = v);
+        s.accept("holdMsMean", () -> holdMsMean, v -> holdMsMean = v);
+        s.accept("holdMsStandardDeviation", () -> holdMsStandardDeviation, v -> holdMsStandardDeviation = v);
+        s.accept("holdMsMin", () -> holdMsMin, v -> holdMsMin = v);
+        s.accept("holdMsMax", () -> holdMsMax, v -> holdMsMax = v);
+        s.accept("holdMsHeavyChance", () -> holdMsHeavyChance, v -> holdMsHeavyChance = v);
+        s.accept("holdMsHeavyMin", () -> holdMsHeavyMin, v -> holdMsHeavyMin = v);
+        s.accept("holdMsHeavyMax", () -> holdMsHeavyMax, v -> holdMsHeavyMax = v);
+        s.accept("rhythmVolatility", () -> rhythmVolatility, v -> rhythmVolatility = v);
+        s.accept("rhythmTension", () -> rhythmTension, v -> rhythmTension = v);
+    }
+
+    // Serialize all params to a shareable text blob.
+    public String export() {
+        StringBuilder sb = new StringBuilder("ghosttap-clicker\n");
+        params((name, get, set) -> sb.append(name).append('=').append(get.getAsDouble()).append('\n'));
+        return sb.toString();
+    }
+
+    // Apply params from an exported blob. Unknown keys are ignored; missing ones
+    // keep their current value. Returns false if the text isn't a valid export.
+    public boolean importFrom(String text) {
+        if (text == null || !text.trim().startsWith("ghosttap-clicker"))
+            return false;
+
+        Map<String, Double> values = new HashMap<>();
+        for (String line : text.split("\\r?\\n")) {
+            int eq = line.indexOf('=');
+            if (eq <= 0)
+                continue;
+            try {
+                values.put(line.substring(0, eq).trim(), Double.parseDouble(line.substring(eq + 1).trim()));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+
+        if (values.isEmpty())
+            return false;
+
+        params((name, get, set) -> {
+            Double v = values.get(name);
+            if (v != null)
+                set.accept(v);
+        });
+        return true;
     }
 
 
