@@ -13,31 +13,31 @@ public class Clicker implements Runnable {
     public static final Clicker RIGHT = new Clicker(InputMouse.BUTTON_RIGHT);
 
 
-    public double cpsMean = 12.0;
-    public double cpsStandardDeviation = 1.5;
-    public double cpsMin = 8.0;
-    public double cpsMax = 18.0;
-    public double cpsMinMaxFallout = 0.8;
+    public double cpsMean;
+    public double cpsStandardDeviation;
+    public double cpsMin;
+    public double cpsMax;
+    public double cpsMinMaxFallout;
 
-    public double spikeChance = 0.04;
-    public double spikeMin = 1;
-    public double spikeMax = 3;
+    public double spikeChance;
+    public double spikeMin;
+    public double spikeMax;
 
-    public double stutterChance = 0.03;
-    public double stutterMin = 4;
-    public double stutterMax = 7;
+    public double stutterChance;
+    public double stutterMin;
+    public double stutterMax;
 
-    public double holdMsMean = 38;
-    public double holdMsStandardDeviation = 6.5;
-    public double holdMsMin = 18;
-    public double holdMsMax = 75;
+    public double holdMsMean;
+    public double holdMsStandardDeviation;
+    public double holdMsMin;
+    public double holdMsMax;
 
-    public double holdMsHeavyChance = 0.015;
-    public double holdMsHeavyMin = 15;
-    public double holdMsHeavyMax = 35;
+    public double holdMsHeavyChance;
+    public double holdMsHeavyMin;
+    public double holdMsHeavyMax;
 
-    public double rhythmVolatility = 0.5;
-    public double rhythmTension = 0.04;
+    public double rhythmVolatility;
+    public double rhythmTension;
 
 
     public final Tracker tracker = new Tracker();
@@ -54,11 +54,42 @@ public class Clicker implements Runnable {
 
     private Clicker(byte button) {
         this.button = button;
+        resetParams();
 
         String name = button == InputMouse.BUTTON_LEFT ? "Left" : "Right";
         thread = new Thread(this, "GhostTap-Clicker-" + name);
         thread.setDaemon(true);
         thread.start();
+    }
+
+    // Single source of the default tuning values, used at construction and by the
+    // reset button.
+    public void resetParams() {
+        cpsMean = 12.0;
+        cpsStandardDeviation = 1.5;
+        cpsMin = 8.0;
+        cpsMax = 18.0;
+        cpsMinMaxFallout = 0.8;
+
+        spikeChance = 0.04;
+        spikeMin = 1;
+        spikeMax = 3;
+
+        stutterChance = 0.03;
+        stutterMin = 4;
+        stutterMax = 7;
+
+        holdMsMean = 38;
+        holdMsStandardDeviation = 6.5;
+        holdMsMin = 18;
+        holdMsMax = 75;
+
+        holdMsHeavyChance = 0.015;
+        holdMsHeavyMin = 15;
+        holdMsHeavyMax = 35;
+
+        rhythmVolatility = 0.5;
+        rhythmTension = 0.04;
     }
 
 
