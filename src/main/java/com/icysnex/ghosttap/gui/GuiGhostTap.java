@@ -68,11 +68,11 @@ public class GuiGhostTap extends GuiScreen {
         List<Object> r = new ArrayList<>();
 
         r.add("CPS");
-        // Mean rides the full scale but is clamped to the live Min/Max, so its
-        // knob physically stops at the current Min and Max positions.
+        // Mean widens the range if dragged past Min/Max; Min/Max also push Mean
+        // back in — the relationship is kept from both sides.
         r.add(slider("Mean", 1, 30, 1, false,
-                "Average click speed. Always stays between Min and Max.",
-                () -> c.cpsMean, v -> c.cpsMean = v, () -> c.cpsMin, () -> c.cpsMax));
+                "Average click speed. Drag past Min or Max to widen the range.",
+                () -> c.cpsMean, v -> { c.cpsMean = v; if (v < c.cpsMin) c.cpsMin = v; if (v > c.cpsMax) c.cpsMax = v; }));
         r.add(slider("Std deviation", 0, 6, 2, false,
                 "How much the speed randomly varies around the Mean.\nHigher = more human, less consistent.",
                 () -> c.cpsStandardDeviation, v -> c.cpsStandardDeviation = v));
@@ -110,8 +110,8 @@ public class GuiGhostTap extends GuiScreen {
 
         r.add("Hold (ms)");
         r.add(slider("Mean", 1, 200, 1, false,
-                "Average time the button stays held per click. Stays between Min and Max.",
-                () -> c.holdMsMean, v -> c.holdMsMean = v, () -> c.holdMsMin, () -> c.holdMsMax));
+                "Average hold time per click. Drag past Min or Max to widen the range.",
+                () -> c.holdMsMean, v -> { c.holdMsMean = v; if (v < c.holdMsMin) c.holdMsMin = v; if (v > c.holdMsMax) c.holdMsMax = v; }));
         r.add(slider("Std deviation", 0, 30, 1, false,
                 "How much the hold time randomly varies.",
                 () -> c.holdMsStandardDeviation, v -> c.holdMsStandardDeviation = v));
@@ -190,12 +190,6 @@ public class GuiGhostTap extends GuiScreen {
 
     private GuiSlider slider(String label, double min, double max, int dec, boolean pct, String tip, DoubleSupplier get, DoubleConsumer set) {
         GuiSlider s = new GuiSlider(label, min, max, dec, pct, get, set);
-        s.tooltip = tip;
-        return s;
-    }
-
-    private GuiSlider slider(String label, double min, double max, int dec, boolean pct, String tip, DoubleSupplier get, DoubleConsumer set, DoubleSupplier clampLo, DoubleSupplier clampHi) {
-        GuiSlider s = new GuiSlider(label, min, max, dec, pct, get, set, clampLo, clampHi);
         s.tooltip = tip;
         return s;
     }
