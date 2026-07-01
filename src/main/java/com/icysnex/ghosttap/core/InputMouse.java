@@ -28,6 +28,16 @@ public abstract class InputMouse {
     public static byte spoofedLeft = STATE_UP;
     public static byte spoofedRight = STATE_UP;
 
+    // Real hardware button state, published by the mixin each poll. Used by Mouse
+    // mode to know when the physical button is held.
+    public static volatile byte realLeft = STATE_UP;
+    public static volatile byte realRight = STATE_UP;
+
+    // When set, the mixin drops the real hold for that button and outputs only the
+    // spoofed clicks (Mouse mode: the real hold is a trigger, not real input).
+    public static volatile boolean maskLeft = false;
+    public static volatile boolean maskRight = false;
+
     public static final AtomicBoolean pollLeftLatch = new AtomicBoolean(false);
     public static final AtomicBoolean pollRightLatch = new AtomicBoolean(false);
 
@@ -68,5 +78,14 @@ public abstract class InputMouse {
 
     public static byte spoofed(byte button) {
         return button == BUTTON_LEFT ? spoofedLeft : spoofedRight;
+    }
+
+    public static byte real(byte button) {
+        return button == BUTTON_LEFT ? realLeft : realRight;
+    }
+
+    public static void setMask(byte button, boolean value) {
+        if (button == BUTTON_LEFT) maskLeft = value;
+        else maskRight = value;
     }
 }

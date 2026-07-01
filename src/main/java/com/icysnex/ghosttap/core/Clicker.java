@@ -42,6 +42,9 @@ public class Clicker implements Runnable {
 
     public final Tracker tracker = new Tracker();
 
+    // Mouse-mode gate: press the key to arm, then the real mouse button drives it.
+    public volatile boolean armed = false;
+
     private final byte button;
     private final Thread thread;
 
@@ -76,6 +79,13 @@ public class Clicker implements Runnable {
 
     public void toggle() {
         setEnabled(!enabled);
+    }
+
+    // Full reset, used when the activation mode changes so nothing stays stuck on.
+    public void deactivate() {
+        setEnabled(false);
+        armed = false;
+        InputMouse.setMask(button, false);
     }
 
 

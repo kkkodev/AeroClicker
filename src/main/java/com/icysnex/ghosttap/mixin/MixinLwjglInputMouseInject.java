@@ -27,47 +27,60 @@ public abstract class MixinLwjglInputMouseInject {
     private static void afterPoll(CallbackInfo ci) {
         // Left
         final byte realLeft = buttons.get(0);
+        InputMouse.realLeft = realLeft;
 
         byte currentSpoofLeft = InputMouse.spoofedLeft;
         if (InputMouse.pollLeftLatch.getAndSet(false)) {
             currentSpoofLeft = InputMouse.STATE_DOWN;
         }
 
-        byte combinedLeft = (byte)(realLeft | currentSpoofLeft);
+        byte combinedLeft;
+        if (InputMouse.maskLeft) {
+            // Mouse mode: hide the real hold, output only the spoofed clicks.
+            combinedLeft = currentSpoofLeft;
+        } else {
+            combinedLeft = (byte)(realLeft | currentSpoofLeft);
 
-        if (ghostTap$prevRealLeft == InputMouse.STATE_DOWN && realLeft == InputMouse.STATE_UP) {
-            combinedLeft = InputMouse.STATE_UP;
+            if (ghostTap$prevRealLeft == InputMouse.STATE_DOWN && realLeft == InputMouse.STATE_UP) {
+                combinedLeft = InputMouse.STATE_UP;
 
-            if (InputMouse.spoofedLeft == InputMouse.STATE_DOWN)
-                InputMouse.upLeft();
+                if (InputMouse.spoofedLeft == InputMouse.STATE_DOWN)
+                    InputMouse.upLeft();
 
-            InputMouse.pollLeftLatch.set(false);
+                InputMouse.pollLeftLatch.set(false);
+            }
         }
 
-        if (realLeft != combinedLeft)
+        if (buttons.get(0) != combinedLeft)
             buttons.put(0, combinedLeft);
         ghostTap$prevRealLeft = realLeft;
 
         // Right
         final byte realRight = buttons.get(1);
+        InputMouse.realRight = realRight;
 
         byte currentSpoofRight = InputMouse.spoofedRight;
         if (InputMouse.pollRightLatch.getAndSet(false)) {
             currentSpoofRight = InputMouse.STATE_DOWN;
         }
 
-        byte combinedRight = (byte)(realRight | currentSpoofRight);
+        byte combinedRight;
+        if (InputMouse.maskRight) {
+            combinedRight = currentSpoofRight;
+        } else {
+            combinedRight = (byte)(realRight | currentSpoofRight);
 
-        if (ghostTap$prevRealRight == InputMouse.STATE_DOWN && realRight == InputMouse.STATE_UP) {
-            combinedRight = InputMouse.STATE_UP;
+            if (ghostTap$prevRealRight == InputMouse.STATE_DOWN && realRight == InputMouse.STATE_UP) {
+                combinedRight = InputMouse.STATE_UP;
 
-            if (InputMouse.spoofedRight == InputMouse.STATE_DOWN)
-                InputMouse.upRight();
+                if (InputMouse.spoofedRight == InputMouse.STATE_DOWN)
+                    InputMouse.upRight();
 
-            InputMouse.pollRightLatch.set(false);
+                InputMouse.pollRightLatch.set(false);
+            }
         }
 
-        if (realRight != combinedRight)
+        if (buttons.get(1) != combinedRight)
             buttons.put(1, combinedRight);
         ghostTap$prevRealRight = realRight;
     }
