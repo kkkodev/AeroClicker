@@ -1,5 +1,6 @@
 package com.icysnex.ghosttap.mixin;
 
+import com.icysnex.ghosttap.core.Clicker;
 import com.icysnex.ghosttap.core.Cps;
 import com.icysnex.ghosttap.core.InputMouse;
 import org.lwjgl.input.Mouse;
@@ -31,6 +32,10 @@ public abstract class MixinLwjglInputMouseInject {
     private static byte ghostTap$prevOutLeft = InputMouse.STATE_UP;
     @Unique
     private static byte ghostTap$prevOutRight = InputMouse.STATE_UP;
+    @Unique
+    private static long ghostTap$lastRealLeft = 0;
+    @Unique
+    private static long ghostTap$lastRealRight = 0;
 
     @Inject(method = "poll", at = @At("RETURN"), remap = false)
     private static void afterPoll(CallbackInfo ci) {
@@ -72,8 +77,15 @@ public abstract class MixinLwjglInputMouseInject {
         if (buttons.get(0) != combinedLeft)
             buttons.put(0, combinedLeft);
 
-        if (ghostTap$prevOutLeft == InputMouse.STATE_UP && combinedLeft == InputMouse.STATE_DOWN)
+        if (ghostTap$prevOutLeft == InputMouse.STATE_UP && combinedLeft == InputMouse.STATE_DOWN) {
             Cps.hit(InputMouse.BUTTON_LEFT);
+            // Real (physical) click: the spoofer records its own clicks in run().
+            if (InputMouse.spoofedLeft != InputMouse.STATE_DOWN) {
+                long now = System.nanoTime();
+                Clicker.LEFT.tracker.recordReal(ghostTap$lastRealLeft == 0 ? 0 : now - ghostTap$lastRealLeft);
+                ghostTap$lastRealLeft = now;
+            }
+        }
         ghostTap$prevOutLeft = combinedLeft;
         ghostTap$prevRealLeft = realLeft;
 
@@ -111,8 +123,14 @@ public abstract class MixinLwjglInputMouseInject {
         if (buttons.get(1) != combinedRight)
             buttons.put(1, combinedRight);
 
-        if (ghostTap$prevOutRight == InputMouse.STATE_UP && combinedRight == InputMouse.STATE_DOWN)
+        if (ghostTap$prevOutRight == InputMouse.STATE_UP && combinedRight == InputMouse.STATE_DOWN) {
             Cps.hit(InputMouse.BUTTON_RIGHT);
+            if (InputMouse.spoofedRight != InputMouse.STATE_DOWN) {
+                long now = System.nanoTime();
+                Clicker.RIGHT.tracker.recordReal(ghostTap$lastRealRight == 0 ? 0 : now - ghostTap$lastRealRight);
+                ghostTap$lastRealRight = now;
+            }
+        }
         ghostTap$prevOutRight = combinedRight;
         ghostTap$prevRealRight = realRight;
     }

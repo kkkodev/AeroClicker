@@ -28,6 +28,12 @@ public class Tracker {
         history.add(new ClickData(now, targetCps, getCurrentCps(), hold, interval, trend));
     }
 
+    // A physical click (no generated target/hold/trend), so the analytics reflect
+    // every click the game sees, matching the CPS HUD.
+    public void recordReal(long interval) {
+        record(0, 0, interval, 0);
+    }
+
 
     public void clear() {
         history.clear();
