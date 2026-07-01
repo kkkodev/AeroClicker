@@ -1,6 +1,6 @@
 package com.icysnex.ghosttap;
 
-import com.icysnex.ghosttap.commands.GhostTapAnalyticsCommand;
+import com.icysnex.ghosttap.commands.GhostTapCommand;
 import com.icysnex.ghosttap.config.ConfigHandler;
 import com.icysnex.ghosttap.events.GhostTapKeybindListener;
 import com.icysnex.ghosttap.hud.ClickerHUD;
@@ -26,7 +26,7 @@ public class GhostTap {
 
     @EventHandler
     public void init(FMLInitializationEvent event) {
-        ClientCommandHandler.instance.registerCommand(new GhostTapAnalyticsCommand());
+        ClientCommandHandler.instance.registerCommand(new GhostTapCommand());
 
         MinecraftForge.EVENT_BUS.register(new GhostTapKeybindListener());
         MinecraftForge.EVENT_BUS.register(new ClickerHUD());
