@@ -129,39 +129,79 @@ public class Clicker implements Runnable {
         s.accept("rhythmTension", () -> rhythmTension, v -> rhythmTension = v);
     }
 
-    // Serialize all params to a shareable text blob.
+    // Serialize all params and gates to a shareable text blob.
     public String export() {
         StringBuilder sb = new StringBuilder("ghosttap-clicker\n");
         params((name, get, set) -> sb.append(name).append('=').append(get.getAsDouble()).append('\n'));
+
+        appendFlag(sb, "weapons", gates.weapons);
+        appendFlag(sb, "tools", gates.tools);
+        appendFlag(sb, "blocks", gates.blocks);
+        appendFlag(sb, "other", gates.other);
+        appendFlag(sb, "allowBlockBreak", gates.allowBlockBreak);
+        appendFlag(sb, "allowInMenu", gates.allowInMenu);
+        appendFlag(sb, "pauseWhileUsingItem", gates.pauseWhileUsingItem);
+        appendFlag(sb, "survival", gates.survival);
+        appendFlag(sb, "creative", gates.creative);
+        appendFlag(sb, "adventure", gates.adventure);
+        for (int i = 0; i < gates.slots.length; i++)
+            appendFlag(sb, "slot" + (i + 1), gates.slots[i]);
+
         return sb.toString();
     }
 
-    // Apply params from an exported blob. Unknown keys are ignored; missing ones
-    // keep their current value. Returns false if the text isn't a valid export.
+    // Apply params and gates from an exported blob. Unknown keys are ignored;
+    // missing ones keep their current value. Returns false if the text isn't a
+    // valid export.
     public boolean importFrom(String text) {
         if (text == null || !text.trim().startsWith("ghosttap-clicker"))
             return false;
 
-        Map<String, Double> values = new HashMap<>();
+        Map<String, String> values = new HashMap<>();
         for (String line : text.split("\\r?\\n")) {
             int eq = line.indexOf('=');
-            if (eq <= 0)
-                continue;
-            try {
-                values.put(line.substring(0, eq).trim(), Double.parseDouble(line.substring(eq + 1).trim()));
-            } catch (NumberFormatException ignored) {
-            }
+            if (eq > 0)
+                values.put(line.substring(0, eq).trim(), line.substring(eq + 1).trim());
         }
 
         if (values.isEmpty())
             return false;
 
         params((name, get, set) -> {
-            Double v = values.get(name);
-            if (v != null)
-                set.accept(v);
+            String v = values.get(name);
+            if (v != null) {
+                try {
+                    set.accept(Double.parseDouble(v));
+                } catch (NumberFormatException ignored) {
+                }
+            }
         });
+
+        gates.weapons = flag(values, "gate.weapons", gates.weapons);
+        gates.tools = flag(values, "gate.tools", gates.tools);
+        gates.blocks = flag(values, "gate.blocks", gates.blocks);
+        gates.other = flag(values, "gate.other", gates.other);
+        gates.allowBlockBreak = flag(values, "gate.allowBlockBreak", gates.allowBlockBreak);
+        gates.allowInMenu = flag(values, "gate.allowInMenu", gates.allowInMenu);
+        gates.pauseWhileUsingItem = flag(values, "gate.pauseWhileUsingItem", gates.pauseWhileUsingItem);
+        gates.survival = flag(values, "gate.survival", gates.survival);
+        gates.creative = flag(values, "gate.creative", gates.creative);
+        gates.adventure = flag(values, "gate.adventure", gates.adventure);
+        for (int i = 0; i < gates.slots.length; i++)
+            gates.slots[i] = flag(values, "gate.slot" + (i + 1), gates.slots[i]);
+
         return true;
+    }
+
+    private static void appendFlag(StringBuilder sb, String name, boolean value) {
+        sb.append("gate.").append(name).append('=').append(value ? 1 : 0).append('\n');
+    }
+
+    private static boolean flag(Map<String, String> values, String key, boolean current) {
+        String v = values.get(key);
+        if (v == null)
+            return current;
+        return v.equals("1") || v.equalsIgnoreCase("true");
     }
 
 
