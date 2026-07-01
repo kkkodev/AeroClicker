@@ -2,6 +2,8 @@ package com.icysnex.ghosttap.core;
 
 import com.icysnex.ghosttap.core.analytics.Tracker;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.locks.LockSupport;
@@ -147,18 +149,23 @@ public class Clicker implements Runnable {
         for (int i = 0; i < gates.slots.length; i++)
             appendFlag(sb, "slot" + (i + 1), gates.slots[i]);
 
-        return sb.toString();
+        // Base64 so the whole config is one easy-to-share token.
+        return Base64.getEncoder().encodeToString(sb.toString().getBytes(StandardCharsets.UTF_8));
     }
 
     // Apply params and gates from an exported blob. Unknown keys are ignored;
     // missing ones keep their current value. Returns false if the text isn't a
     // valid export.
     public boolean importFrom(String text) {
-        if (text == null || !text.trim().startsWith("ghosttap-clicker"))
+        if (text == null)
+            return false;
+
+        String data = decode(text.trim());
+        if (!data.trim().startsWith("ghosttap-clicker"))
             return false;
 
         Map<String, String> values = new HashMap<>();
-        for (String line : text.split("\\r?\\n")) {
+        for (String line : data.split("\\r?\\n")) {
             int eq = line.indexOf('=');
             if (eq > 0)
                 values.put(line.substring(0, eq).trim(), line.substring(eq + 1).trim());
@@ -191,6 +198,15 @@ public class Clicker implements Runnable {
             gates.slots[i] = flag(values, "gate.slot" + (i + 1), gates.slots[i]);
 
         return true;
+    }
+
+    // Decode a base64 token; fall back to the raw text for old plaintext exports.
+    private static String decode(String s) {
+        try {
+            return new String(Base64.getDecoder().decode(s), StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException e) {
+            return s;
+        }
     }
 
     private static void appendFlag(StringBuilder sb, String name, boolean value) {
