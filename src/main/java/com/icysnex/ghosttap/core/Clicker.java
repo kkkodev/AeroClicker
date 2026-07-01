@@ -45,7 +45,10 @@ public class Clicker implements Runnable {
 
 
     public final Tracker tracker = new Tracker();
+    public final ClickerGates gates = new ClickerGates();
 
+    // Persistent intent for Toggle mode (survives so gates can keep gating it).
+    public volatile boolean toggledOn = false;
     // Mouse-mode gate: press the key to arm, then the real mouse button drives it.
     public volatile boolean armed = false;
 
@@ -177,13 +180,10 @@ public class Clicker implements Runnable {
         }
     }
 
-    public void toggle() {
-        setEnabled(!enabled);
-    }
-
     // Full reset, used when the activation mode changes so nothing stays stuck on.
     public void deactivate() {
         setEnabled(false);
+        toggledOn = false;
         armed = false;
         InputMouse.setMask(button, false);
     }

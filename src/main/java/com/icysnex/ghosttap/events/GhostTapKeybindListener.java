@@ -3,6 +3,7 @@ package com.icysnex.ghosttap.events;
 import com.icysnex.ghosttap.config.ConfigHandler;
 import com.icysnex.ghosttap.core.ActivationMode;
 import com.icysnex.ghosttap.core.Clicker;
+import com.icysnex.ghosttap.core.Gates;
 import com.icysnex.ghosttap.core.InputMouse;
 import com.icysnex.ghosttap.gui.GuiGhostTap;
 import net.minecraft.client.Minecraft;
@@ -24,45 +25,50 @@ public class GhostTapKeybindListener {
             return;
 
         Minecraft mc = Minecraft.getMinecraft();
-        boolean inWorld = mc.currentScreen == null && mc.inGameHasFocus;
+        boolean screenOpen = mc.currentScreen != null;
 
-        boolean openDown = inWorld && Keyboard.isKeyDown(ConfigHandler.openGuiKey);
+        boolean openDown = !screenOpen && Keyboard.isKeyDown(ConfigHandler.openGuiKey);
         if (openDown && !wasOpenDown)
             mc.displayGuiScreen(new GuiGhostTap());
         wasOpenDown = openDown;
 
-        process(Clicker.LEFT, ConfigHandler.toggleLeftKey, ConfigHandler.leftMode, InputMouse.BUTTON_LEFT, left, inWorld);
-        process(Clicker.RIGHT, ConfigHandler.toggleRightKey, ConfigHandler.rightMode, InputMouse.BUTTON_RIGHT, right, inWorld);
+        process(Clicker.LEFT, ConfigHandler.toggleLeftKey, ConfigHandler.leftMode, InputMouse.BUTTON_LEFT, left, screenOpen);
+        process(Clicker.RIGHT, ConfigHandler.toggleRightKey, ConfigHandler.rightMode, InputMouse.BUTTON_RIGHT, right, screenOpen);
     }
 
-    private void process(Clicker clicker, int key, ActivationMode mode, byte button, ButtonState st, boolean inWorld) {
-        boolean keyDown = inWorld && Keyboard.isKeyDown(key);
+    private void process(Clicker clicker, int key, ActivationMode mode, byte button, ButtonState st, boolean screenOpen) {
+        // A clicker only acts when in the world, unless it's allowed in menus.
+        boolean context = !screenOpen || clicker.gates.allowInMenu;
+        boolean keyDown = context && Keyboard.isKeyDown(key);
 
+        // "Intent" = does the user want it clicking, before context gates apply.
+        boolean intent = false;
         switch (mode) {
             case TOGGLE:
                 if (keyDown && !st.wasKeyDown)
-                    clicker.toggle();
+                    clicker.toggledOn = !clicker.toggledOn;
+                intent = clicker.toggledOn;
                 break;
 
             case HOLD:
-                clicker.setEnabled(keyDown);
+                intent = keyDown;
                 break;
 
             case MOUSE:
                 if (keyDown && !st.wasKeyDown)
                     clicker.armed = !clicker.armed;
-
-                boolean realDown = inWorld && InputMouse.real(button) == InputMouse.STATE_DOWN;
-                clicker.setEnabled(clicker.armed && realDown);
+                boolean realDown = context && InputMouse.real(button) == InputMouse.STATE_DOWN;
+                intent = clicker.armed && realDown;
                 break;
         }
-
-        // Suppress the real button whenever the spoofer owns it, so a physical
-        // hold can't desync the polled state from the injected click events.
-        boolean mask = mode == ActivationMode.MOUSE ? clicker.armed : clicker.isEnabled();
-        InputMouse.setMask(button, mask);
-
         st.wasKeyDown = keyDown;
+
+        boolean enabled = intent && context && Gates.pass(clicker.gates);
+        clicker.setEnabled(enabled);
+
+        // Mask (suppress the real button) exactly while the spoofer is clicking,
+        // so a physical hold can't desync the polled state from the click events.
+        InputMouse.setMask(button, enabled);
     }
 
     private static class ButtonState {
