@@ -106,12 +106,12 @@ public class GuiGhostTap extends GuiScreen {
     }
 
     private Tab buildClickerTab(Clicker c) {
+        boolean left = c == Clicker.LEFT;
         List<SubTab> subs = new ArrayList<>();
         subs.add(new SubTab("Speed", buildSpeedRows(c)));
         subs.add(new SubTab("Hold", buildHoldRows(c)));
-        subs.add(new SubTab("Filters", buildFilterRows(c)));
-        subs.add(new SubTab("Config", buildConfigRows(c)));
-        return new Tab(c == Clicker.LEFT ? "Left" : "Right", subs);
+        subs.add(new SubTab("Filters", buildFilterRows(c, left)));
+        return new Tab(left ? "Left" : "Right", subs);
     }
 
     private List<Object> buildSpeedRows(Clicker c) {
@@ -200,7 +200,7 @@ public class GuiGhostTap extends GuiScreen {
         return r;
     }
 
-    private List<Object> buildFilterRows(Clicker c) {
+    private List<Object> buildFilterRows(Clicker c, boolean left) {
         List<Object> r = new ArrayList<>();
 
         r.add("Hotbar slots");
@@ -217,8 +217,10 @@ public class GuiGhostTap extends GuiScreen {
                 () -> c.gates.other, v -> c.gates.other = v));
 
         r.add("Rules");
-        r.add(toggle("Break blocks", "Allow clicking while aimed at a block (mining).",
-                () -> c.gates.allowBlockBreak, v -> c.gates.allowBlockBreak = v));
+        // Block breaking is a left-click concept only.
+        if (left)
+            r.add(toggle("Break blocks", "Allow clicking while aimed at a block (mining).",
+                    () -> c.gates.allowBlockBreak, v -> c.gates.allowBlockBreak = v));
         r.add(toggle("In menus", "Allow clicking while a screen (inventory, chat) is open.",
                 () -> c.gates.allowInMenu, v -> c.gates.allowInMenu = v));
         r.add(toggle("Pause on item use", "Pause while eating, drawing a bow or blocking.",
@@ -235,16 +237,11 @@ public class GuiGhostTap extends GuiScreen {
         return r;
     }
 
-    private List<Object> buildConfigRows(Clicker c) {
-        List<Object> r = new ArrayList<>();
-
-        r.add("Config");
-        r.add(new GuiButtonRow(
+    private GuiButtonRow configRow(Clicker c) {
+        return new GuiButtonRow(
                 button("Reset", "Restore this clicker's settings to their defaults.", c::resetParams),
                 button("Export", "Copy this clicker's settings to the clipboard.", () -> exportClicker(c)),
-                button("Import", "Load this clicker's settings from the clipboard.", () -> importClicker(c))));
-
-        return r;
+                button("Import", "Load this clicker's settings from the clipboard.", () -> importClicker(c)));
     }
 
     private void exportClicker(Clicker c) {
@@ -278,6 +275,7 @@ public class GuiGhostTap extends GuiScreen {
                 i -> { ConfigHandler.leftMode = ActivationMode.values()[i]; Clicker.LEFT.deactivate(); }));
         r.add(keybind("Key", "Left clicker key (toggle / hold / arm depending on mode).",
                 () -> ConfigHandler.toggleLeftKey, v -> ConfigHandler.toggleLeftKey = v));
+        r.add(configRow(Clicker.LEFT));
 
         r.add("Right clicker");
         r.add(toggle("Enabled", enabledTip,
@@ -288,6 +286,7 @@ public class GuiGhostTap extends GuiScreen {
                 i -> { ConfigHandler.rightMode = ActivationMode.values()[i]; Clicker.RIGHT.deactivate(); }));
         r.add(keybind("Key", "Right clicker key (toggle / hold / arm depending on mode).",
                 () -> ConfigHandler.toggleRightKey, v -> ConfigHandler.toggleRightKey = v));
+        r.add(configRow(Clicker.RIGHT));
 
         r.add("Menu");
         r.add(keybind("Open menu", "Key that opens this config screen.",
