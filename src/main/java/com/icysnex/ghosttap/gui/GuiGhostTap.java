@@ -3,6 +3,7 @@ package com.icysnex.ghosttap.gui;
 import com.icysnex.ghosttap.config.ConfigHandler;
 import com.icysnex.ghosttap.core.ActivationMode;
 import com.icysnex.ghosttap.core.Clicker;
+import com.icysnex.ghosttap.core.HudAnchor;
 import com.icysnex.ghosttap.core.analytics.Analytics;
 import com.icysnex.ghosttap.core.analytics.Tracker;
 import com.icysnex.ghosttap.utils.Notice;
@@ -52,7 +53,20 @@ public class GuiGhostTap extends GuiScreen {
 
     private GuiSlider activeSlider;
     private GuiKeybind activeKeybind;
+    private GuiHexField activeField;
     private String hoverTooltip;
+
+    // Row wrapper that only shows when the condition holds (walk/mouseClicked skip
+    // it otherwise). Lets rows appear/disappear without rebuilding the tab.
+    private static class Cond {
+        final java.util.function.BooleanSupplier show;
+        final Object row;
+        Cond(java.util.function.BooleanSupplier show, Object row) { this.show = show; this.row = row; }
+    }
+
+    private Object cond(java.util.function.BooleanSupplier show, Object row) {
+        return new Cond(show, row);
+    }
 
     // Screen to return to on close: null when opened in-game, the mods list when
     // opened via the Forge config button.
@@ -304,55 +318,55 @@ public class GuiGhostTap extends GuiScreen {
                 () -> ConfigHandler.hudEnabled, v -> ConfigHandler.hudEnabled = v));
         r.add(toggle("CPS counter", "Show a clicks-per-second line.",
                 () -> ConfigHandler.hudShowCps, v -> ConfigHandler.hudShowCps = v));
-        r.add(toggle("Left CPS", "Include the left clicker in the CPS line.",
-                () -> ConfigHandler.hudCpsLeft, v -> ConfigHandler.hudCpsLeft = v));
-        r.add(toggle("Right CPS", "Include the right clicker in the CPS line.",
-                () -> ConfigHandler.hudCpsRight, v -> ConfigHandler.hudCpsRight = v));
+        r.add(cond(() -> ConfigHandler.hudShowCps, toggle("Left CPS", "Include the left clicker in the CPS line.",
+                () -> ConfigHandler.hudCpsLeft, v -> ConfigHandler.hudCpsLeft = v)));
+        r.add(cond(() -> ConfigHandler.hudShowCps, toggle("Right CPS", "Include the right clicker in the CPS line.",
+                () -> ConfigHandler.hudCpsRight, v -> ConfigHandler.hudCpsRight = v)));
         r.add(toggle("Clicker status", "Show each clicker's on/off state and mode.",
                 () -> ConfigHandler.hudShowStatus, v -> ConfigHandler.hudShowStatus = v));
 
-        r.add("Format");
-        r.add(colorSlider("Text R", "Text colour (red).", 16, () -> ConfigHandler.hudTextColor, v -> ConfigHandler.hudTextColor = v));
-        r.add(colorSlider("Text G", "Text colour (green).", 8, () -> ConfigHandler.hudTextColor, v -> ConfigHandler.hudTextColor = v));
-        r.add(colorSlider("Text B", "Text colour (blue).", 0, () -> ConfigHandler.hudTextColor, v -> ConfigHandler.hudTextColor = v));
+        r.add("Formatting");
+        r.add(hexField("Text colour", false, () -> ConfigHandler.hudTextColor, v -> ConfigHandler.hudTextColor = v));
         r.add(toggle("Background", "Draw a box behind the HUD for readability.",
                 () -> ConfigHandler.hudBackground, v -> ConfigHandler.hudBackground = v));
-        r.add(slider("Padding", 0, 12, 0, false, "Space between the text and the box edge.",
-                () -> ConfigHandler.hudPadding, v -> ConfigHandler.hudPadding = (int) v));
-        r.add(colorSlider("Back R", "Background colour (red).", 16, () -> ConfigHandler.hudBgColor, v -> ConfigHandler.hudBgColor = v));
-        r.add(colorSlider("Back G", "Background colour (green).", 8, () -> ConfigHandler.hudBgColor, v -> ConfigHandler.hudBgColor = v));
-        r.add(colorSlider("Back B", "Background colour (blue).", 0, () -> ConfigHandler.hudBgColor, v -> ConfigHandler.hudBgColor = v));
-        r.add(colorSlider("Back opacity", "Background transparency.", 24, () -> ConfigHandler.hudBgColor, v -> ConfigHandler.hudBgColor = v));
+        r.add(cond(() -> ConfigHandler.hudBackground, hexField("Background colour", true, () -> ConfigHandler.hudBgColor, v -> ConfigHandler.hudBgColor = v)));
+        r.add(cond(() -> ConfigHandler.hudBackground, slider("Padding", 0, 12, 0, false, "Space between the text and the box edge.",
+                () -> ConfigHandler.hudPadding, v -> ConfigHandler.hudPadding = (int) v)));
 
         r.add("Position");
+        r.add(anchorSegment());
         ScaledResolution sr = new ScaledResolution(mc);
         int sw = sr.getScaledWidth();
         int sh = sr.getScaledHeight();
-        r.add(slider("X", 0, sw, 0, false, "Horizontal position (pixels from the left).",
-                () -> ConfigHandler.hudX, v -> ConfigHandler.hudX = (int) v));
-        r.add(slider("Y", 0, sh, 0, false, "Vertical position (pixels from the top).",
-                () -> ConfigHandler.hudY, v -> ConfigHandler.hudY = (int) v));
-        r.add(new GuiButtonRow("Preset",
-                button("TL", "Anchor to the top-left.", () -> setHudPos(2, 2)),
-                button("TR", "Anchor to the top-right.", () -> setHudPos(sw - 64, 2)),
-                button("BL", "Anchor to the bottom-left.", () -> setHudPos(2, sh - 20)),
-                button("BR", "Anchor to the bottom-right.", () -> setHudPos(sw - 64, sh - 20))));
+        r.add(cond(GuiGhostTap::manualPos, slider("X", 0, sw, 0, false, "Horizontal position (pixels from the left).",
+                () -> ConfigHandler.hudX, v -> ConfigHandler.hudX = (int) v)));
+        r.add(cond(GuiGhostTap::manualPos, slider("Y", 0, sh, 0, false, "Vertical position (pixels from the top).",
+                () -> ConfigHandler.hudY, v -> ConfigHandler.hudY = (int) v)));
 
         return r;
     }
 
-    private void setHudPos(int x, int y) {
-        ConfigHandler.hudX = Math.max(0, x);
-        ConfigHandler.hudY = Math.max(0, y);
+    private static boolean manualPos() {
+        return ConfigHandler.hudAnchor == HudAnchor.MANUAL;
     }
 
-    // Slider over one 8-bit colour channel (shift = bit offset in the ARGB int).
-    private GuiSlider colorSlider(String label, String tip, int shift, java.util.function.IntSupplier get, java.util.function.IntConsumer set) {
-        GuiSlider s = new GuiSlider(label, 0, 255, 0, false,
-                () -> (get.getAsInt() >> shift) & 0xFF,
-                v -> set.accept((get.getAsInt() & ~(0xFF << shift)) | (((int) v & 0xFF) << shift)));
-        s.tooltip = tip;
+    private GuiSegment anchorSegment() {
+        HudAnchor[] anchors = HudAnchor.values();
+        String[] names = new String[anchors.length];
+        for (int i = 0; i < anchors.length; i++)
+            names[i] = anchors[i].label;
+
+        GuiSegment s = new GuiSegment("Anchor", names,
+                () -> ConfigHandler.hudAnchor.ordinal(),
+                i -> ConfigHandler.hudAnchor = HudAnchor.values()[i]);
+        s.tooltip = "Corner anchors stick to the screen edges on resize; Man = free X/Y.";
         return s;
+    }
+
+    private GuiHexField hexField(String label, boolean alpha, java.util.function.IntSupplier get, java.util.function.IntConsumer set) {
+        GuiHexField f = new GuiHexField(label, alpha, get, set);
+        f.tooltip = alpha ? "Hex colour #AARRGGBB (alpha first)." : "Hex colour #RRGGBB.";
+        return f;
     }
 
     private List<Object> buildAnalyticsRows() {
@@ -485,8 +499,8 @@ public class GuiGhostTap extends GuiScreen {
         if (notice != null) {
             int w = fontRendererObj.getStringWidth(notice);
             int nx = left + (PANEL_W - w) / 2;
-            int ny = top + PANEL_H - 18;
-            drawRect(nx - 5, ny - 4, nx + w + 5, ny + 10, 0xE0000000);
+            int ny = top + PANEL_H + 6;
+            drawRect(nx - 5, ny - 4, nx + w + 5, ny + 10, 0xF0121212);
             drawBorder(nx - 5, ny - 4, nx + w + 5, ny + 10, 0xFF5A9BD4);
             fontRendererObj.drawStringWithShadow(notice, nx, ny, 0xFFFFFFFF);
         }
@@ -563,7 +577,15 @@ public class GuiGhostTap extends GuiScreen {
         int cursor = contentTop - scroll;
         int start = cursor;
 
-        for (Object row : rows) {
+        for (Object entry : rows) {
+            Object row = entry;
+            if (row instanceof Cond) {
+                Cond c = (Cond) row;
+                if (!c.show.getAsBoolean())
+                    continue;
+                row = c.row;
+            }
+
             if (row instanceof String) {
                 if (draw && cursor + SECTION_H >= contentTop && cursor <= contentBottom) {
                     fontRendererObj.drawString((String) row, contentX, cursor + 6, 0xFF5A9BD4);
@@ -610,6 +632,16 @@ public class GuiGhostTap extends GuiScreen {
                     captureHoverTitle(mouseX, mouseY, cursor + 3, sg.label, sg.tooltip);
                 }
                 cursor += GuiSegment.ROW_HEIGHT;
+            } else if (row instanceof GuiHexField) {
+                GuiHexField f = (GuiHexField) row;
+                f.x = contentX;
+                f.y = cursor;
+                f.width = contentW;
+                if (draw) {
+                    f.draw(fontRendererObj, mouseX, mouseY);
+                    captureHoverTitle(mouseX, mouseY, cursor + 3, f.label, f.tooltip);
+                }
+                cursor += GuiHexField.ROW_HEIGHT;
             } else if (row instanceof GuiSlots) {
                 GuiSlots sl = (GuiSlots) row;
                 sl.x = contentX;
@@ -716,11 +748,26 @@ public class GuiGhostTap extends GuiScreen {
             return;
 
         clearListening();
-        for (Object row : currentRows()) {
+        clearFocus();
+        for (Object entry : currentRows()) {
+            Object row = entry;
+            if (row instanceof Cond) {
+                Cond c = (Cond) row;
+                if (!c.show.getAsBoolean())
+                    continue;
+                row = c.row;
+            }
+
             if (row instanceof GuiSlider) {
                 GuiSlider s = (GuiSlider) row;
                 if (s.mouseClicked(mouseX, mouseY)) {
                     activeSlider = s;
+                    return;
+                }
+            } else if (row instanceof GuiHexField) {
+                GuiHexField f = (GuiHexField) row;
+                if (f.mouseClicked(mouseX, mouseY)) {
+                    activeField = f;
                     return;
                 }
             } else if (row instanceof GuiToggle) {
@@ -786,9 +833,25 @@ public class GuiGhostTap extends GuiScreen {
             return;
         }
 
+        // Typing into a hex field consumes keys (Escape just defocuses).
+        if (activeField != null) {
+            if (keyCode == Keyboard.KEY_ESCAPE)
+                clearFocus();
+            else
+                activeField.keyTyped(typedChar, keyCode);
+            return;
+        }
+
         if (keyCode == Keyboard.KEY_ESCAPE || keyCode == ConfigHandler.openGuiKey) {
             close();
             return;
+        }
+    }
+
+    private void clearFocus() {
+        if (activeField != null) {
+            activeField.focused = false;
+            activeField = null;
         }
     }
 
@@ -812,6 +875,7 @@ public class GuiGhostTap extends GuiScreen {
         activeSub = 0;
         scroll = 0;
         clearListening();
+        clearFocus();
         activeSlider = null;
         layoutContent();
     }
@@ -820,6 +884,7 @@ public class GuiGhostTap extends GuiScreen {
         activeSub = i;
         scroll = 0;
         clearListening();
+        clearFocus();
         activeSlider = null;
     }
 
