@@ -53,14 +53,14 @@ public class GhostTapKeybindListener {
                     clicker.armed = !clicker.armed;
 
                 boolean realDown = inWorld && InputMouse.real(button) == InputMouse.STATE_DOWN;
-                InputMouse.setMask(button, clicker.armed);
                 clicker.setEnabled(clicker.armed && realDown);
                 break;
         }
 
-        // Mask only matters in Mouse mode; make sure it never lingers otherwise.
-        if (mode != ActivationMode.MOUSE)
-            InputMouse.setMask(button, false);
+        // Suppress the real button whenever the spoofer owns it, so a physical
+        // hold can't desync the polled state from the injected click events.
+        boolean mask = mode == ActivationMode.MOUSE ? clicker.armed : clicker.isEnabled();
+        InputMouse.setMask(button, mask);
 
         st.wasKeyDown = keyDown;
     }
