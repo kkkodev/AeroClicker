@@ -8,6 +8,8 @@ import net.minecraftforge.common.config.Property;
 import org.lwjgl.input.Keyboard;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.function.DoubleConsumer;
 import java.util.function.DoubleSupplier;
 
@@ -18,6 +20,7 @@ public class ConfigHandler {
     private static final String CAT_KEYS = "keys";
 
     private static Configuration config;
+    private static File file;
 
     // Keybinds (LWJGL key codes). Rebindable from the GUI.
     public static int openGuiKey = Keyboard.KEY_RSHIFT;
@@ -29,11 +32,45 @@ public class ConfigHandler {
     public static ActivationMode rightMode = ActivationMode.TOGGLE;
 
 
-    public static void loadConfig(File file) {
+    public static void loadConfig(File configFile) {
+        file = configFile;
         config = new Configuration(file);
         config.load();
 
         sync(false);
+    }
+
+    // Flush live settings to disk and return the whole config file as text, for
+    // copying to the clipboard.
+    public static String exportString() {
+        saveConfig();
+        try {
+            return new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    // Apply a config file pasted from the clipboard: write it, reload, and push
+    // the values into the live fields. Runtime state is reset so nothing sticks.
+    public static boolean importString(String text) {
+        if (text == null || text.trim().isEmpty())
+            return false;
+
+        try {
+            Files.write(file.toPath(), text.getBytes(StandardCharsets.UTF_8));
+            config = new Configuration(file);
+            config.load();
+            sync(false);
+
+            Clicker.LEFT.deactivate();
+            Clicker.RIGHT.deactivate();
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
     }
 
     public static void saveConfig() {
