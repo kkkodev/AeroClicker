@@ -283,8 +283,8 @@ public class GuiGhostTap extends GuiScreen {
 
         r.add("Left clicker");
         r.add(toggle("Enabled", enabledTip,
-                () -> active(Clicker.LEFT, ConfigHandler.leftMode),
-                v -> setActive(Clicker.LEFT, ConfigHandler.leftMode, v)));
+                () -> Clicker.LEFT.isActive(ConfigHandler.leftMode),
+                v -> Clicker.LEFT.setActive(ConfigHandler.leftMode, v)));
         r.add(segment("Mode", modeTip,
                 () -> ConfigHandler.leftMode.ordinal(),
                 i -> { ConfigHandler.leftMode = ActivationMode.values()[i]; Clicker.LEFT.deactivate(); }));
@@ -294,8 +294,8 @@ public class GuiGhostTap extends GuiScreen {
 
         r.add("Right clicker");
         r.add(toggle("Enabled", enabledTip,
-                () -> active(Clicker.RIGHT, ConfigHandler.rightMode),
-                v -> setActive(Clicker.RIGHT, ConfigHandler.rightMode, v)));
+                () -> Clicker.RIGHT.isActive(ConfigHandler.rightMode),
+                v -> Clicker.RIGHT.setActive(ConfigHandler.rightMode, v)));
         r.add(segment("Mode", modeTip,
                 () -> ConfigHandler.rightMode.ordinal(),
                 i -> { ConfigHandler.rightMode = ActivationMode.values()[i]; Clicker.RIGHT.deactivate(); }));
@@ -306,6 +306,9 @@ public class GuiGhostTap extends GuiScreen {
         r.add("HUD");
         r.add(toggle("Enabled", "Show the on-screen HUD (configure it on the HUD tab).",
                 () -> ConfigHandler.hudEnabled, v -> ConfigHandler.hudEnabled = v));
+        r.add(new GuiButtonRow("Config",
+                button("Export", "Copy HUD settings to the clipboard.", this::exportHud),
+                button("Import", "Load HUD settings from the clipboard.", this::importHud)));
 
         r.add("Analytics");
         r.add(toggle("Enabled", "Record click data for stats and export (Analytics tab).",
@@ -348,11 +351,6 @@ public class GuiGhostTap extends GuiScreen {
                 () -> ConfigHandler.hudY, v -> ConfigHandler.hudY = (int) v)));
         r.add(cond(() -> !manualPos(), slider("Edge gap", 0, 40, 0, false, "Distance from the screen edge when anchored to a corner.",
                 () -> ConfigHandler.hudMargin, v -> ConfigHandler.hudMargin = (int) v)));
-
-        r.add("Config");
-        r.add(new GuiButtonRow("Config",
-                button("Export", "Copy HUD settings to the clipboard.", this::exportHud),
-                button("Import", "Load HUD settings from the clipboard.", this::importHud)));
 
         return r;
     }
@@ -413,20 +411,6 @@ public class GuiGhostTap extends GuiScreen {
         r.add(button("Clear data", "Delete all recorded data.", Analytics::clear));
 
         return r;
-    }
-
-
-    // The "Enabled" toggle targets the arm gate in Mouse mode (so you can drop
-    // back to a normal mouse) and the plain on/off state otherwise.
-    private static boolean active(Clicker c, ActivationMode mode) {
-        return mode == ActivationMode.MOUSE ? c.armed : c.isEnabled();
-    }
-
-    private static void setActive(Clicker c, ActivationMode mode, boolean value) {
-        if (mode == ActivationMode.MOUSE)
-            c.armed = value;
-        else
-            c.setEnabled(value);
     }
 
 

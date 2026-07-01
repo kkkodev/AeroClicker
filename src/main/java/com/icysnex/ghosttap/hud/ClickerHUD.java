@@ -67,8 +67,8 @@ public class ClickerHUD {
             lines.add(Line.plain(cps));
 
         if (ConfigHandler.hudShowStatus) {
-            lines.add(Line.status("Left", Clicker.LEFT.isEnabled(), ConfigHandler.leftMode.label));
-            lines.add(Line.status("Right", Clicker.RIGHT.isEnabled(), ConfigHandler.rightMode.label));
+            lines.add(Line.status("Left", Clicker.LEFT.isActive(ConfigHandler.leftMode), ConfigHandler.leftMode.label));
+            lines.add(Line.status("Right", Clicker.RIGHT.isActive(ConfigHandler.rightMode), ConfigHandler.rightMode.label));
         }
 
         return lines;

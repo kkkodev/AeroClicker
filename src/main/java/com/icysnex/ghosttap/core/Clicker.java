@@ -236,6 +236,24 @@ public class Clicker implements Runnable {
         }
     }
 
+    // The persistent on-state for the current mode (not whether it's mid-click):
+    // Mouse = armed, Toggle = toggled on, Hold = live key state.
+    public boolean isActive(ActivationMode mode) {
+        switch (mode) {
+            case MOUSE: return armed;
+            case TOGGLE: return toggledOn;
+            default: return enabled;
+        }
+    }
+
+    public void setActive(ActivationMode mode, boolean value) {
+        switch (mode) {
+            case MOUSE: armed = value; break;
+            case TOGGLE: toggledOn = value; break;
+            default: setEnabled(value); break;
+        }
+    }
+
     // Full reset, used when the activation mode changes so nothing stays stuck on.
     public void deactivate() {
         setEnabled(false);
