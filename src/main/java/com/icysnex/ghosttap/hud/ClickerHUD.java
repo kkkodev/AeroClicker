@@ -59,13 +59,19 @@ public class ClickerHUD {
             fr.drawStringWithShadow(lines.get(i), x, y + i * lineHeight, color);
     }
 
+    // The background box extends `pad` beyond the text, so anchored positions
+    // inset the text by the margin plus that padding to keep the box off the edge.
+    private int edgePad() {
+        return ConfigHandler.hudMargin + (ConfigHandler.hudBackground ? ConfigHandler.hudPadding : 0);
+    }
+
     private int anchorX(int textW, int screenW) {
         HudAnchor a = ConfigHandler.hudAnchor;
         if (a == HudAnchor.MANUAL)
             return ConfigHandler.hudX;
         if (a == HudAnchor.TOP_RIGHT || a == HudAnchor.BOTTOM_RIGHT)
-            return screenW - textW - 4;
-        return 4;
+            return screenW - textW - edgePad();
+        return edgePad();
     }
 
     private int anchorY(int textH, int screenH) {
@@ -73,8 +79,8 @@ public class ClickerHUD {
         if (a == HudAnchor.MANUAL)
             return ConfigHandler.hudY;
         if (a == HudAnchor.BOTTOM_LEFT || a == HudAnchor.BOTTOM_RIGHT)
-            return screenH - textH - 4;
-        return 4;
+            return screenH - textH - edgePad();
+        return edgePad();
     }
 
     private List<String> buildLines() {

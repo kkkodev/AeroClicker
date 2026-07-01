@@ -42,6 +42,7 @@ public class ConfigHandler {
     public static int hudTextColor = 0xFFFFFFFF;
     public static int hudBgColor = 0x90000000;
     public static HudAnchor hudAnchor = HudAnchor.TOP_LEFT;
+    public static int hudMargin = 4;
     public static int hudX = 4;
     public static int hudY = 4;
 
@@ -101,6 +102,7 @@ public class ConfigHandler {
         } catch (IllegalArgumentException ignored) {
         }
 
+        hudMargin = integer(CAT_HUD, "margin", hudMargin, save);
         hudX = integer(CAT_HUD, "x", hudX, save);
         hudY = integer(CAT_HUD, "y", hudY, save);
     }

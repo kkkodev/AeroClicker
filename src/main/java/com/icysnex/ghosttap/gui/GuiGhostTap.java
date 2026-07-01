@@ -342,6 +342,8 @@ public class GuiGhostTap extends GuiScreen {
                 () -> ConfigHandler.hudX, v -> ConfigHandler.hudX = (int) v)));
         r.add(cond(GuiGhostTap::manualPos, slider("Y", 0, sh, 0, false, "Vertical position (pixels from the top).",
                 () -> ConfigHandler.hudY, v -> ConfigHandler.hudY = (int) v)));
+        r.add(cond(() -> !manualPos(), slider("Edge gap", 0, 40, 0, false, "Distance from the screen edge when anchored to a corner.",
+                () -> ConfigHandler.hudMargin, v -> ConfigHandler.hudMargin = (int) v)));
 
         return r;
     }

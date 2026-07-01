@@ -8,7 +8,7 @@ public enum HudAnchor {
     TOP_RIGHT("TR"),
     BOTTOM_LEFT("BL"),
     BOTTOM_RIGHT("BR"),
-    MANUAL("Man");
+    MANUAL("Manual");
 
     public final String label;
 

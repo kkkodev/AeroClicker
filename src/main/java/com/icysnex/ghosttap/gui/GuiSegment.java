@@ -11,7 +11,7 @@ import java.util.function.IntSupplier;
 public class GuiSegment {
 
     public static final int ROW_HEIGHT = 18;
-    private static final int SEG_W = 150;
+    private static final int LABEL_W = 42;
 
     final String label;
     private final String[] options;
@@ -28,11 +28,20 @@ public class GuiSegment {
         this.setIndex = setIndex;
     }
 
+    // Pills fill the width after the label, so wider option sets still fit.
+    private int segX() {
+        return x + LABEL_W;
+    }
+
+    private int pillW() {
+        return (x + width - segX()) / options.length;
+    }
+
     public void draw(FontRenderer fr, int mouseX, int mouseY) {
         fr.drawString(label, x, y + 3, 0xFFB8B8B8);
 
-        int segX = x + width - SEG_W;
-        int pillW = SEG_W / options.length;
+        int segX = segX();
+        int pillW = pillW();
         int active = getIndex.getAsInt();
 
         for (int i = 0; i < options.length; i++) {
@@ -50,8 +59,8 @@ public class GuiSegment {
     }
 
     public boolean mouseClicked(int mouseX, int mouseY) {
-        int segX = x + width - SEG_W;
-        int pillW = SEG_W / options.length;
+        int segX = segX();
+        int pillW = pillW();
 
         if (mouseY < y || mouseY > y + 14 || mouseX < segX || mouseX > segX + pillW * options.length)
             return false;
