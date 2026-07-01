@@ -10,6 +10,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import org.lwjgl.input.Keyboard;
+import org.lwjgl.input.Mouse;
 
 // Polled every client tick rather than driven by key events, so Hold mode sees
 // releases reliably and Mouse mode can watch the real mouse button.
@@ -27,7 +28,7 @@ public class GhostTapKeybindListener {
         Minecraft mc = Minecraft.getMinecraft();
         boolean screenOpen = mc.currentScreen != null;
 
-        boolean openDown = !screenOpen && Keyboard.isKeyDown(ConfigHandler.openGuiKey);
+        boolean openDown = !screenOpen && isDown(ConfigHandler.openGuiKey);
         if (openDown && !wasOpenDown)
             mc.displayGuiScreen(new GuiGhostTap());
         wasOpenDown = openDown;
@@ -39,7 +40,7 @@ public class GhostTapKeybindListener {
     private void process(Clicker clicker, int key, ActivationMode mode, byte button, ButtonState st, boolean screenOpen) {
         // A clicker only acts when in the world, unless it's allowed in menus.
         boolean context = !screenOpen || clicker.gates.allowInMenu;
-        boolean keyDown = context && Keyboard.isKeyDown(key);
+        boolean keyDown = context && isDown(key);
 
         // "Intent" = does the user want it clicking, before context gates apply.
         boolean intent = false;
@@ -70,6 +71,13 @@ public class GhostTapKeybindListener {
         // When a gate stops clicking, the mask lifts so the physical mouse behaves
         // normally again (e.g. so you can mine a block yourself).
         InputMouse.setMask(button, enabled);
+    }
+
+    // A hotkey is a keyboard code, or a mouse button stored as (button - 100).
+    private static boolean isDown(int code) {
+        if (code < 0)
+            return Mouse.isButtonDown(code + 100);
+        return Keyboard.isKeyDown(code);
     }
 
     private static class ButtonState {

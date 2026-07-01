@@ -35,9 +35,7 @@ public class GuiKeybind {
         int color = listening ? 0xFF5A9BD4 : (contains(mouseX, mouseY) ? 0xFF3A3A3A : 0xFF2A2A2A);
         Gui.drawRect(boxX, y, boxX + boxW, y + 14, color);
 
-        String text = listening ? "> press <" : Keyboard.getKeyName(getter.getAsInt());
-        if (text == null)
-            text = "NONE";
+        String text = listening ? "> press <" : name(getter.getAsInt());
         int textX = boxX + (boxW - fr.getStringWidth(text)) / 2;
         fr.drawString(text, textX, y + 3, 0xFFFFFFFF);
     }
@@ -55,6 +53,28 @@ public class GuiKeybind {
         if (keyCode != Keyboard.KEY_ESCAPE)
             onChange.accept(keyCode);
         listening = false;
+    }
+
+    // Bind a mouse button. Stored as (button - 100), matching Minecraft's own
+    // key-code convention so keyboard and mouse share one int space.
+    public void mousePressed(int button) {
+        onChange.accept(button - 100);
+        listening = false;
+    }
+
+    // Human-readable name for a keyboard code or a mouse button (negative code).
+    public static String name(int code) {
+        if (code < 0) {
+            int button = code + 100;
+            switch (button) {
+                case 0: return "LMB";
+                case 1: return "RMB";
+                case 2: return "MMB";
+                default: return "M" + (button + 1);
+            }
+        }
+        String n = Keyboard.getKeyName(code);
+        return n == null ? "NONE" : n;
     }
 
     private boolean contains(int mouseX, int mouseY) {
