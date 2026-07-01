@@ -1,7 +1,6 @@
 package com.icysnex.ghosttap.hud;
 
 import com.icysnex.ghosttap.config.ConfigHandler;
-import com.icysnex.ghosttap.core.ActivationMode;
 import com.icysnex.ghosttap.core.Clicker;
 import com.icysnex.ghosttap.core.Cps;
 import com.icysnex.ghosttap.core.HudAnchor;
@@ -16,8 +15,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 // Configurable overlay: a classic "CPS: L | R" counter and/or per-clicker status,
-// drawn at a user-set position in a single chosen colour.
+// drawn at a user-set position in a chosen colour (ON/OFF stay green/red).
 public class ClickerHUD {
+
+    private static final int GREEN = 0xFF55FF55;
+    private static final int RED = 0xFFFF5555;
 
     @SubscribeEvent
     public void onRenderGameOverlay(RenderGameOverlayEvent.Post event) {
@@ -30,7 +32,7 @@ public class ClickerHUD {
         if (mc.thePlayer == null)
             return;
 
-        List<String> lines = buildLines();
+        List<Line> lines = buildLines();
         if (lines.isEmpty())
             return;
 
@@ -38,10 +40,8 @@ public class ClickerHUD {
         int lineHeight = fr.FONT_HEIGHT + 1;
 
         int w = 0;
-        for (String line : lines)
-            w = Math.max(w, fr.getStringWidth(line));
-        // Trailing char spacing / lower font-cell row aren't visible, so trim a
-        // pixel off the right and bottom to keep the padding even on all sides.
+        for (Line line : lines)
+            w = Math.max(w, line.width(fr));
         int textW = w - 1;
         int textH = lines.size() * lineHeight - 2;
 
@@ -56,11 +56,37 @@ public class ClickerHUD {
 
         int color = 0xFF000000 | (ConfigHandler.hudTextColor & 0xFFFFFF);
         for (int i = 0; i < lines.size(); i++)
-            fr.drawStringWithShadow(lines.get(i), x, y + i * lineHeight, color);
+            lines.get(i).draw(fr, x, y + i * lineHeight, color);
     }
 
-    // The background box extends `pad` beyond the text, so anchored positions
-    // inset the text by the margin plus that padding to keep the box off the edge.
+    private List<Line> buildLines() {
+        List<Line> lines = new ArrayList<>();
+
+        String cps = cpsText();
+        if (cps != null)
+            lines.add(Line.plain(cps));
+
+        if (ConfigHandler.hudShowStatus) {
+            lines.add(Line.status("Left", Clicker.LEFT.isEnabled(), ConfigHandler.leftMode.label));
+            lines.add(Line.status("Right", Clicker.RIGHT.isEnabled(), ConfigHandler.rightMode.label));
+        }
+
+        return lines;
+    }
+
+    private String cpsText() {
+        boolean left = ConfigHandler.hudCpsLeft;
+        boolean right = ConfigHandler.hudCpsRight;
+
+        if (left && right)
+            return "CPS: " + Cps.left() + " | " + Cps.right();
+        if (left)
+            return "CPS: " + Cps.left();
+        if (right)
+            return "CPS: " + Cps.right();
+        return null;
+    }
+
     private int edgePad() {
         return ConfigHandler.hudMargin + (ConfigHandler.hudBackground ? ConfigHandler.hudPadding : 0);
     }
@@ -83,35 +109,46 @@ public class ClickerHUD {
         return edgePad();
     }
 
-    private List<String> buildLines() {
-        List<String> lines = new ArrayList<>();
+    // A HUD line: either plain text, or a status line whose ON/OFF is coloured.
+    private static final class Line {
+        private final String plain;
+        private final String name;
+        private final boolean on;
+        private final String mode;
 
-        String cps = cpsText();
-        if (cps != null)
-            lines.add(cps);
-
-        if (ConfigHandler.hudShowStatus) {
-            lines.add(statusLine("Left", Clicker.LEFT, ConfigHandler.leftMode));
-            lines.add(statusLine("Right", Clicker.RIGHT, ConfigHandler.rightMode));
+        private Line(String plain, String name, boolean on, String mode) {
+            this.plain = plain;
+            this.name = name;
+            this.on = on;
+            this.mode = mode;
         }
 
-        return lines;
-    }
+        static Line plain(String text) {
+            return new Line(text, null, false, null);
+        }
 
-    private String cpsText() {
-        boolean left = ConfigHandler.hudCpsLeft;
-        boolean right = ConfigHandler.hudCpsRight;
+        static Line status(String name, boolean on, String mode) {
+            return new Line(null, name, on, mode);
+        }
 
-        if (left && right)
-            return "CPS: " + Cps.left() + " | " + Cps.right();
-        if (left)
-            return "CPS: " + Cps.left();
-        if (right)
-            return "CPS: " + Cps.right();
-        return null;
-    }
+        int width(FontRenderer fr) {
+            if (plain != null)
+                return fr.getStringWidth(plain);
+            return fr.getStringWidth(name + ": ") + fr.getStringWidth(on ? "ON" : "OFF") + fr.getStringWidth(" (" + mode + ")");
+        }
 
-    private String statusLine(String name, Clicker clicker, ActivationMode mode) {
-        return name + ": " + (clicker.isEnabled() ? "ON" : "OFF") + " (" + mode.label + ")";
+        void draw(FontRenderer fr, int x, int y, int color) {
+            if (plain != null) {
+                fr.drawStringWithShadow(plain, x, y, color);
+                return;
+            }
+            String prefix = name + ": ";
+            String state = on ? "ON" : "OFF";
+            fr.drawStringWithShadow(prefix, x, y, color);
+            int x2 = x + fr.getStringWidth(prefix);
+            fr.drawStringWithShadow(state, x2, y, on ? GREEN : RED);
+            int x3 = x2 + fr.getStringWidth(state);
+            fr.drawStringWithShadow(" (" + mode + ")", x3, y, color);
+        }
     }
 }
