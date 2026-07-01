@@ -1,16 +1,14 @@
 package com.icysnex.ghosttap.core.analytics;
 
 import com.icysnex.ghosttap.core.Clicker;
-import com.icysnex.ghosttap.utils.Chat;
 import com.icysnex.ghosttap.utils.FileIO;
-import net.minecraft.command.ICommandSender;
-import net.minecraft.util.EnumChatFormatting;
+import com.icysnex.ghosttap.utils.Notice;
 
 import java.util.List;
 
-// Shared analytics actions so the /gta command and the config UI both go through
-// one place. Each button exports to its own CSV keeping the single-button format
-// the python analyzer expects.
+// Shared analytics actions used by the config UI. Each button exports to its own
+// CSV keeping the single-button format the python analyzer expects. Feedback goes
+// through Notice so it works with no world/player.
 public class Analytics {
 
     public static int totalSize() {
@@ -20,20 +18,21 @@ public class Analytics {
     public static void clear() {
         Clicker.LEFT.tracker.clear();
         Clicker.RIGHT.tracker.clear();
+        Notice.show("Cleared analytics data.");
     }
 
-    public static void export(ICommandSender sender) {
+    public static void export() {
         if (totalSize() <= 0) {
-            Chat.error(sender, "Analytics", "No data collected. Enable tracking and start clicking.");
+            Notice.show("No analytics data. Enable tracking and click first.");
             return;
         }
 
-        Chat.message(sender, "Analytics", EnumChatFormatting.YELLOW + "Exporting session...");
-        exportButton(sender, Clicker.LEFT, "left");
-        exportButton(sender, Clicker.RIGHT, "right");
+        Notice.show("Exporting analytics...");
+        exportButton(Clicker.LEFT, "left");
+        exportButton(Clicker.RIGHT, "right");
     }
 
-    private static void exportButton(ICommandSender sender, Clicker c, String label) {
+    private static void exportButton(Clicker c, String label) {
         if (c.tracker.size() <= 0)
             return;
 
@@ -56,9 +55,9 @@ public class Analytics {
             }
         }, (success) -> {
             if (success) {
-                Chat.success(sender, "Analytics", "Exported " + label + ": " + fileName);
+                Notice.show("Exported " + label + ": " + fileName);
             } else {
-                Chat.error(sender, "Analytics", "Export failed for " + label + "! Check console.");
+                Notice.show("Export failed for " + label + " (see console).");
             }
         });
     }

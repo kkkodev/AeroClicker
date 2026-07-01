@@ -5,7 +5,7 @@ import com.icysnex.ghosttap.core.ActivationMode;
 import com.icysnex.ghosttap.core.Clicker;
 import com.icysnex.ghosttap.core.analytics.Analytics;
 import com.icysnex.ghosttap.core.analytics.Tracker;
-import com.icysnex.ghosttap.utils.Chat;
+import com.icysnex.ghosttap.utils.Notice;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.ScaledResolution;
 import org.lwjgl.input.Keyboard;
@@ -247,14 +247,14 @@ public class GuiGhostTap extends GuiScreen {
 
     private void exportClicker(Clicker c) {
         setClipboardString(c.export());
-        Chat.message(mc.thePlayer, "Config", "Copied clicker settings to clipboard.");
+        Notice.show("Copied clicker settings to clipboard.");
     }
 
     private void importClicker(Clicker c) {
         if (c.importFrom(getClipboardString()))
-            Chat.message(mc.thePlayer, "Config", "Loaded clicker settings from clipboard.");
+            Notice.show("Loaded clicker settings from clipboard.");
         else
-            Chat.error(mc.thePlayer, "Config", "Clipboard has no valid clicker config.");
+            Notice.show("Clipboard has no valid clicker config.");
     }
 
     private List<Object> buildGeneralRows() {
@@ -308,6 +308,8 @@ public class GuiGhostTap extends GuiScreen {
                 () -> ConfigHandler.hudShowStatus, v -> ConfigHandler.hudShowStatus = v));
         r.add(toggle("Background", "Draw a dark box behind the HUD for readability.",
                 () -> ConfigHandler.hudBackground, v -> ConfigHandler.hudBackground = v));
+        r.add(slider("Padding", 0, 12, 0, false, "Space between the text and the background box edge.",
+                () -> ConfigHandler.hudPadding, v -> ConfigHandler.hudPadding = (int) v));
 
         r.add("Position");
         r.add(slider("X", 0, 400, 0, false, "Horizontal position (pixels from the left).",
@@ -339,7 +341,7 @@ public class GuiGhostTap extends GuiScreen {
 
         r.add("Actions");
         r.add(button("Export CSV", "Save recorded data to a CSV file in the config folder.",
-                () -> Analytics.export(mc.thePlayer)));
+                Analytics::export));
         r.add(button("Clear data", "Delete all recorded data.", Analytics::clear));
 
         return r;
@@ -443,6 +445,16 @@ public class GuiGhostTap extends GuiScreen {
         // Border last so it frames the whole window cleanly, on top of the title
         // bar, tabs and content.
         drawBorder(left, top, left + PANEL_W, top + PANEL_H, 0xFF5A9BD4);
+
+        String notice = Notice.current();
+        if (notice != null) {
+            int w = fontRendererObj.getStringWidth(notice);
+            int nx = left + (PANEL_W - w) / 2;
+            int ny = top + PANEL_H - 18;
+            drawRect(nx - 5, ny - 4, nx + w + 5, ny + 10, 0xE0000000);
+            drawBorder(nx - 5, ny - 4, nx + w + 5, ny + 10, 0xFF5A9BD4);
+            fontRendererObj.drawStringWithShadow(notice, nx, ny, 0xFFFFFFFF);
+        }
 
         // Tooltip on top of everything. Suppressed while actively dragging or
         // rebinding so it doesn't get in the way.
@@ -621,6 +633,14 @@ public class GuiGhostTap extends GuiScreen {
 
     @Override
     protected void mouseClicked(int mouseX, int mouseY, int mouseButton) throws java.io.IOException {
+        // Binding a mouse button: middle / side buttons only (left & right stay
+        // free for the UI and are meaningless as clicker hotkeys anyway).
+        if (activeKeybind != null && mouseButton >= 2) {
+            activeKeybind.mousePressed(mouseButton);
+            activeKeybind = null;
+            return;
+        }
+
         super.mouseClicked(mouseX, mouseY, mouseButton);
         if (mouseButton != 0)
             return;

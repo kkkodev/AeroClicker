@@ -35,6 +35,7 @@ public class ConfigHandler {
     public static boolean hudShowCps = true;
     public static boolean hudShowStatus = false;
     public static boolean hudBackground = true;
+    public static int hudPadding = 3;
     public static int hudX = 4;
     public static int hudY = 4;
 
@@ -81,6 +82,7 @@ public class ConfigHandler {
         hudShowCps = bool(CAT_HUD, "showCps", hudShowCps, save);
         hudShowStatus = bool(CAT_HUD, "showStatus", hudShowStatus, save);
         hudBackground = bool(CAT_HUD, "background", hudBackground, save);
+        hudPadding = integer(CAT_HUD, "padding", hudPadding, save);
         hudX = integer(CAT_HUD, "x", hudX, save);
         hudY = integer(CAT_HUD, "y", hudY, save);
     }

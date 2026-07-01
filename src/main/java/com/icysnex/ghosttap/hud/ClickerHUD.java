@@ -7,6 +7,7 @@ import com.icysnex.ghosttap.core.Cps;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.Gui;
+import net.minecraft.util.EnumChatFormatting;
 import net.minecraftforge.client.event.RenderGameOverlayEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
@@ -38,10 +39,11 @@ public class ClickerHUD {
         int lineHeight = fr.FONT_HEIGHT + 1;
 
         if (ConfigHandler.hudBackground) {
+            int pad = ConfigHandler.hudPadding;
             int w = 0;
             for (String line : lines)
                 w = Math.max(w, fr.getStringWidth(line));
-            Gui.drawRect(x - 3, y - 3, x + w + 3, y + lines.size() * lineHeight, 0x90000000);
+            Gui.drawRect(x - pad, y - pad, x + w + pad, y + lines.size() * lineHeight - 1 + pad, 0x90000000);
         }
 
         for (int i = 0; i < lines.size(); i++)
@@ -57,17 +59,21 @@ public class ClickerHUD {
             lines.add(statusLine("Left", Clicker.LEFT, ConfigHandler.leftMode, cps, Cps.left()));
             lines.add(statusLine("Right", Clicker.RIGHT, ConfigHandler.rightMode, cps, Cps.right()));
         } else if (cps) {
-            lines.add("§bCPS  §7L §f" + Cps.left() + "  §7R §f" + Cps.right());
+            lines.add(EnumChatFormatting.AQUA + "CPS  "
+                    + EnumChatFormatting.GRAY + "L " + EnumChatFormatting.WHITE + Cps.left() + "  "
+                    + EnumChatFormatting.GRAY + "R " + EnumChatFormatting.WHITE + Cps.right());
         }
 
         return lines;
     }
 
     private String statusLine(String name, Clicker clicker, ActivationMode mode, boolean cps, int value) {
-        String state = clicker.isEnabled() ? "§aON" : "§8OFF";
-        String line = "§f" + name + "  " + state + " §8" + mode.label;
+        String state = clicker.isEnabled()
+                ? EnumChatFormatting.GREEN + "ON"
+                : EnumChatFormatting.DARK_GRAY + "OFF";
+        String line = EnumChatFormatting.WHITE + name + "  " + state + " " + EnumChatFormatting.DARK_GRAY + mode.label;
         if (cps)
-            line += " §b" + value;
+            line += " " + EnumChatFormatting.AQUA + value;
         return line;
     }
 }
