@@ -143,11 +143,25 @@ public class GuiGhostTap extends GuiScreen {
                 "How strongly the pace is pulled back toward the Mean.\nHigher = steadier.",
                 () -> c.rhythmTension, v -> c.rhythmTension = v));
 
-        r.add("Reset");
-        r.add(button("Reset to defaults", "Restore this clicker's settings to their defaults.",
-                c::resetParams));
+        r.add("Config");
+        r.add(new GuiButtonRow(
+                button("Reset", "Restore this clicker's settings to their defaults.", c::resetParams),
+                button("Export", "Copy this clicker's settings to the clipboard.", () -> exportClicker(c)),
+                button("Import", "Load this clicker's settings from the clipboard.", () -> importClicker(c))));
 
         return r;
+    }
+
+    private void exportClicker(Clicker c) {
+        setClipboardString(c.export());
+        Chat.message(mc.thePlayer, "Config", "Copied clicker settings to clipboard.");
+    }
+
+    private void importClicker(Clicker c) {
+        if (c.importFrom(getClipboardString()))
+            Chat.message(mc.thePlayer, "Config", "Loaded clicker settings from clipboard.");
+        else
+            Chat.error(mc.thePlayer, "Config", "Clipboard has no valid clicker config.");
     }
 
     private List<Object> buildGeneralRows() {
@@ -184,30 +198,7 @@ public class GuiGhostTap extends GuiScreen {
         r.add(keybind("Open menu", "Key that opens this config screen.",
                 () -> ConfigHandler.openGuiKey, v -> ConfigHandler.openGuiKey = v));
 
-        r.add("Config");
-        r.add(button("Export to clipboard", "Copy all settings to the clipboard to share.",
-                this::exportConfig));
-        r.add(button("Import from clipboard", "Load settings from a clipboard config.",
-                this::importConfig));
-
         return r;
-    }
-
-    private void exportConfig() {
-        String data = ConfigHandler.exportString();
-        if (data != null) {
-            setClipboardString(data);
-            Chat.message(mc.thePlayer, "Config", "Copied settings to clipboard.");
-        } else {
-            Chat.error(mc.thePlayer, "Config", "Export failed. Check console.");
-        }
-    }
-
-    private void importConfig() {
-        if (ConfigHandler.importString(getClipboardString()))
-            Chat.message(mc.thePlayer, "Config", "Loaded settings from clipboard.");
-        else
-            Chat.error(mc.thePlayer, "Config", "Clipboard has no valid config.");
     }
 
     private List<Object> buildAnalyticsRows() {
@@ -449,6 +440,17 @@ public class GuiGhostTap extends GuiScreen {
                     captureHover(mouseX, mouseY, contentX, cursor, contentW, 16, b.tooltip);
                 }
                 cursor += GuiActionButton.ROW_HEIGHT;
+            } else if (row instanceof GuiButtonRow) {
+                GuiButtonRow br = (GuiButtonRow) row;
+                br.x = contentX;
+                br.y = cursor;
+                br.width = contentW;
+                if (draw) {
+                    br.draw(fontRendererObj, mouseX, mouseY);
+                    for (GuiActionButton b : br.buttons)
+                        captureHover(mouseX, mouseY, b.x, cursor, b.width, 16, b.tooltip);
+                }
+                cursor += GuiButtonRow.ROW_HEIGHT;
             }
         }
 
@@ -509,6 +511,9 @@ public class GuiGhostTap extends GuiScreen {
                     return;
             } else if (row instanceof GuiActionButton) {
                 if (((GuiActionButton) row).mouseClicked(mouseX, mouseY))
+                    return;
+            } else if (row instanceof GuiButtonRow) {
+                if (((GuiButtonRow) row).mouseClicked(mouseX, mouseY))
                     return;
             }
         }
