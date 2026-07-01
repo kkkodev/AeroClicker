@@ -152,7 +152,10 @@ public class GuiGhostTap extends GuiScreen {
                 + "Hold: clicks only while key is held.\n"
                 + "Mouse: press key to arm, then hold the real mouse button to click.";
 
+        String enabledTip = "Turn the clicker on or off. In Hold and Mouse mode this follows your key/button.";
+
         r.add("Left clicker");
+        r.add(toggle("Enabled", enabledTip, Clicker.LEFT::isEnabled, Clicker.LEFT::setEnabled));
         r.add(segment("Mode", modeTip,
                 () -> ConfigHandler.leftMode.ordinal(),
                 i -> { ConfigHandler.leftMode = ActivationMode.values()[i]; Clicker.LEFT.deactivate(); }));
@@ -160,6 +163,7 @@ public class GuiGhostTap extends GuiScreen {
                 () -> ConfigHandler.toggleLeftKey, v -> ConfigHandler.toggleLeftKey = v));
 
         r.add("Right clicker");
+        r.add(toggle("Enabled", enabledTip, Clicker.RIGHT::isEnabled, Clicker.RIGHT::setEnabled));
         r.add(segment("Mode", modeTip,
                 () -> ConfigHandler.rightMode.ordinal(),
                 i -> { ConfigHandler.rightMode = ActivationMode.values()[i]; Clicker.RIGHT.deactivate(); }));
