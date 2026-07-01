@@ -11,11 +11,15 @@ import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.GL11;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.function.DoubleConsumer;
+import java.util.function.DoubleSupplier;
 
-// Custom dark-panel config screen. Three tabs (Left / Right / General), each a
-// scrollable list of section headers + widgets. Widget coords are recomputed
-// every frame in walk(), so the mouse handlers can reuse the same layout.
+// Custom dark-panel config screen. Four tabs (Left / Right / General /
+// Analytics), each a scrollable list of section headers + widgets. Widget coords
+// are recomputed every frame in walk(), so the mouse handlers can reuse the same
+// layout.
 public class GuiGhostTap extends GuiScreen {
 
     private static final int PANEL_W = 250;
@@ -23,6 +27,7 @@ public class GuiGhostTap extends GuiScreen {
     private static final int TITLE_H = 18;
     private static final int TAB_H = 16;
     private static final int SECTION_H = 20;
+    private static final int BOTTOM_PAD = 8;
 
     private static final String[] TABS = {"Left", "Right", "General", "Analytics"};
 
@@ -32,6 +37,7 @@ public class GuiGhostTap extends GuiScreen {
 
     private GuiSlider activeSlider;
     private GuiKeybind activeKeybind;
+    private String hoverTooltip;
 
     // Panel geometry, filled in initGui.
     private int left, top;
@@ -45,7 +51,7 @@ public class GuiGhostTap extends GuiScreen {
         contentX = left + 12;
         contentW = PANEL_W - 24;
         contentTop = top + TITLE_H + TAB_H + 4;
-        contentBottom = top + PANEL_H - 16;
+        contentBottom = top + PANEL_H - BOTTOM_PAD;
         contentH = contentBottom - contentTop;
 
         tabRows.clear();
@@ -59,36 +65,77 @@ public class GuiGhostTap extends GuiScreen {
         List<Object> r = new ArrayList<>();
 
         r.add("CPS");
-        r.add(new GuiSlider("Mean", 1, 25, 1, c.cpsMean, v -> c.cpsMean = v));
-        r.add(new GuiSlider("Std deviation", 0, 6, 2, c.cpsStandardDeviation, v -> c.cpsStandardDeviation = v));
-        r.add(new GuiSlider("Min", 1, 25, 1, c.cpsMin, v -> c.cpsMin = v));
-        r.add(new GuiSlider("Max", 1, 30, 1, c.cpsMax, v -> c.cpsMax = v));
-        r.add(new GuiSlider("Min/Max fallout", 0, 3, 2, c.cpsMinMaxFallout, v -> c.cpsMinMaxFallout = v));
+        // Mean is bounded by the live Min/Max so it can never sit outside the range.
+        r.add(slider("Mean", () -> c.cpsMin, () -> c.cpsMax, 1, false,
+                "Average click speed. Always stays between Min and Max.",
+                () -> c.cpsMean, v -> c.cpsMean = v));
+        r.add(slider("Std deviation", 0, 6, 2, false,
+                "How much the speed randomly varies around the Mean.\nHigher = more human, less consistent.",
+                () -> c.cpsStandardDeviation, v -> c.cpsStandardDeviation = v));
+        r.add(slider("Min", 1, 25, 1, false,
+                "Lowest allowed click speed. Pushes Max and Mean up if needed.",
+                () -> c.cpsMin, v -> { c.cpsMin = v; if (c.cpsMax < v) c.cpsMax = v; if (c.cpsMean < v) c.cpsMean = v; }));
+        r.add(slider("Max", 1, 30, 1, false,
+                "Highest allowed click speed. Pulls Min and Mean down if needed.",
+                () -> c.cpsMax, v -> { c.cpsMax = v; if (c.cpsMin > v) c.cpsMin = v; if (c.cpsMean > v) c.cpsMean = v; }));
+        r.add(slider("Min/Max fallout", 0, 3, 2, false,
+                "How far the speed may drift past Min/Max before being reeled back in.",
+                () -> c.cpsMinMaxFallout, v -> c.cpsMinMaxFallout = v));
 
         r.add("Spike");
-        r.add(new GuiSlider("Chance", 0, 0.5, 3, c.spikeChance, v -> c.spikeChance = v));
-        r.add(new GuiSlider("Min", 0, 10, 1, c.spikeMin, v -> c.spikeMin = v));
-        r.add(new GuiSlider("Max", 0, 10, 1, c.spikeMax, v -> c.spikeMax = v));
+        r.add(slider("Chance", 0, 0.5, 1, true,
+                "Chance per click of a short burst of extra speed.",
+                () -> c.spikeChance, v -> c.spikeChance = v));
+        r.add(slider("Min", 0, 10, 1, false,
+                "Smallest speed boost a spike adds (in CPS).",
+                () -> c.spikeMin, v -> { c.spikeMin = v; if (c.spikeMax < v) c.spikeMax = v; }));
+        r.add(slider("Max", 0, 10, 1, false,
+                "Largest speed boost a spike adds (in CPS).",
+                () -> c.spikeMax, v -> { c.spikeMax = v; if (c.spikeMin > v) c.spikeMin = v; }));
 
         r.add("Stutter");
-        r.add(new GuiSlider("Chance", 0, 0.5, 3, c.stutterChance, v -> c.stutterChance = v));
-        r.add(new GuiSlider("Min", 0, 15, 1, c.stutterMin, v -> c.stutterMin = v));
-        r.add(new GuiSlider("Max", 0, 15, 1, c.stutterMax, v -> c.stutterMax = v));
+        r.add(slider("Chance", 0, 0.5, 1, true,
+                "Chance per click of a short hitch that slows down.",
+                () -> c.stutterChance, v -> c.stutterChance = v));
+        r.add(slider("Min", 0, 15, 1, false,
+                "Smallest speed drop a stutter causes (in CPS).",
+                () -> c.stutterMin, v -> { c.stutterMin = v; if (c.stutterMax < v) c.stutterMax = v; }));
+        r.add(slider("Max", 0, 15, 1, false,
+                "Largest speed drop a stutter causes (in CPS).",
+                () -> c.stutterMax, v -> { c.stutterMax = v; if (c.stutterMin > v) c.stutterMin = v; }));
 
         r.add("Hold (ms)");
-        r.add(new GuiSlider("Mean", 5, 150, 1, c.holdMsMean, v -> c.holdMsMean = v));
-        r.add(new GuiSlider("Std deviation", 0, 30, 1, c.holdMsStandardDeviation, v -> c.holdMsStandardDeviation = v));
-        r.add(new GuiSlider("Min", 1, 150, 1, c.holdMsMin, v -> c.holdMsMin = v));
-        r.add(new GuiSlider("Max", 1, 200, 1, c.holdMsMax, v -> c.holdMsMax = v));
+        r.add(slider("Mean", () -> c.holdMsMin, () -> c.holdMsMax, 1, false,
+                "Average time the button stays held per click. Stays between Min and Max.",
+                () -> c.holdMsMean, v -> c.holdMsMean = v));
+        r.add(slider("Std deviation", 0, 30, 1, false,
+                "How much the hold time randomly varies.",
+                () -> c.holdMsStandardDeviation, v -> c.holdMsStandardDeviation = v));
+        r.add(slider("Min", 1, 150, 1, false,
+                "Shortest allowed hold time (ms).",
+                () -> c.holdMsMin, v -> { c.holdMsMin = v; if (c.holdMsMax < v) c.holdMsMax = v; if (c.holdMsMean < v) c.holdMsMean = v; }));
+        r.add(slider("Max", 1, 200, 1, false,
+                "Longest allowed hold time (ms).",
+                () -> c.holdMsMax, v -> { c.holdMsMax = v; if (c.holdMsMin > v) c.holdMsMin = v; if (c.holdMsMean > v) c.holdMsMean = v; }));
 
         r.add("Heavy hold");
-        r.add(new GuiSlider("Chance", 0, 0.2, 3, c.holdMsHeavyChance, v -> c.holdMsHeavyChance = v));
-        r.add(new GuiSlider("Min", 0, 60, 1, c.holdMsHeavyMin, v -> c.holdMsHeavyMin = v));
-        r.add(new GuiSlider("Max", 0, 80, 1, c.holdMsHeavyMax, v -> c.holdMsHeavyMax = v));
+        r.add(slider("Chance", 0, 0.2, 1, true,
+                "Chance per click of an occasional extra-long hold.",
+                () -> c.holdMsHeavyChance, v -> c.holdMsHeavyChance = v));
+        r.add(slider("Min", 0, 60, 1, false,
+                "Smallest extra time a heavy hold adds (ms).",
+                () -> c.holdMsHeavyMin, v -> { c.holdMsHeavyMin = v; if (c.holdMsHeavyMax < v) c.holdMsHeavyMax = v; }));
+        r.add(slider("Max", 0, 80, 1, false,
+                "Largest extra time a heavy hold adds (ms).",
+                () -> c.holdMsHeavyMax, v -> { c.holdMsHeavyMax = v; if (c.holdMsHeavyMin > v) c.holdMsHeavyMin = v; }));
 
         r.add("Rhythm");
-        r.add(new GuiSlider("Volatility", 0, 3, 2, c.rhythmVolatility, v -> c.rhythmVolatility = v));
-        r.add(new GuiSlider("Tension", 0, 1, 3, c.rhythmTension, v -> c.rhythmTension = v));
+        r.add(slider("Volatility", 0, 3, 2, false,
+                "How quickly the click pace wanders over time.",
+                () -> c.rhythmVolatility, v -> c.rhythmVolatility = v));
+        r.add(slider("Tension", 0, 1, 3, false,
+                "How strongly the pace is pulled back toward the Mean.\nHigher = steadier.",
+                () -> c.rhythmTension, v -> c.rhythmTension = v));
 
         return r;
     }
@@ -97,9 +144,12 @@ public class GuiGhostTap extends GuiScreen {
         List<Object> r = new ArrayList<>();
 
         r.add("Keybinds");
-        r.add(new GuiKeybind("Open menu", () -> ConfigHandler.openGuiKey, v -> ConfigHandler.openGuiKey = v));
-        r.add(new GuiKeybind("Toggle left", () -> ConfigHandler.toggleLeftKey, v -> ConfigHandler.toggleLeftKey = v));
-        r.add(new GuiKeybind("Toggle right", () -> ConfigHandler.toggleRightKey, v -> ConfigHandler.toggleRightKey = v));
+        r.add(keybind("Open menu", "Key that opens this config screen.",
+                () -> ConfigHandler.openGuiKey, v -> ConfigHandler.openGuiKey = v));
+        r.add(keybind("Toggle left", "Key to switch the left clicker on/off.",
+                () -> ConfigHandler.toggleLeftKey, v -> ConfigHandler.toggleLeftKey = v));
+        r.add(keybind("Toggle right", "Key to switch the right clicker on/off.",
+                () -> ConfigHandler.toggleRightKey, v -> ConfigHandler.toggleRightKey = v));
 
         return r;
     }
@@ -108,29 +158,73 @@ public class GuiGhostTap extends GuiScreen {
         List<Object> r = new ArrayList<>();
 
         r.add("Tracking");
-        r.add(new GuiToggle("Enabled", () -> Tracker.enabled, v -> Tracker.enabled = v));
+        r.add(toggle("Enabled", "Record click timing data for stats and CSV export.",
+                () -> Tracker.enabled, v -> Tracker.enabled = v));
 
         r.add("Left");
-        r.add(new GuiStat("Current CPS", () -> String.format("%.0f", Clicker.LEFT.tracker.getCurrentCps())));
-        r.add(new GuiStat("Recorded", () -> String.valueOf(Clicker.LEFT.tracker.size())));
-        r.add(new GuiStat("Average CPS", () -> String.format("%.2f", Clicker.LEFT.tracker.getAverageCps())));
+        r.add(stat("Recorded", "Left clicks recorded this session.",
+                () -> String.valueOf(Clicker.LEFT.tracker.size())));
+        r.add(stat("Average CPS", "Average recorded left click speed.",
+                () -> String.format("%.2f", Clicker.LEFT.tracker.getAverageCps())));
 
         r.add("Right");
-        r.add(new GuiStat("Current CPS", () -> String.format("%.0f", Clicker.RIGHT.tracker.getCurrentCps())));
-        r.add(new GuiStat("Recorded", () -> String.valueOf(Clicker.RIGHT.tracker.size())));
-        r.add(new GuiStat("Average CPS", () -> String.format("%.2f", Clicker.RIGHT.tracker.getAverageCps())));
+        r.add(stat("Recorded", "Right clicks recorded this session.",
+                () -> String.valueOf(Clicker.RIGHT.tracker.size())));
+        r.add(stat("Average CPS", "Average recorded right click speed.",
+                () -> String.format("%.2f", Clicker.RIGHT.tracker.getAverageCps())));
 
         r.add("Actions");
-        r.add(new GuiActionButton("Export CSV", () -> Analytics.export(mc.thePlayer)));
-        r.add(new GuiActionButton("Clear data", Analytics::clear));
+        r.add(button("Export CSV", "Save recorded data to a CSV file in the config folder.",
+                () -> Analytics.export(mc.thePlayer)));
+        r.add(button("Clear data", "Delete all recorded data.", Analytics::clear));
 
         return r;
+    }
+
+
+    // --- Row builder helpers (attach tooltips without cluttering call sites) ---
+
+    private GuiSlider slider(String label, double min, double max, int dec, boolean pct, String tip, DoubleSupplier get, DoubleConsumer set) {
+        GuiSlider s = new GuiSlider(label, min, max, dec, pct, get, set);
+        s.tooltip = tip;
+        return s;
+    }
+
+    private GuiSlider slider(String label, DoubleSupplier min, DoubleSupplier max, int dec, boolean pct, String tip, DoubleSupplier get, DoubleConsumer set) {
+        GuiSlider s = new GuiSlider(label, min, max, dec, pct, get, set);
+        s.tooltip = tip;
+        return s;
+    }
+
+    private GuiToggle toggle(String label, String tip, java.util.function.BooleanSupplier get, java.util.function.Consumer<Boolean> set) {
+        GuiToggle t = new GuiToggle(label, get, set);
+        t.tooltip = tip;
+        return t;
+    }
+
+    private GuiKeybind keybind(String label, String tip, java.util.function.IntSupplier get, java.util.function.IntConsumer set) {
+        GuiKeybind k = new GuiKeybind(label, get, set);
+        k.tooltip = tip;
+        return k;
+    }
+
+    private GuiStat stat(String label, String tip, java.util.function.Supplier<String> value) {
+        GuiStat s = new GuiStat(label, value);
+        s.tooltip = tip;
+        return s;
+    }
+
+    private GuiActionButton button(String label, String tip, Runnable action) {
+        GuiActionButton b = new GuiActionButton(label, action);
+        b.tooltip = tip;
+        return b;
     }
 
 
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
         drawDefaultBackground();
+        hoverTooltip = null;
 
         // Panel background
         drawRect(left, top, left + PANEL_W, top + PANEL_H, 0xF0121212);
@@ -160,6 +254,22 @@ public class GuiGhostTap extends GuiScreen {
         // Border last so it frames the whole window cleanly, on top of the title
         // bar, tabs and content.
         drawBorder(left, top, left + PANEL_W, top + PANEL_H, 0xFF5A9BD4);
+
+        // Tooltip on top of everything. Suppressed while actively dragging or
+        // rebinding so it doesn't get in the way.
+        if (hoverTooltip != null && activeSlider == null && activeKeybind == null)
+            drawHoveringText(Arrays.asList(hoverTooltip.split("\n")), mouseX, mouseY);
+    }
+
+    // Records the tooltip of whichever row the mouse is over, clipped to the
+    // visible content region. Drawn later, after the scissor is disabled.
+    private void captureHover(int mouseX, int mouseY, int rowTop, int rowHeight, String tip) {
+        if (tip == null || tip.isEmpty())
+            return;
+        if (mouseY < contentTop || mouseY > contentBottom)
+            return;
+        if (mouseX >= contentX && mouseX <= contentX + contentW && mouseY >= rowTop && mouseY <= rowTop + rowHeight)
+            hoverTooltip = tip;
     }
 
     private void drawTabs(int mouseX, int mouseY) {
@@ -200,35 +310,50 @@ public class GuiGhostTap extends GuiScreen {
                 s.x = contentX;
                 s.y = cursor;
                 s.width = contentW;
-                if (draw) s.draw(fontRendererObj, mouseX, mouseY);
+                if (draw) {
+                    s.draw(fontRendererObj, mouseX, mouseY);
+                    captureHover(mouseX, mouseY, cursor, GuiSlider.ROW_HEIGHT, s.tooltip);
+                }
                 cursor += GuiSlider.ROW_HEIGHT;
             } else if (row instanceof GuiToggle) {
                 GuiToggle t = (GuiToggle) row;
                 t.x = contentX;
                 t.y = cursor;
                 t.width = contentW;
-                if (draw) t.draw(fontRendererObj, mouseX, mouseY);
+                if (draw) {
+                    t.draw(fontRendererObj, mouseX, mouseY);
+                    captureHover(mouseX, mouseY, cursor, GuiToggle.ROW_HEIGHT, t.tooltip);
+                }
                 cursor += GuiToggle.ROW_HEIGHT;
             } else if (row instanceof GuiKeybind) {
                 GuiKeybind k = (GuiKeybind) row;
                 k.x = contentX;
                 k.y = cursor;
                 k.width = contentW;
-                if (draw) k.draw(fontRendererObj, mouseX, mouseY);
+                if (draw) {
+                    k.draw(fontRendererObj, mouseX, mouseY);
+                    captureHover(mouseX, mouseY, cursor, GuiKeybind.ROW_HEIGHT, k.tooltip);
+                }
                 cursor += GuiKeybind.ROW_HEIGHT;
             } else if (row instanceof GuiStat) {
                 GuiStat s = (GuiStat) row;
                 s.x = contentX;
                 s.y = cursor;
                 s.width = contentW;
-                if (draw) s.draw(fontRendererObj, mouseX, mouseY);
+                if (draw) {
+                    s.draw(fontRendererObj, mouseX, mouseY);
+                    captureHover(mouseX, mouseY, cursor, GuiStat.ROW_HEIGHT, s.tooltip);
+                }
                 cursor += GuiStat.ROW_HEIGHT;
             } else if (row instanceof GuiActionButton) {
                 GuiActionButton b = (GuiActionButton) row;
                 b.x = contentX;
                 b.y = cursor;
                 b.width = contentW;
-                if (draw) b.draw(fontRendererObj, mouseX, mouseY);
+                if (draw) {
+                    b.draw(fontRendererObj, mouseX, mouseY);
+                    captureHover(mouseX, mouseY, cursor, GuiActionButton.ROW_HEIGHT, b.tooltip);
+                }
                 cursor += GuiActionButton.ROW_HEIGHT;
             }
         }
@@ -315,7 +440,9 @@ public class GuiGhostTap extends GuiScreen {
 
     private void clampScroll() {
         int total = walk(currentRows(), false, 0, 0);
-        int max = Math.max(0, total - contentH);
+        // Extra padding so the last row can clear the bottom edge instead of
+        // sitting flush against it.
+        int max = Math.max(0, total - contentH + BOTTOM_PAD);
         scroll = Math.max(0, Math.min(max, scroll));
     }
 

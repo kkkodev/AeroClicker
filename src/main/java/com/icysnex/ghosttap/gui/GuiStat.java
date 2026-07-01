@@ -13,6 +13,7 @@ public class GuiStat {
     private final String label;
     private final Supplier<String> value;
 
+    public String tooltip;
     public int x, y, width;
 
     public GuiStat(String label, Supplier<String> value) {

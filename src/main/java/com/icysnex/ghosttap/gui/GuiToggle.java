@@ -16,6 +16,7 @@ public class GuiToggle {
     private final BooleanSupplier getter;
     private final Consumer<Boolean> onChange;
 
+    public String tooltip;
     public int x, y, width;
 
     public GuiToggle(String label, BooleanSupplier getter, Consumer<Boolean> onChange) {

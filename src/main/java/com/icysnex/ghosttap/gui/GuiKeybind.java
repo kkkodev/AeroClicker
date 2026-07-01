@@ -17,6 +17,7 @@ public class GuiKeybind {
     private final IntSupplier getter;
     private final IntConsumer onChange;
 
+    public String tooltip;
     public boolean listening;
     public int x, y, width;
 

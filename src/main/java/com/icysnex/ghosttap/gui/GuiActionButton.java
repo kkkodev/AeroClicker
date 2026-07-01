@@ -11,6 +11,7 @@ public class GuiActionButton {
     private final String text;
     private final Runnable action;
 
+    public String tooltip;
     public int x, y, width;
 
     public GuiActionButton(String text, Runnable action) {
