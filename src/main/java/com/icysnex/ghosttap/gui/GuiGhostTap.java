@@ -41,6 +41,18 @@ public class GuiGhostTap extends GuiScreen {
     private GuiKeybind activeKeybind;
     private String hoverTooltip;
 
+    // Screen to return to on close: null when opened in-game, the mods list when
+    // opened via the Forge config button.
+    private final GuiScreen parent;
+
+    public GuiGhostTap() {
+        this(null);
+    }
+
+    public GuiGhostTap(GuiScreen parent) {
+        this.parent = parent;
+    }
+
     // Panel geometry, filled in initGui.
     private int left, top;
     private int contentX, contentW, contentTop, contentBottom, contentH;
@@ -470,7 +482,7 @@ public class GuiGhostTap extends GuiScreen {
 
         // Close button
         if (mouseX >= left + PANEL_W - 16 && mouseX <= left + PANEL_W - 4 && mouseY >= top + 4 && mouseY <= top + 14) {
-            mc.displayGuiScreen(null);
+            close();
             return;
         }
 
@@ -558,9 +570,13 @@ public class GuiGhostTap extends GuiScreen {
         }
 
         if (keyCode == Keyboard.KEY_ESCAPE || keyCode == ConfigHandler.openGuiKey) {
-            mc.displayGuiScreen(null);
+            close();
             return;
         }
+    }
+
+    private void close() {
+        mc.displayGuiScreen(parent);
     }
 
     @Override

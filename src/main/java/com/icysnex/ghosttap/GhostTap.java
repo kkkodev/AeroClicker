@@ -11,7 +11,8 @@ import net.minecraftforge.fml.common.Mod.EventHandler;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
 
-@Mod(modid = GhostTap.MODID, name = GhostTap.MODNAME, version = GhostTap.VERSION)
+@Mod(modid = GhostTap.MODID, name = GhostTap.MODNAME, version = GhostTap.VERSION,
+        guiFactory = "com.icysnex.ghosttap.gui.GhostTapGuiFactory")
 public class GhostTap {
 
     public static final String MODID = "ghosttap";
