@@ -28,13 +28,26 @@ public class GuiGhostTap extends GuiScreen {
     private static final int PANEL_H = 210;
     private static final int TITLE_H = 18;
     private static final int TAB_H = 16;
+    private static final int SUBTAB_H = 14;
     private static final int SECTION_H = 20;
     private static final int BOTTOM_PAD = 8;
 
-    private static final String[] TABS = {"Left", "Right", "General", "Analytics"};
+    // A main tab holds one or more sub-tabs; a sub-tab holds a list of rows.
+    private static class SubTab {
+        final String name;
+        final List<Object> rows;
+        SubTab(String name, List<Object> rows) { this.name = name; this.rows = rows; }
+    }
 
-    private final List<List<Object>> tabRows = new ArrayList<>();
+    private static class Tab {
+        final String name;
+        final List<SubTab> subs;
+        Tab(String name, List<SubTab> subs) { this.name = name; this.subs = subs; }
+    }
+
+    private final List<Tab> tabs = new ArrayList<>();
     private int activeTab = 0;
+    private int activeSub = 0;
     private int scroll = 0;
 
     private GuiSlider activeSlider;
@@ -64,21 +77,44 @@ public class GuiGhostTap extends GuiScreen {
 
         contentX = left + 12;
         contentW = PANEL_W - 24;
-        contentTop = top + TITLE_H + TAB_H + 4;
-        // Viewport reaches the bottom edge (no fixed margin); the breathing gap is
-        // added only as trailing scroll room (BOTTOM_PAD), so it shows when
-        // scrolled to the end without shrinking the usable area.
-        contentBottom = top + PANEL_H;
-        contentH = contentBottom - contentTop;
 
-        tabRows.clear();
-        tabRows.add(buildClickerRows(Clicker.LEFT));
-        tabRows.add(buildClickerRows(Clicker.RIGHT));
-        tabRows.add(buildGeneralRows());
-        tabRows.add(buildAnalyticsRows());
+        tabs.clear();
+        tabs.add(buildClickerTab(Clicker.LEFT));
+        tabs.add(buildClickerTab(Clicker.RIGHT));
+        tabs.add(new Tab("General", single(buildGeneralRows())));
+        tabs.add(new Tab("Analytics", single(buildAnalyticsRows())));
+
+        layoutContent();
     }
 
-    private List<Object> buildClickerRows(Clicker c) {
+    private List<SubTab> single(List<Object> rows) {
+        List<SubTab> subs = new ArrayList<>();
+        subs.add(new SubTab("", rows));
+        return subs;
+    }
+
+    // Content region depends on whether a sub-tab bar is visible for this tab.
+    private void layoutContent() {
+        int subBar = hasSubTabs() ? SUBTAB_H : 0;
+        contentTop = top + TITLE_H + TAB_H + subBar + 4;
+        contentBottom = top + PANEL_H;
+        contentH = contentBottom - contentTop;
+    }
+
+    private boolean hasSubTabs() {
+        return tabs.get(activeTab).subs.size() > 1;
+    }
+
+    private Tab buildClickerTab(Clicker c) {
+        List<SubTab> subs = new ArrayList<>();
+        subs.add(new SubTab("Speed", buildSpeedRows(c)));
+        subs.add(new SubTab("Hold", buildHoldRows(c)));
+        subs.add(new SubTab("Filters", buildFilterRows(c)));
+        subs.add(new SubTab("Config", buildConfigRows(c)));
+        return new Tab(c == Clicker.LEFT ? "Left" : "Right", subs);
+    }
+
+    private List<Object> buildSpeedRows(Clicker c) {
         List<Object> r = new ArrayList<>();
 
         r.add("CPS");
@@ -122,6 +158,20 @@ public class GuiGhostTap extends GuiScreen {
                 "Largest speed drop a stutter causes (in CPS).",
                 () -> c.stutterMax, v -> { c.stutterMax = v; if (c.stutterMin > v) c.stutterMin = v; }));
 
+        r.add("Rhythm");
+        r.add(slider("Volatility", 0, 3, 2, false,
+                "How quickly the click pace wanders over time.",
+                () -> c.rhythmVolatility, v -> c.rhythmVolatility = v));
+        r.add(slider("Tension", 0, 1, 3, false,
+                "How strongly the pace is pulled back toward the Mean.\nHigher = steadier.",
+                () -> c.rhythmTension, v -> c.rhythmTension = v));
+
+        return r;
+    }
+
+    private List<Object> buildHoldRows(Clicker c) {
+        List<Object> r = new ArrayList<>();
+
         r.add("Hold (ms)");
         r.add(slider("Mean", 1, 200, 1, false,
                 "Average hold time per click. Drag past Min or Max to widen the range.",
@@ -147,13 +197,46 @@ public class GuiGhostTap extends GuiScreen {
                 "Largest extra time a heavy hold adds (ms).",
                 () -> c.holdMsHeavyMax, v -> { c.holdMsHeavyMax = v; if (c.holdMsHeavyMin > v) c.holdMsHeavyMin = v; }));
 
-        r.add("Rhythm");
-        r.add(slider("Volatility", 0, 3, 2, false,
-                "How quickly the click pace wanders over time.",
-                () -> c.rhythmVolatility, v -> c.rhythmVolatility = v));
-        r.add(slider("Tension", 0, 1, 3, false,
-                "How strongly the pace is pulled back toward the Mean.\nHigher = steadier.",
-                () -> c.rhythmTension, v -> c.rhythmTension = v));
+        return r;
+    }
+
+    private List<Object> buildFilterRows(Clicker c) {
+        List<Object> r = new ArrayList<>();
+
+        r.add("Hotbar slots");
+        r.add(slots("Slots", "Only click when the selected hotbar slot is enabled.", c.gates.slots));
+
+        r.add("Held item");
+        r.add(toggle("Weapons", "Allow while holding a sword or axe.",
+                () -> c.gates.weapons, v -> c.gates.weapons = v));
+        r.add(toggle("Tools", "Allow while holding a pickaxe, shovel, hoe or shears.",
+                () -> c.gates.tools, v -> c.gates.tools = v));
+        r.add(toggle("Blocks", "Allow while holding a placeable block.",
+                () -> c.gates.blocks, v -> c.gates.blocks = v));
+        r.add(toggle("Other", "Allow while holding anything else, or an empty hand.",
+                () -> c.gates.other, v -> c.gates.other = v));
+
+        r.add("Rules");
+        r.add(toggle("Break blocks", "Allow clicking while aimed at a block (mining).",
+                () -> c.gates.allowBlockBreak, v -> c.gates.allowBlockBreak = v));
+        r.add(toggle("In menus", "Allow clicking while a screen (inventory, chat) is open.",
+                () -> c.gates.allowInMenu, v -> c.gates.allowInMenu = v));
+        r.add(toggle("Pause on item use", "Pause while eating, drawing a bow or blocking.",
+                () -> c.gates.pauseWhileUsingItem, v -> c.gates.pauseWhileUsingItem = v));
+
+        r.add("Game mode");
+        r.add(toggle("Survival", "Allow in survival mode.",
+                () -> c.gates.survival, v -> c.gates.survival = v));
+        r.add(toggle("Creative", "Allow in creative mode.",
+                () -> c.gates.creative, v -> c.gates.creative = v));
+        r.add(toggle("Adventure", "Allow in adventure mode.",
+                () -> c.gates.adventure, v -> c.gates.adventure = v));
+
+        return r;
+    }
+
+    private List<Object> buildConfigRows(Clicker c) {
+        List<Object> r = new ArrayList<>();
 
         r.add("Config");
         r.add(new GuiButtonRow(
@@ -298,6 +381,12 @@ public class GuiGhostTap extends GuiScreen {
         return b;
     }
 
+    private GuiSlots slots(String label, String tip, boolean[] arr) {
+        GuiSlots s = new GuiSlots(label, arr);
+        s.tooltip = tip;
+        return s;
+    }
+
 
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
@@ -358,10 +447,10 @@ public class GuiGhostTap extends GuiScreen {
     }
 
     private void drawTabs(int mouseX, int mouseY) {
-        int tabW = PANEL_W / TABS.length;
         int tabY = top + TITLE_H;
+        int tabW = PANEL_W / tabs.size();
 
-        for (int i = 0; i < TABS.length; i++) {
+        for (int i = 0; i < tabs.size(); i++) {
             int tx = left + i * tabW;
             boolean active = i == activeTab;
             boolean hover = mouseX >= tx && mouseX <= tx + tabW && mouseY >= tabY && mouseY <= tabY + TAB_H;
@@ -372,8 +461,30 @@ public class GuiGhostTap extends GuiScreen {
                 drawRect(tx, tabY + TAB_H - 2, tx + tabW, tabY + TAB_H, 0xFF5A9BD4);
 
             int color = active ? 0xFFFFFFFF : 0xFFA0A0A0;
-            int textX = tx + (tabW - fontRendererObj.getStringWidth(TABS[i])) / 2;
-            fontRendererObj.drawString(TABS[i], textX, tabY + 4, color);
+            int textX = tx + (tabW - fontRendererObj.getStringWidth(tabs.get(i).name)) / 2;
+            fontRendererObj.drawString(tabs.get(i).name, textX, tabY + 4, color);
+        }
+
+        if (!hasSubTabs())
+            return;
+
+        List<SubTab> subs = tabs.get(activeTab).subs;
+        int subY = tabY + TAB_H;
+        int subW = PANEL_W / subs.size();
+
+        for (int i = 0; i < subs.size(); i++) {
+            int sx = left + i * subW;
+            boolean active = i == activeSub;
+            boolean hover = mouseX >= sx && mouseX <= sx + subW && mouseY >= subY && mouseY <= subY + SUBTAB_H;
+
+            int bg = active ? 0xFF202020 : (hover ? 0xFF1A1A1A : 0xFF121212);
+            drawRect(sx, subY, sx + subW, subY + SUBTAB_H, bg);
+            if (active)
+                drawRect(sx, subY + SUBTAB_H - 1, sx + subW, subY + SUBTAB_H, 0xFF5A9BD4);
+
+            int color = active ? 0xFFDDDDDD : 0xFF888888;
+            int textX = sx + (subW - fontRendererObj.getStringWidth(subs.get(i).name)) / 2;
+            fontRendererObj.drawString(subs.get(i).name, textX, subY + 3, color);
         }
     }
 
@@ -430,6 +541,16 @@ public class GuiGhostTap extends GuiScreen {
                     captureHoverTitle(mouseX, mouseY, cursor + 3, sg.label, sg.tooltip);
                 }
                 cursor += GuiSegment.ROW_HEIGHT;
+            } else if (row instanceof GuiSlots) {
+                GuiSlots sl = (GuiSlots) row;
+                sl.x = contentX;
+                sl.y = cursor;
+                sl.width = contentW;
+                if (draw) {
+                    sl.draw(fontRendererObj, mouseX, mouseY);
+                    captureHoverTitle(mouseX, mouseY, cursor + 3, sl.label, sl.tooltip);
+                }
+                cursor += GuiSlots.ROW_HEIGHT;
             } else if (row instanceof GuiStat) {
                 GuiStat s = (GuiStat) row;
                 s.x = contentX;
@@ -470,7 +591,7 @@ public class GuiGhostTap extends GuiScreen {
     }
 
     private List<Object> currentRows() {
-        return tabRows.get(activeTab);
+        return tabs.get(activeTab).subs.get(activeSub).rows;
     }
 
 
@@ -486,14 +607,28 @@ public class GuiGhostTap extends GuiScreen {
             return;
         }
 
-        // Tabs
-        int tabW = PANEL_W / TABS.length;
+        boolean inPanelX = mouseX >= left && mouseX <= left + PANEL_W;
+
+        // Main tabs
         int tabY = top + TITLE_H;
-        if (mouseY >= tabY && mouseY <= tabY + TAB_H) {
-            int i = (mouseX - left) / tabW;
-            if (i >= 0 && i < TABS.length && mouseX >= left && mouseX <= left + PANEL_W) {
+        if (inPanelX && mouseY >= tabY && mouseY <= tabY + TAB_H) {
+            int i = (mouseX - left) / (PANEL_W / tabs.size());
+            if (i >= 0 && i < tabs.size()) {
                 switchTab(i);
                 return;
+            }
+        }
+
+        // Sub tabs
+        if (hasSubTabs()) {
+            List<SubTab> subs = tabs.get(activeTab).subs;
+            int subY = tabY + TAB_H;
+            if (inPanelX && mouseY >= subY && mouseY <= subY + SUBTAB_H) {
+                int i = (mouseX - left) / (PANEL_W / subs.size());
+                if (i >= 0 && i < subs.size()) {
+                    switchSub(i);
+                    return;
+                }
             }
         }
 
@@ -520,6 +655,9 @@ public class GuiGhostTap extends GuiScreen {
                 }
             } else if (row instanceof GuiSegment) {
                 if (((GuiSegment) row).mouseClicked(mouseX, mouseY))
+                    return;
+            } else if (row instanceof GuiSlots) {
+                if (((GuiSlots) row).mouseClicked(mouseX, mouseY))
                     return;
             } else if (row instanceof GuiActionButton) {
                 if (((GuiActionButton) row).mouseClicked(mouseX, mouseY))
@@ -592,6 +730,15 @@ public class GuiGhostTap extends GuiScreen {
 
     private void switchTab(int i) {
         activeTab = i;
+        activeSub = 0;
+        scroll = 0;
+        clearListening();
+        activeSlider = null;
+        layoutContent();
+    }
+
+    private void switchSub(int i) {
+        activeSub = i;
         scroll = 0;
         clearListening();
         activeSlider = null;
