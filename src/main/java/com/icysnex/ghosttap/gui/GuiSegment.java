@@ -50,8 +50,10 @@ public class GuiSegment {
             boolean isActive = i == active;
             boolean hover = mouseX >= px && mouseX <= pxEnd && mouseY >= y && mouseY <= y + 14;
 
+            // 1px gap between pills, but the last one fills flush to the edge.
+            int right = i == options.length - 1 ? pxEnd : pxEnd - 1;
             int bg = isActive ? 0xFF5A9BD4 : (hover ? 0xFF3A3A3A : 0xFF262626);
-            Gui.drawRect(px, y, pxEnd - 1, y + 14, bg);
+            Gui.drawRect(px, y, right, y + 14, bg);
 
             int color = isActive ? 0xFFFFFFFF : 0xFFC8C8C8;
             int textX = px + (pxEnd - px - fr.getStringWidth(options[i])) / 2;

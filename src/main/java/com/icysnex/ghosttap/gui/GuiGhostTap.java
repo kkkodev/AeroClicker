@@ -303,10 +303,12 @@ public class GuiGhostTap extends GuiScreen {
                 () -> ConfigHandler.toggleRightKey, v -> ConfigHandler.toggleRightKey = v));
         r.add(configRow(Clicker.RIGHT));
 
-        r.add("Modules");
-        r.add(toggle("HUD", "Show the on-screen HUD (configure it on the HUD tab).",
+        r.add("HUD");
+        r.add(toggle("Enabled", "Show the on-screen HUD (configure it on the HUD tab).",
                 () -> ConfigHandler.hudEnabled, v -> ConfigHandler.hudEnabled = v));
-        r.add(toggle("Analytics", "Record click data for stats and export (Analytics tab).",
+
+        r.add("Analytics");
+        r.add(toggle("Enabled", "Record click data for stats and export (Analytics tab).",
                 () -> Tracker.enabled, v -> Tracker.enabled = v));
 
         r.add("Menu");
