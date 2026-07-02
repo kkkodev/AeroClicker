@@ -722,13 +722,6 @@ public class GuiGhostTap extends GuiScreen {
         if (wheel == 0)
             return;
 
-        // Over a slider, the wheel nudges it one step for precise values; elsewhere
-        // it scrolls the list.
-        if (hoveredSlider != null) {
-            hoveredSlider.nudge(Integer.signum(wheel));
-            return;
-        }
-
         scroll -= Integer.signum(wheel) * 14;
         clampScroll();
     }
@@ -756,6 +749,12 @@ public class GuiGhostTap extends GuiScreen {
                 clearFocus();
             else
                 activeField.keyTyped(typedChar, keyCode);
+            return;
+        }
+
+        // Left/right nudge the slider under the cursor one step for precise values.
+        if (hoveredSlider != null && (keyCode == Keyboard.KEY_LEFT || keyCode == Keyboard.KEY_RIGHT)) {
+            hoveredSlider.nudge(keyCode == Keyboard.KEY_RIGHT ? 1 : -1);
             return;
         }
 
