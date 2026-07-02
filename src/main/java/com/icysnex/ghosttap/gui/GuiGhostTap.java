@@ -342,7 +342,7 @@ public class GuiGhostTap extends GuiScreen {
                 () -> ConfigHandler.hideFromServers, v -> ConfigHandler.hideFromServers = v));
 
         r.add("Menu");
-        r.add(keybind("Open menu", "Key that opens this config screen.",
+        r.add(keybind("Key", "Key that opens this config screen.",
                 () -> ConfigHandler.openGuiKey, v -> ConfigHandler.openGuiKey = v));
         r.add(toggle("Smooth scroll", "Animate this menu's list scrolling.",
                 () -> ConfigHandler.smoothScroll, v -> ConfigHandler.smoothScroll = v));
@@ -733,7 +733,7 @@ public class GuiGhostTap extends GuiScreen {
         if (wheel == 0)
             return;
 
-        scrollTarget -= Integer.signum(wheel) * 28;
+        scrollTarget -= Integer.signum(wheel) * 36;
         clampScroll();
     }
 
