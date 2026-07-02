@@ -1,15 +1,16 @@
 package com.icysnex.ghosttap.core.analytics;
 
+import com.icysnex.ghosttap.core.Defaults;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.stream.Stream;
 
-// One tracker per clicker, so left and right keep separate history. The enabled
-// flag stays global: a single master switch for all recording.
+// One tracker per clicker; the enabled flag is a global master switch.
 public class Tracker {
 
-    public static boolean enabled = false;
+    public static boolean enabled = Defaults.ANALYTICS;
 
 
     private final ConcurrentLinkedQueue<ClickData> history = new ConcurrentLinkedQueue<>();

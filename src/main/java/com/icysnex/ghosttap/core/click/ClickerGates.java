@@ -11,21 +11,31 @@ public class ClickerGates {
     public final boolean[] slots = new boolean[9];
 
     // Allowed held-item categories (all true = any item).
-    public boolean weapons = Defaults.GATE_ITEM;
-    public boolean tools = Defaults.GATE_ITEM;
-    public boolean blocks = Defaults.GATE_ITEM;
-    public boolean other = Defaults.GATE_ITEM;
+    public boolean weapons;
+    public boolean tools;
+    public boolean blocks;
+    public boolean other;
 
-    public boolean allowBlockBreak = Defaults.ALLOW_BLOCK_BREAK;
-    public boolean allowInMenu = Defaults.ALLOW_IN_MENU;
-    public boolean pauseWhileUsingItem = Defaults.PAUSE_ON_ITEM_USE;
+    public boolean allowBlockBreak;
+    public boolean allowInMenu;
+    public boolean pauseWhileUsingItem;
 
     // Allowed game modes.
-    public boolean survival = Defaults.GATE_GAMEMODE;
-    public boolean creative = Defaults.GATE_GAMEMODE;
-    public boolean adventure = Defaults.GATE_GAMEMODE;
+    public boolean survival;
+    public boolean creative;
+    public boolean adventure;
 
-    public ClickerGates() {
-        Arrays.fill(slots, Defaults.GATE_SLOT);
+    public ClickerGates(Defaults.Profile d) {
+        weapons = d.weapons;
+        tools = d.tools;
+        blocks = d.blocks;
+        other = d.other;
+        allowBlockBreak = d.allowBlockBreak;
+        allowInMenu = d.allowInMenu;
+        pauseWhileUsingItem = d.pauseWhileUsingItem;
+        survival = d.survival;
+        creative = d.creative;
+        adventure = d.adventure;
+        Arrays.fill(slots, d.slot);
     }
 }

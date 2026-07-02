@@ -15,8 +15,8 @@ import java.util.function.DoubleSupplier;
 // humanization params and gates.
 public class Clicker implements Runnable {
 
-    public static final Clicker LEFT = new Clicker(InputMouse.BUTTON_LEFT);
-    public static final Clicker RIGHT = new Clicker(InputMouse.BUTTON_RIGHT);
+    public static final Clicker LEFT = new Clicker(InputMouse.BUTTON_LEFT, Defaults.LEFT);
+    public static final Clicker RIGHT = new Clicker(InputMouse.BUTTON_RIGHT, Defaults.RIGHT);
 
 
     public double cpsMean;
@@ -47,7 +47,9 @@ public class Clicker implements Runnable {
 
 
     public final Tracker tracker = new Tracker();
-    public final ClickerGates gates = new ClickerGates();
+    public final ClickerGates gates;
+
+    private final Defaults.Profile defaults;
 
     // Toggle-mode intent (persists so gates keep gating it); Mouse-mode arm gate.
     public volatile boolean toggledOn = false;
@@ -60,8 +62,10 @@ public class Clicker implements Runnable {
     private double currentTrend = 0;
 
 
-    private Clicker(byte button) {
+    private Clicker(byte button, Defaults.Profile defaults) {
         this.button = button;
+        this.defaults = defaults;
+        this.gates = new ClickerGates(defaults);
         resetParams();
 
         String name = button == InputMouse.BUTTON_LEFT ? "Left" : "Right";
@@ -71,31 +75,31 @@ public class Clicker implements Runnable {
     }
 
     public void resetParams() {
-        cpsMean = Defaults.CPS_MEAN;
-        cpsStandardDeviation = Defaults.CPS_STD_DEV;
-        cpsMin = Defaults.CPS_MIN;
-        cpsMax = Defaults.CPS_MAX;
-        cpsMinMaxFallout = Defaults.CPS_FALLOUT;
+        cpsMean = defaults.cpsMean;
+        cpsStandardDeviation = defaults.cpsStandardDeviation;
+        cpsMin = defaults.cpsMin;
+        cpsMax = defaults.cpsMax;
+        cpsMinMaxFallout = defaults.cpsMinMaxFallout;
 
-        spikeChance = Defaults.SPIKE_CHANCE;
-        spikeMin = Defaults.SPIKE_MIN;
-        spikeMax = Defaults.SPIKE_MAX;
+        spikeChance = defaults.spikeChance;
+        spikeMin = defaults.spikeMin;
+        spikeMax = defaults.spikeMax;
 
-        stutterChance = Defaults.STUTTER_CHANCE;
-        stutterMin = Defaults.STUTTER_MIN;
-        stutterMax = Defaults.STUTTER_MAX;
+        stutterChance = defaults.stutterChance;
+        stutterMin = defaults.stutterMin;
+        stutterMax = defaults.stutterMax;
 
-        holdMsMean = Defaults.HOLD_MEAN;
-        holdMsStandardDeviation = Defaults.HOLD_STD_DEV;
-        holdMsMin = Defaults.HOLD_MIN;
-        holdMsMax = Defaults.HOLD_MAX;
+        holdMsMean = defaults.holdMsMean;
+        holdMsStandardDeviation = defaults.holdMsStandardDeviation;
+        holdMsMin = defaults.holdMsMin;
+        holdMsMax = defaults.holdMsMax;
 
-        holdMsHeavyChance = Defaults.HEAVY_CHANCE;
-        holdMsHeavyMin = Defaults.HEAVY_MIN;
-        holdMsHeavyMax = Defaults.HEAVY_MAX;
+        holdMsHeavyChance = defaults.holdMsHeavyChance;
+        holdMsHeavyMin = defaults.holdMsHeavyMin;
+        holdMsHeavyMax = defaults.holdMsHeavyMax;
 
-        rhythmVolatility = Defaults.RHYTHM_VOLATILITY;
-        rhythmTension = Defaults.RHYTHM_TENSION;
+        rhythmVolatility = defaults.rhythmVolatility;
+        rhythmTension = defaults.rhythmTension;
     }
 
 

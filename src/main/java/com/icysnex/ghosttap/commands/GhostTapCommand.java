@@ -11,8 +11,7 @@ import org.lwjgl.input.Keyboard;
 
 import java.util.List;
 
-// Fallback for rebinding the menu key from chat, in case the current key is taken
-// by another mod and the menu can't be opened to rebind it in the UI.
+// Fallback for rebinding the menu key from chat.
 public class GhostTapCommand extends CommandBase {
 
     @Override

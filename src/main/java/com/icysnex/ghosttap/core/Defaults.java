@@ -2,57 +2,76 @@ package com.icysnex.ghosttap.core;
 
 import org.lwjgl.input.Keyboard;
 
-// Every default value in one place. Referenced by the field initialisers, the
-// reset buttons and the config loader so there is a single source of truth.
+// Every default value in one place. LEFT and RIGHT start identical; set any
+// per-side differences in the static block below.
 public final class Defaults {
 
     private Defaults() {
     }
 
-    // Clicker tuning (per button)
-    public static final double CPS_MEAN = 12.0;
-    public static final double CPS_STD_DEV = 1.5;
-    public static final double CPS_MIN = 8.0;
-    public static final double CPS_MAX = 18.0;
-    public static final double CPS_FALLOUT = 0.8;
+    // Per-clicker defaults: tuning params and gate options.
+    public static final class Profile {
+        public double cpsMean = 12.0;
+        public double cpsStandardDeviation = 1.5;
+        public double cpsMin = 8.0;
+        public double cpsMax = 18.0;
+        public double cpsMinMaxFallout = 0.8;
 
-    public static final double SPIKE_CHANCE = 0.04;
-    public static final double SPIKE_MIN = 1;
-    public static final double SPIKE_MAX = 3;
+        public double spikeChance = 0.04;
+        public double spikeMin = 1;
+        public double spikeMax = 3;
 
-    public static final double STUTTER_CHANCE = 0.03;
-    public static final double STUTTER_MIN = 4;
-    public static final double STUTTER_MAX = 7;
+        public double stutterChance = 0.03;
+        public double stutterMin = 4;
+        public double stutterMax = 7;
 
-    public static final double HOLD_MEAN = 38;
-    public static final double HOLD_STD_DEV = 6.5;
-    public static final double HOLD_MIN = 18;
-    public static final double HOLD_MAX = 75;
+        public double holdMsMean = 38;
+        public double holdMsStandardDeviation = 6.5;
+        public double holdMsMin = 18;
+        public double holdMsMax = 75;
 
-    public static final double HEAVY_CHANCE = 0.015;
-    public static final double HEAVY_MIN = 15;
-    public static final double HEAVY_MAX = 35;
+        public double holdMsHeavyChance = 0.015;
+        public double holdMsHeavyMin = 15;
+        public double holdMsHeavyMax = 35;
 
-    public static final double RHYTHM_VOLATILITY = 0.5;
-    public static final double RHYTHM_TENSION = 0.04;
+        public double rhythmVolatility = 0.5;
+        public double rhythmTension = 0.04;
 
-    // Gates
-    public static final boolean GATE_ITEM = true;      // weapons / tools / blocks / other
-    public static final boolean GATE_GAMEMODE = true;  // survival / creative / adventure
-    public static final boolean GATE_SLOT = true;
-    public static final boolean ALLOW_BLOCK_BREAK = false;
-    public static final boolean ALLOW_IN_MENU = false;
-    public static final boolean PAUSE_ON_ITEM_USE = true;
+        public boolean weapons = true;
+        public boolean tools = true;
+        public boolean blocks = true;
+        public boolean other = true;
 
-    // Keys and modes
+        public boolean allowBlockBreak = false;
+        public boolean allowInMenu = false;
+        public boolean pauseWhileUsingItem = true;
+
+        public boolean survival = true;
+        public boolean creative = true;
+        public boolean adventure = true;
+
+        public boolean slot = true;
+    }
+
+    public static final Profile LEFT = new Profile();
+    public static final Profile RIGHT = new Profile();
+
+    static {
+        // Diverge left/right here, e.g.:
+        // RIGHT.cpsMean = 8.0;
+        // RIGHT.allowBlockBreak = true;
+    }
+
+    // Keys and modes (per button).
     public static final int KEY_OPEN = Keyboard.KEY_RSHIFT;
     public static final int KEY_LEFT = Keyboard.KEY_N;
     public static final int KEY_RIGHT = Keyboard.KEY_M;
     public static final ActivationMode MODE_LEFT = ActivationMode.MOUSE;
     public static final ActivationMode MODE_RIGHT = ActivationMode.MOUSE;
+
     public static final boolean ANALYTICS = false;
 
-    // HUD
+    // HUD (global).
     public static final boolean HUD_ENABLED = true;
     public static final boolean HUD_CPS_LEFT = true;
     public static final boolean HUD_CPS_RIGHT = true;
