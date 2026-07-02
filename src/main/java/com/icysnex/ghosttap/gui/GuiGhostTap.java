@@ -254,7 +254,8 @@ public class GuiGhostTap extends GuiScreen {
 
     private GuiButtonRow configRow(Clicker c) {
         return new GuiButtonRow("Config",
-                button("Reset", "Restore this clicker's settings to their defaults.", c::resetParams),
+                button("Reset", "Restore this clicker's settings to their defaults.",
+                        () -> { c.resetParams(); Notice.show("Reset clicker settings to defaults."); }),
                 button("Export", "Copy this clicker's settings to the clipboard.", () -> exportClicker(c)),
                 button("Import", "Load this clicker's settings from the clipboard.", () -> importClicker(c)));
     }
@@ -307,7 +308,8 @@ public class GuiGhostTap extends GuiScreen {
         r.add(toggle("Enabled", "Show the on-screen HUD (configure it on the HUD tab).",
                 () -> ConfigHandler.hudEnabled, v -> ConfigHandler.hudEnabled = v));
         r.add(new GuiButtonRow("Config",
-                button("Reset", "Restore HUD settings to their defaults.", ConfigHandler::resetHud),
+                button("Reset", "Restore HUD settings to their defaults.",
+                        () -> { ConfigHandler.resetHud(); Notice.show("Reset HUD settings to defaults."); }),
                 button("Export", "Copy HUD settings to the clipboard.", this::exportHud),
                 button("Import", "Load HUD settings from the clipboard.", this::importHud)));
 
