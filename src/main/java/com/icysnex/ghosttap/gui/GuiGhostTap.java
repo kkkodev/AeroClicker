@@ -236,18 +236,18 @@ public class GuiGhostTap extends GuiScreen {
         if (left)
             r.add(toggle("Break blocks", "Pause the auto-clicker while aimed at a reachable block.\nOnly really makes sense if 'Mouse' mode is set.",
                     () -> c.gates.allowBlockBreak, v -> c.gates.allowBlockBreak = v));
-        r.add(toggle("Entity only", "Only click when a living entity is in sight within reach.",
-                () -> c.gates.entityOnly, v -> c.gates.entityOnly = v));
-        r.add(cond(() -> c.gates.entityOnly, slider("Reach min", 1, 6, 1, false,
-                "Nearest reach the entity check accepts (blocks). Picked randomly up to Max.",
-                () -> c.gates.reachMin, v -> { c.gates.reachMin = v; if (c.gates.reachMax < v) c.gates.reachMax = v; })));
-        r.add(cond(() -> c.gates.entityOnly, slider("Reach max", 1, 6, 1, false,
-                "Farthest reach the entity check accepts (blocks).",
-                () -> c.gates.reachMax, v -> { c.gates.reachMax = v; if (c.gates.reachMin > v) c.gates.reachMin = v; })));
         r.add(toggle("In menus", "Allow clicking while a screen (inventory, chat) is open.",
                 () -> c.gates.allowInMenu, v -> c.gates.allowInMenu = v));
         r.add(toggle("Pause on item use", "Pause while eating, drawing a bow or blocking.",
                 () -> c.gates.pauseWhileUsingItem, v -> c.gates.pauseWhileUsingItem = v));
+        r.add(toggle("Entity only", "Only click when a living entity is in sight within reach.",
+                () -> c.gates.entityOnly, v -> c.gates.entityOnly = v));
+        r.add(cond(() -> c.gates.entityOnly, slider("Reach min", 1, 6, 1, false,
+                "Distance the entity is always accepted within (blocks). Rolled randomly up to Max each check.",
+                () -> c.gates.reachMin, v -> { c.gates.reachMin = v; if (c.gates.reachMax < v) c.gates.reachMax = v; })));
+        r.add(cond(() -> c.gates.entityOnly, slider("Reach max", 1, 6, 1, false,
+                "Farthest the entity can be and still be clicked (blocks).",
+                () -> c.gates.reachMax, v -> { c.gates.reachMax = v; if (c.gates.reachMin > v) c.gates.reachMin = v; })));
 
         r.add("Game mode");
         r.add(toggle("Survival", "Allow in survival mode.",
