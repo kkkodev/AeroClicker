@@ -69,12 +69,20 @@ processResources {
 }
 
 jar {
+    // Bundle the Mixin library so the mod works outside the dev environment
+    // (nothing else provides org.spongepowered.asm.* in a normal install).
+    from {
+        configurations.compile.findAll { it.name.contains('mixin') }.collect { zipTree(it) }
+    }
+    exclude 'META-INF/MANIFEST.MF', 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+
     manifest {
         attributes(
                 "FMLCorePlugin": "com.icysnex.ghosttap.mixin.MixinLoader",
                 "ModSide": "CLIENT",
                 "ForceLoadAsMod": true,
-                "FMLCorePluginContainsFMLMod": true
+                "FMLCorePluginContainsFMLMod": true,
+                "TweakClass": "org.spongepowered.asm.launch.MixinTweaker"
         )
     }
 }
