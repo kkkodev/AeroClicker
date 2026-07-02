@@ -35,8 +35,6 @@ public final class Defaults {
         public double rhythmVolatility = 0.5;
         public double rhythmTension = 0.04;
 
-        // Milliseconds the trigger must be held before autoclicking starts
-        // (Hold/Mouse modes only). Lets a quick tap through as a single click.
         public double startDelayMs = 0;
 
         public boolean weapons = true;
@@ -54,10 +52,9 @@ public final class Defaults {
 
         public boolean slot = true;
 
-        // Only click when a living entity is in sight within a random reach.
         public boolean entityOnly = false;
-        public double reachMin = 2.5;
-        public double reachMax = 3.0;
+        public double reachMin = 3.0;
+        public double reachMax = 3.5;
     }
 
 
