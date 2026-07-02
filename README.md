@@ -1,5 +1,5 @@
 <p align="center" xmlns="http://www.w3.org/1999/html">
-  <img src="assets/icon-transparent.svg" width="128" alt="GhostTap icon">
+  <img src="assets/icon/icon-transparent.svg" width="128" alt="GhostTap icon">
 </p>
 
 <h1 align="center">
@@ -18,8 +18,7 @@
 </h3>
 
 <p align="center">
-  <img src="assets/screenshots/hero.png" width="720" alt="GhostTap in action">
-  <br><sub><i>(placeholder — hero shot: menu open in-world with the HUD visible)</i></sub>
+  <img src="assets/screenshots/hero.gif" width="720" alt="GhostTap in action">
 </p>
 
 ---
@@ -71,8 +70,7 @@ GhostTap installs a SpongePowered **Mixin** into LWJGL's `org.lwjgl.input.Mouse`
 Open it with **Right Shift**. If this button is currently taken you can use `.ghosttap key <KEY>` in chat to rebind it. The menu is a custom dark panel with a tab per area.
 
 <p align="center">
-  <img src="assets/screenshots/menu-general.png" width="480" alt="General tab">
-  <br><sub><i>(placeholder — General tab)</i></sub>
+  <img src="assets/screenshots/gui-general.png" width="480" alt="General tab">
 </p>
 
 ### General
@@ -104,8 +102,7 @@ Every clicker and the HUD can be **exported to a base64 token** (copied to your 
 Each clicker tab is split into three sub-tabs.
 
 <p align="center">
-  <img src="assets/screenshots/menu-cps.png" width="480" alt="CPS tab">
-  <br><sub><i>(placeholder — CPS sub-tab)</i></sub>
+  <img src="assets/screenshots/gui-left-cps.png" width="480" alt="Left/Right CPS tab">
 </p>
 
 **CPS:** the core click-rate model:
@@ -116,6 +113,10 @@ Each clicker tab is split into three sub-tabs.
 | **Spike** | Chance, Min, Max - a short burst of *extra* speed.                                                                        |
 | **Stutter** | Chance, Min, Max - a short hitch that *slows down*.                                                                       |
 
+<p align="center">
+  <img src="assets/screenshots/gui-left-fatigue.png" width="480" alt="Left/Right Fatgiue tab">
+</p>
+
 **Fatigue:** how each individual click *feels*:
 
 | Group | Options                                                                                            |
@@ -123,6 +124,13 @@ Each clicker tab is split into three sub-tabs.
 | **Hold (ms)** | Mean, Std deviation, Min, Max - how long each click is physically held down.                       |
 | **Heavy hold** | Chance, Min, Max - an occasional noticeably longer hold.                                           |
 | **Rhythm** | Volatility and Tension - a slow random-walk drift of the pace, pulled gently back toward the Mean. |
+
+<p align="center">
+  <img src="assets/screenshots/gui-left-filters.png" width="480" alt="Left Filters tab">
+</p>
+<p align="center">
+  <img src="assets/screenshots/gui-right-filters.png" width="480" alt="Right Filters tab">
+</p>
 
 **Filters:** gates that decide when autoclicking is *allowed*:
 
@@ -133,16 +141,13 @@ Each clicker tab is split into three sub-tabs.
 | **Rules** | *Break blocks* (left only - pause while aimed at a mineable block), *Placeable only* (right only - click only when actually able to place down block; collision check), *In menus*, *Pause on item use*, *Entity only* + random *Reach min/max*. |
 | **Game mode** | Survival, Creative, Adventure.                                                                                                                                                                                                                   |
 
-<p align="center">
-  <img src="assets/screenshots/menu-filters.png" width="480" alt="Filters tab">
-  <br><sub><i>(placeholder — Filters sub-tab)</i></sub>
-</p>
-
 ### HUD
 
 <p align="center">
   <img src="assets/screenshots/hud.png" width="360" alt="HUD">
-  <br><sub><i>(placeholder — HUD showing CPS + status)</i></sub>
+</p>
+<p align="center">
+  <img src="assets/screenshots/gui-hud.png" width="480" alt="HUD tab">
 </p>
 
 | Setting                               | Description                                                                                                 |
@@ -156,8 +161,7 @@ Each clicker tab is split into three sub-tabs.
 ### Analytics
 
 <p align="center">
-  <img src="assets/screenshots/analytics.png" width="480" alt="Analytics">
-  <br><sub><i>(placeholder — Analytics tab)</i></sub>
+  <img src="assets/screenshots/gui-analytics.png" width="480" alt="Analytics tab">
 </p>
 
 Toggle recording on/off and export the collected data. See [Analytics](#analytics-1).
@@ -175,8 +179,7 @@ When enabled, every click (spoofed **and** real) is recorded with:
 Export writes a **CSV to your Desktop**. A small Python project under [`tools/`](tools/) reads the CSV and plots the distributions so you can visually tune your humanization.
 
 <p align="center">
-  <img src="assets/screenshots/plots.png" width="640" alt="Analytics plots">
-  <br><sub><i>(placeholder — example distribution plots)</i></sub>
+  <img src="assets/plots/combined.png" width="640" alt="Analytics plots">
 </p>
 
 ---
@@ -215,4 +218,4 @@ The built jar lands in `build/libs/GhostTap-1.0.jar`.
 
 ## License
 
-Licensed under the **GNU General Public License v3.0** — see [LICENSE](LICENSE).
+Licensed under the **GNU General Public License v3.0** - see [LICENSE](LICENSE).
