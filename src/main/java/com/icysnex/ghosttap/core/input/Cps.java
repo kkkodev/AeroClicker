@@ -25,7 +25,11 @@ public final class Cps {
 
     private static int count(ConcurrentLinkedQueue<Long> window) {
         long now = System.currentTimeMillis();
-        window.removeIf(timestamp -> now - timestamp > 1000);
+        // Timestamps are FIFO, so the expired ones are at the head — drop them
+        // without allocating a lambda every call.
+        Long head;
+        while ((head = window.peek()) != null && now - head > 1000)
+            window.poll();
         return window.size();
     }
 }

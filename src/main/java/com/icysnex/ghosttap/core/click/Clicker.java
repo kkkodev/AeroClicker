@@ -272,9 +272,10 @@ public class Clicker implements Runnable {
         long remaining;
 
         while ((remaining = targetNanoTime - System.nanoTime()) > 0) {
-            if (remaining > 1_500_000L) {
+            if (remaining > 1_500_000L)
                 LockSupport.parkNanos(1_000_000L);
-            }
+            else
+                Thread.yield(); // sub-ms tail: spin but yield the core each pass
         }
     }
 
