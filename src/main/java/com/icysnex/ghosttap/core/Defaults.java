@@ -88,6 +88,9 @@ public final class Defaults {
     // Strip the mod from the mod list sent to servers during the FML handshake.
     public static final boolean HIDE_FROM_SERVERS = true;
 
+    // Animate the config menu's list scrolling.
+    public static final boolean SMOOTH_SCROLL = true;
+
     // HUD (global).
     public static final boolean HUD_ENABLED = true;
     public static final boolean HUD_HIDE_IN_MENU = true;

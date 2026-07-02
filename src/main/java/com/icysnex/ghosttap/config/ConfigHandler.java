@@ -33,6 +33,9 @@ public class ConfigHandler {
     // Hide the mod from the server-facing FML handshake mod list.
     public static boolean hideFromServers = Defaults.HIDE_FROM_SERVERS;
 
+    // Animate the config menu's list scrolling.
+    public static boolean smoothScroll = Defaults.SMOOTH_SCROLL;
+
     // On-screen HUD.
     public static boolean hudEnabled = Defaults.HUD_ENABLED;
     public static boolean hudHideInMenu = Defaults.HUD_HIDE_IN_MENU;
@@ -145,6 +148,7 @@ public class ConfigHandler {
         rightMode = mode(CAT_KEYS, "rightMode", rightMode, save);
 
         hideFromServers = bool(CAT_KEYS, "hideFromServers", hideFromServers, save);
+        smoothScroll = bool(CAT_KEYS, "smoothScroll", smoothScroll, save);
 
         Property analytics = config.get(CAT_KEYS, "analyticsEnabled", Tracker.enabled, "Record click analytics for tuning/export");
         if (save)

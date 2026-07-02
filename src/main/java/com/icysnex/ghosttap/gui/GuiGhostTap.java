@@ -49,7 +49,8 @@ public class GuiGhostTap extends GuiScreen {
     private final List<Tab> tabs = new ArrayList<>();
     private int activeTab = 0;
     private int activeSub = 0;
-    private int scroll = 0;
+    private double scroll = 0;
+    private double scrollTarget = 0;
 
     private GuiSlider activeSlider;
     private GuiSlider hoveredSlider;
@@ -343,6 +344,8 @@ public class GuiGhostTap extends GuiScreen {
         r.add("Menu");
         r.add(keybind("Open menu", "Key that opens this config screen.",
                 () -> ConfigHandler.openGuiKey, v -> ConfigHandler.openGuiKey = v));
+        r.add(toggle("Smooth scroll", "Animate this menu's list scrolling.",
+                () -> ConfigHandler.smoothScroll, v -> ConfigHandler.smoothScroll = v));
 
         return r;
     }
@@ -514,6 +517,14 @@ public class GuiGhostTap extends GuiScreen {
         GL11.glEnable(GL11.GL_SCISSOR_TEST);
         GL11.glScissor(contentX * sf, mc.displayHeight - contentBottom * sf, contentW * sf, contentH * sf);
 
+        if (ConfigHandler.smoothScroll) {
+            scroll += (scrollTarget - scroll) * 0.35;
+            if (Math.abs(scrollTarget - scroll) < 0.5)
+                scroll = scrollTarget;
+        } else {
+            scroll = scrollTarget;
+        }
+
         if (activeSlider != null)
             activeSlider.mouseDragged(mouseX);
         hoveredSlider = null;
@@ -587,7 +598,7 @@ public class GuiGhostTap extends GuiScreen {
 
     // Lays out every row and optionally draws it. Returns total content height.
     private int walk(List<Object> rows, boolean draw, int mouseX, int mouseY) {
-        int cursor = contentTop - scroll;
+        int cursor = contentTop - (int) Math.round(scroll);
         int start = cursor;
 
         for (Object entry : rows) {
@@ -722,7 +733,7 @@ public class GuiGhostTap extends GuiScreen {
         if (wheel == 0)
             return;
 
-        scroll -= Integer.signum(wheel) * 14;
+        scrollTarget -= Integer.signum(wheel) * 28;
         clampScroll();
     }
 
@@ -731,6 +742,7 @@ public class GuiGhostTap extends GuiScreen {
         // Extra padding so the last row can clear the bottom edge instead of
         // sitting flush against it.
         int max = Math.max(0, total - contentH + BOTTOM_PAD);
+        scrollTarget = Math.max(0, Math.min(max, scrollTarget));
         scroll = Math.max(0, Math.min(max, scroll));
     }
 
@@ -790,6 +802,7 @@ public class GuiGhostTap extends GuiScreen {
         activeTab = i;
         activeSub = 0;
         scroll = 0;
+        scrollTarget = 0;
         clearListening();
         clearFocus();
         activeSlider = null;
@@ -799,6 +812,7 @@ public class GuiGhostTap extends GuiScreen {
     private void switchSub(int i) {
         activeSub = i;
         scroll = 0;
+        scrollTarget = 0;
         clearListening();
         clearFocus();
         activeSlider = null;
