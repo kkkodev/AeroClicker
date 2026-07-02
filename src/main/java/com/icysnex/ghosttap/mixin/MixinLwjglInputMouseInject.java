@@ -4,6 +4,7 @@ import com.icysnex.ghosttap.core.analytics.ClickData;
 import com.icysnex.ghosttap.core.click.Clicker;
 import com.icysnex.ghosttap.core.input.Cps;
 import com.icysnex.ghosttap.core.input.InputMouse;
+import com.icysnex.ghosttap.gui.GuiGhostTap;
 import net.minecraft.client.Minecraft;
 import org.lwjgl.input.Mouse;
 import org.spongepowered.asm.mixin.Mixin;
@@ -49,9 +50,9 @@ public abstract class MixinLwjglInputMouseInject {
 
     @Inject(method = "poll", at = @At("RETURN"), remap = false)
     private static void afterPoll(CallbackInfo ci) {
-        // Clicks made while a screen is open (inventory, chat, menus) aren't
-        // gameplay clicks, so they don't count towards CPS or analytics.
-        final boolean count = Minecraft.getMinecraft().currentScreen == null;
+        // Count clicks everywhere except our own config screen, where clicks on
+        // sliders/buttons shouldn't inflate the CPS counter or analytics.
+        final boolean count = !(Minecraft.getMinecraft().currentScreen instanceof GuiGhostTap);
 
         // Left
         final byte realLeft = buttons.get(0);

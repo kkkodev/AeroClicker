@@ -54,6 +54,9 @@ public class GhostTapKeybindListener {
                 break;
 
             case HOLD:
+                // Track the raw key so the HUD shows ON while held, even if a gate
+                // is currently blocking the actual clicking.
+                clicker.held = isDown(key);
                 intent = keyDown;
                 break;
 

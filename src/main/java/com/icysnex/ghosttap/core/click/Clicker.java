@@ -53,9 +53,11 @@ public class Clicker implements Runnable {
 
     private final Defaults.Profile defaults;
 
-    // Toggle-mode intent (persists so gates keep gating it); Mouse-mode arm gate.
+    // Toggle-mode intent (persists so gates keep gating it); Mouse-mode arm gate;
+    // Hold-mode key-held state (for the HUD, independent of whether gates pass).
     public volatile boolean toggledOn = false;
     public volatile boolean armed = false;
+    public volatile boolean held = false;
 
     private final byte button;
     private final Thread thread;
@@ -214,7 +216,7 @@ public class Clicker implements Runnable {
         switch (mode) {
             case MOUSE: return armed;
             case TOGGLE: return toggledOn;
-            default: return enabled;
+            default: return held;
         }
     }
 
@@ -231,6 +233,7 @@ public class Clicker implements Runnable {
         setEnabled(false);
         toggledOn = false;
         armed = false;
+        held = false;
         InputMouse.setMask(button, false);
     }
 
