@@ -41,7 +41,11 @@ repositories {
 }
 
 dependencies {
-    compile "org.spongepowered:mixin:0.7.10-SNAPSHOT"
+    // 0.7.11 matches what the common 1.8.9 mods (ModHider, BetterPingMod, ...) ship,
+    // so the bundled copy never clashes with another version in the instance.
+    compile("org.spongepowered:mixin:0.7.11-SNAPSHOT") {
+        transitive = false
+    }
 }
 
 // Feed the MCP->SRG mappings to the Mixin annotation processor so mixins into
@@ -69,12 +73,17 @@ processResources {
 }
 
 jar {
+    // Bundle Mixin so the mod also works in an instance that has no other Mixin
+    // provider. It's booted by the MixinTweaker below (never by our coremod).
+    from {
+        configurations.compile.findAll { it.name.contains('mixin') }.collect { zipTree(it) }
+    }
+    exclude 'META-INF/MANIFEST.MF', 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA', 'module-info.class'
+
     manifest {
         attributes(
-                // The mod's Mixins are registered via this manifest entry, so the
-                // Mixin already present in the instance (from other mods) loads them
-                // — we don't bundle our own, which would clash with a newer version.
                 "FMLCorePlugin": "com.icysnex.ghosttap.mixin.MixinLoader",
+                "TweakClass": "org.spongepowered.asm.launch.MixinTweaker",
                 "MixinConfigs": "mixin.ghosttap.json",
                 "ModSide": "CLIENT",
                 "ForceLoadAsMod": true,

@@ -1,41 +1,35 @@
 package com.icysnex.ghosttap.mixin;
 
+import net.minecraft.launchwrapper.Launch;
+import net.minecraft.launchwrapper.LaunchClassLoader;
 import net.minecraftforge.fml.relauncher.IFMLLoadingPlugin;
-import org.spongepowered.asm.launch.MixinBootstrap;
-import org.spongepowered.asm.mixin.MixinEnvironment;
-import org.spongepowered.asm.mixin.Mixins;
 
 import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.Set;
 
+// This coremod's only job is to let Mixin transform the LWJGL input classes,
+// which LaunchWrapper excludes from transformation by default.
+//
+// It must NOT reference Mixin at all: touching org.spongepowered.asm.* from a
+// coremod constructor loads those classes far too early (before any Mixin tweaker
+// runs). If that lookup fails it gets cached in LaunchClassLoader's invalidClasses
+// set, which then breaks every other mod that legitimately loads Mixin later.
+// Mixin is bootstrapped by the MixinTweaker (jar manifest), not here.
 public class MixinLoader implements IFMLLoadingPlugin {
-    public MixinLoader() {
-        System.out.println("[GhostTap] Injecting Mixin with IFMLLoadingPlugin.");
 
-        // Let Mixin transform the (normally excluded) LWJGL input classes.
+    public MixinLoader() {
+        System.out.println("[GhostTap] Unlocking LWJGL for Mixin transformation.");
         try {
-            Field field = net.minecraft.launchwrapper.LaunchClassLoader.class.getDeclaredField("classLoaderExceptions");
+            Field field = LaunchClassLoader.class.getDeclaredField("classLoaderExceptions");
             field.setAccessible(true);
-            Set<String> exceptions = (Set<String>) field.get(net.minecraft.launchwrapper.Launch.classLoader);
+            @SuppressWarnings("unchecked")
+            Set<String> exceptions = (Set<String>) field.get(Launch.classLoader);
             exceptions.remove("org.lwjgl.");
         } catch (Exception e) {
             e.printStackTrace();
         }
-
-        // In the dev environment nothing else bootstraps Mixin, so do it here. In a
-        // normal install another mod already provides (a possibly newer) Mixin and
-        // loads our config via the MixinConfigs manifest entry, so this may fail —
-        // swallow it instead of crashing the game.
-        try {
-            MixinBootstrap.init();
-            Mixins.addConfiguration("mixin.ghosttap.json");
-            MixinEnvironment.getDefaultEnvironment().setSide(MixinEnvironment.Side.CLIENT);
-        } catch (Throwable t) {
-            System.out.println("[GhostTap] Mixin provided by the environment; using the manifest config.");
-        }
     }
-
 
     @Override
     public String[] getASMTransformerClass() {
@@ -53,7 +47,8 @@ public class MixinLoader implements IFMLLoadingPlugin {
     }
 
     @Override
-    public void injectData(Map<String, Object> data) { }
+    public void injectData(Map<String, Object> data) {
+    }
 
     @Override
     public String getAccessTransformerClass() {
