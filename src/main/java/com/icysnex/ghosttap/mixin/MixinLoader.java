@@ -13,9 +13,7 @@ public class MixinLoader implements IFMLLoadingPlugin {
     public MixinLoader() {
         System.out.println("[GhostTap] Injecting Mixin with IFMLLoadingPlugin.");
 
-        MixinBootstrap.init();
-        Mixins.addConfiguration("mixin.ghosttap.json");
-
+        // Let Mixin transform the (normally excluded) LWJGL input classes.
         try {
             Field field = net.minecraft.launchwrapper.LaunchClassLoader.class.getDeclaredField("classLoaderExceptions");
             field.setAccessible(true);
@@ -25,7 +23,17 @@ public class MixinLoader implements IFMLLoadingPlugin {
             e.printStackTrace();
         }
 
-        MixinEnvironment.getDefaultEnvironment().setSide(MixinEnvironment.Side.CLIENT);
+        // In the dev environment nothing else bootstraps Mixin, so do it here. In a
+        // normal install another mod already provides (a possibly newer) Mixin and
+        // loads our config via the MixinConfigs manifest entry, so this may fail —
+        // swallow it instead of crashing the game.
+        try {
+            MixinBootstrap.init();
+            Mixins.addConfiguration("mixin.ghosttap.json");
+            MixinEnvironment.getDefaultEnvironment().setSide(MixinEnvironment.Side.CLIENT);
+        } catch (Throwable t) {
+            System.out.println("[GhostTap] Mixin provided by the environment; using the manifest config.");
+        }
     }
 
 
