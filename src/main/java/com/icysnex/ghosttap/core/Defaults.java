@@ -9,7 +9,7 @@ public final class Defaults {
     }
 
     public static final class Profile {
-        public double cpsMean = 12.0;
+        public double cpsMean = 13.0;
         public double cpsStandardDeviation = 1.5;
         public double cpsMin = 8.0;
         public double cpsMax = 18.0;
@@ -44,14 +44,12 @@ public final class Defaults {
         public boolean blocks = true;
         public boolean other = true;
 
-        public boolean allowBlockBreak = false;
+        public boolean allowBlockBreak = true;
         public boolean allowInMenu = false;
         public boolean pauseWhileUsingItem = true;
-
         public boolean entityOnly = false;
         public double reachMin = 3.0;
         public double reachMax = 3.5;
-
         public boolean placeableOnly = false;
 
         public boolean survival = true;
@@ -66,14 +64,15 @@ public final class Defaults {
     public static final Profile RIGHT = new Profile();
 
     static {
-        // Both clickers start from the identical Profile above. To give a side
-        // its own defaults, override only the fields that should differ here:
-        //
-        //   LEFT.cpsMean = 13;
-        //   LEFT.entityOnly = true;
-        //
-        //   RIGHT.cpsMean = 8;
-        //   RIGHT.placeableOnly = true;
+        RIGHT.cpsMean = 15.0;
+        RIGHT.cpsMin = 10.0;
+        RIGHT.cpsMax = 20.0;
+        
+        RIGHT.weapons = false;
+        RIGHT.tools = true;
+        RIGHT.other = false;
+        
+        RIGHT.allowBlockBreak = false;
     }
 
     // Keys and modes (per button).
@@ -85,6 +84,9 @@ public final class Defaults {
 
     // Analytics
     public static final boolean ANALYTICS = false;
+
+    // Strip the mod from the mod list sent to servers during the FML handshake.
+    public static final boolean HIDE_FROM_SERVERS = true;
 
     // HUD (global).
     public static final boolean HUD_ENABLED = true;

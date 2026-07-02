@@ -30,6 +30,9 @@ public class ConfigHandler {
     public static ActivationMode leftMode = Defaults.MODE_LEFT;
     public static ActivationMode rightMode = Defaults.MODE_RIGHT;
 
+    // Hide the mod from the server-facing FML handshake mod list.
+    public static boolean hideFromServers = Defaults.HIDE_FROM_SERVERS;
+
     // On-screen HUD.
     public static boolean hudEnabled = Defaults.HUD_ENABLED;
     public static boolean hudHideInMenu = Defaults.HUD_HIDE_IN_MENU;
@@ -140,6 +143,8 @@ public class ConfigHandler {
 
         leftMode = mode(CAT_KEYS, "leftMode", leftMode, save);
         rightMode = mode(CAT_KEYS, "rightMode", rightMode, save);
+
+        hideFromServers = bool(CAT_KEYS, "hideFromServers", hideFromServers, save);
 
         Property analytics = config.get(CAT_KEYS, "analyticsEnabled", Tracker.enabled, "Record click analytics for tuning/export");
         if (save)

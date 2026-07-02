@@ -1,6 +1,7 @@
 package com.icysnex.ghosttap.mixin;
 
 import com.icysnex.ghosttap.GhostTap;
+import com.icysnex.ghosttap.config.ConfigHandler;
 import net.minecraftforge.fml.common.network.handshake.FMLHandshakeMessage;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -21,6 +22,7 @@ public abstract class MixinFmlModList {
 
     @Inject(method = "<init>(Ljava/util/List;)V", at = @At("RETURN"))
     private void ghostTap$hide(List<?> modList, CallbackInfo ci) {
-        modTags.remove(GhostTap.MODID);
+        if (ConfigHandler.hideFromServers)
+            modTags.remove(GhostTap.MODID);
     }
 }

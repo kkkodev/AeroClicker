@@ -267,7 +267,7 @@ public class GuiGhostTap extends GuiScreen {
     private GuiButtonRow configRow(Clicker c) {
         return new GuiButtonRow("Config",
                 button("Reset", "Restore this clicker's settings to their defaults.",
-                        () -> { c.resetParams(); Notice.show("Reset clicker settings to defaults."); }),
+                        () -> { c.reset(); Notice.show("Reset clicker settings to defaults."); }),
                 button("Export", "Copy this clicker's settings to the clipboard.", () -> exportClicker(c)),
                 button("Import", "Load this clicker's settings from the clipboard.", () -> importClicker(c)));
     }
@@ -338,6 +338,10 @@ public class GuiGhostTap extends GuiScreen {
         r.add("Menu");
         r.add(keybind("Open menu", "Key that opens this config screen.",
                 () -> ConfigHandler.openGuiKey, v -> ConfigHandler.openGuiKey = v));
+
+        r.add("Server");
+        r.add(toggle("Hide from servers", "Strip the mod from the mod list sent to servers on connect.\nTakes effect on the next connection.",
+                () -> ConfigHandler.hideFromServers, v -> ConfigHandler.hideFromServers = v));
 
         return r;
     }

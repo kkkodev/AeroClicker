@@ -68,7 +68,7 @@ public class Clicker implements Runnable {
         this.button = button;
         this.defaults = defaults;
         this.gates = new ClickerGates(defaults);
-        resetParams();
+        reset();
 
         String name = button == InputMouse.BUTTON_LEFT ? "Left" : "Right";
         thread = new Thread(this, "GhostTap-Clicker-" + name);
@@ -76,7 +76,8 @@ public class Clicker implements Runnable {
         thread.start();
     }
 
-    public void resetParams() {
+    // Restore all tuning params and gates to this clicker's defaults.
+    public void reset() {
         cpsMean = defaults.cpsMean;
         cpsStandardDeviation = defaults.cpsStandardDeviation;
         cpsMin = defaults.cpsMin;
