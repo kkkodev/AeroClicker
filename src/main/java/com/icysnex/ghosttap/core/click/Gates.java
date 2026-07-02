@@ -3,6 +3,8 @@ package com.icysnex.ghosttap.core.click;
 import com.icysnex.ghosttap.core.input.InputMouse;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemAxe;
 import net.minecraft.item.ItemBlock;
@@ -11,7 +13,9 @@ import net.minecraft.item.ItemShears;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.ItemSword;
 import net.minecraft.item.ItemTool;
+import net.minecraft.util.AxisAlignedBB;
 import net.minecraft.util.MovingObjectPosition;
+import net.minecraft.util.Vec3;
 import net.minecraft.world.WorldSettings;
 
 // Evaluates a clicker's gates against live client state.
@@ -47,7 +51,37 @@ public final class Gates {
         if (button == InputMouse.BUTTON_LEFT && g.allowBlockBreak && aimingBlock(mc))
             return false;
 
+        // Random reach each check so the engagement distance varies like a human's.
+        if (g.entityOnly && !entityInReach(mc, player, Variance.range(g.reachMin, g.reachMax)))
+            return false;
+
         return true;
+    }
+
+    // True if a living entity is intersected by the look ray within `reach` blocks.
+    private static boolean entityInReach(Minecraft mc, EntityPlayerSP player, double reach) {
+        Vec3 eyes = player.getPositionEyes(1.0F);
+        Vec3 look = player.getLook(1.0F);
+        Vec3 end = eyes.addVector(look.xCoord * reach, look.yCoord * reach, look.zCoord * reach);
+
+        AxisAlignedBB region = player.getEntityBoundingBox()
+                .addCoord(look.xCoord * reach, look.yCoord * reach, look.zCoord * reach)
+                .expand(1.0, 1.0, 1.0);
+
+        for (Entity e : mc.theWorld.getEntitiesWithinAABBExcludingEntity(player, region)) {
+            if (!(e instanceof EntityLivingBase))
+                continue;
+
+            double border = e.getCollisionBorderSize();
+            AxisAlignedBB box = e.getEntityBoundingBox().expand(border, border, border);
+            if (box.isVecInside(eyes))
+                return true;
+
+            MovingObjectPosition hit = box.calculateIntercept(eyes, end);
+            if (hit != null && eyes.distanceTo(hit.hitVec) <= reach)
+                return true;
+        }
+        return false;
     }
 
     private static boolean categoryAllowed(ClickerGates g, ItemStack held) {

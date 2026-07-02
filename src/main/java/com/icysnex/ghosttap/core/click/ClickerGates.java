@@ -24,7 +24,12 @@ public class ClickerGates {
     public boolean creative;
     public boolean adventure;
 
-    
+    // Combat: only click when an entity is in sight within a random reach.
+    public boolean entityOnly;
+    public double reachMin;
+    public double reachMax;
+
+
     public ClickerGates(Defaults.Profile d) {
         weapons = d.weapons;
         tools = d.tools;
@@ -36,6 +41,9 @@ public class ClickerGates {
         survival = d.survival;
         creative = d.creative;
         adventure = d.adventure;
+        entityOnly = d.entityOnly;
+        reachMin = d.reachMin;
+        reachMax = d.reachMax;
         Arrays.fill(slots, d.slot);
     }
 }

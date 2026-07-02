@@ -49,6 +49,11 @@ public final class Defaults {
         public boolean adventure = true;
 
         public boolean slot = true;
+
+        // Only click when a living entity is in sight within a random reach.
+        public boolean entityOnly = false;
+        public double reachMin = 2.5;
+        public double reachMax = 3.0;
     }
 
 
