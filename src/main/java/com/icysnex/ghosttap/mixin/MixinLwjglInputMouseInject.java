@@ -1,5 +1,6 @@
 package com.icysnex.ghosttap.mixin;
 
+import com.icysnex.ghosttap.core.analytics.ClickData;
 import com.icysnex.ghosttap.core.click.Clicker;
 import com.icysnex.ghosttap.core.input.Cps;
 import com.icysnex.ghosttap.core.input.InputMouse;
@@ -37,6 +38,14 @@ public abstract class MixinLwjglInputMouseInject {
     private static long ghostTap$lastRealLeft = 0;
     @Unique
     private static long ghostTap$lastRealRight = 0;
+    @Unique
+    private static long ghostTap$downLeft = 0;
+    @Unique
+    private static long ghostTap$downRight = 0;
+    @Unique
+    private static ClickData ghostTap$pendingLeft;
+    @Unique
+    private static ClickData ghostTap$pendingRight;
 
     @Inject(method = "poll", at = @At("RETURN"), remap = false)
     private static void afterPoll(CallbackInfo ci) {
@@ -87,9 +96,15 @@ public abstract class MixinLwjglInputMouseInject {
             // Real (physical) click: the spoofer records its own clicks in run().
             if (InputMouse.spoofedLeft != InputMouse.STATE_DOWN) {
                 long now = System.nanoTime();
-                Clicker.LEFT.tracker.recordReal(ghostTap$lastRealLeft == 0 ? 0 : now - ghostTap$lastRealLeft);
+                ghostTap$pendingLeft = Clicker.LEFT.tracker.recordReal(ghostTap$lastRealLeft == 0 ? 0 : now - ghostTap$lastRealLeft);
                 ghostTap$lastRealLeft = now;
+                ghostTap$downLeft = now;
             }
+        }
+        // On release, fill in the physical click's hold duration.
+        if (ghostTap$prevOutLeft == InputMouse.STATE_DOWN && combinedLeft == InputMouse.STATE_UP && ghostTap$pendingLeft != null) {
+            ghostTap$pendingLeft.holdNanos = System.nanoTime() - ghostTap$downLeft;
+            ghostTap$pendingLeft = null;
         }
         ghostTap$prevOutLeft = combinedLeft;
         ghostTap$prevRealLeft = realLeft;
@@ -132,9 +147,14 @@ public abstract class MixinLwjglInputMouseInject {
             Cps.hit(InputMouse.BUTTON_RIGHT);
             if (InputMouse.spoofedRight != InputMouse.STATE_DOWN) {
                 long now = System.nanoTime();
-                Clicker.RIGHT.tracker.recordReal(ghostTap$lastRealRight == 0 ? 0 : now - ghostTap$lastRealRight);
+                ghostTap$pendingRight = Clicker.RIGHT.tracker.recordReal(ghostTap$lastRealRight == 0 ? 0 : now - ghostTap$lastRealRight);
                 ghostTap$lastRealRight = now;
+                ghostTap$downRight = now;
             }
+        }
+        if (ghostTap$prevOutRight == InputMouse.STATE_DOWN && combinedRight == InputMouse.STATE_UP && ghostTap$pendingRight != null) {
+            ghostTap$pendingRight.holdNanos = System.nanoTime() - ghostTap$downRight;
+            ghostTap$pendingRight = null;
         }
         ghostTap$prevOutRight = combinedRight;
         ghostTap$prevRealRight = realRight;

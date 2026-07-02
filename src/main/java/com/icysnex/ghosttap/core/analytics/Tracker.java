@@ -17,8 +17,18 @@ public class Tracker {
     private final ConcurrentLinkedQueue<Long> window = new ConcurrentLinkedQueue<>();
 
     public void record(double targetCps, long hold, long interval, double trend) {
+        add(targetCps, hold, interval, trend);
+    }
+
+    // Physical click: no generated target/trend, and hold isn't known until the
+    // button is released, so the mixin patches holdNanos on the returned row.
+    public ClickData recordReal(long interval) {
+        return add(0, 0, interval, 0);
+    }
+
+    private ClickData add(double targetCps, long hold, long interval, double trend) {
         if (!enabled)
-            return;
+            return null;
 
         long now = System.currentTimeMillis();
         window.add(now);
@@ -26,12 +36,9 @@ public class Tracker {
         if (history.size() >= 2000)
             history.poll();
 
-        history.add(new ClickData(now, targetCps, getCurrentCps(), hold, interval, trend));
-    }
-
-    // Physical click: no generated target/hold/trend, just timing.
-    public void recordReal(long interval) {
-        record(0, 0, interval, 0);
+        ClickData d = new ClickData(now, targetCps, getCurrentCps(), hold, interval, trend);
+        history.add(d);
+        return d;
     }
 
 
