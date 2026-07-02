@@ -5,13 +5,13 @@
 		"description": "A lightweight internal auto‑clicker focused on customization and undetectability",
 		"version": "${version}",
 		"mcversion": "${mcversion}",
-		"url": "",
-		"updateUrl": "",
+		"url": "https://github.com/IcySnex/GhostTap",
+		"updateUrl": "https://github.com/IcySnex/GhostTap/releases",
 		"authorList": [
 			"IcySnex"
 		],
 		"credits": "IcySnex",
-		"logoFile": "",
+		"logoFile": "logo.png",
 		"screenshots": [
 
 		],
