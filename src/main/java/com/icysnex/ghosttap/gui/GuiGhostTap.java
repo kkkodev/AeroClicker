@@ -240,10 +240,10 @@ public class GuiGhostTap extends GuiScreen {
                 () -> c.gates.allowInMenu, v -> c.gates.allowInMenu = v));
         r.add(toggle("Pause on item use", "Pause while eating, drawing a bow or blocking.",
                 () -> c.gates.pauseWhileUsingItem, v -> c.gates.pauseWhileUsingItem = v));
-        r.add(toggle("Entity only", "Only click when a living entity is in sight within reach.",
+        r.add(toggle("Entity only", "Only click when a living entity is in sight within reach (randomly from min to max).",
                 () -> c.gates.entityOnly, v -> c.gates.entityOnly = v));
         r.add(cond(() -> c.gates.entityOnly, slider("Reach min", 1, 6, 1, false,
-                "Distance the entity is always accepted within (blocks). Rolled randomly up to Max each check.",
+                "Distance the entity must be to always click (blocks).",
                 () -> c.gates.reachMin, v -> { c.gates.reachMin = v; if (c.gates.reachMax < v) c.gates.reachMax = v; })));
         r.add(cond(() -> c.gates.entityOnly, slider("Reach max", 1, 6, 1, false,
                 "Farthest the entity can be and still be clicked (blocks).",

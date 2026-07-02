@@ -38,6 +38,11 @@ public final class Gates {
             default: return false; // spectator etc.: no interaction
         }
 
+        // In a GUI, the aim/item/slot gates are about in-world clicking and would
+        // veto inventory clicking, so only the game-mode gate above applies.
+        if (mc.currentScreen != null)
+            return true;
+
         if (g.pauseWhileUsingItem && player.isUsingItem())
             return false;
 
