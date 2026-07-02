@@ -3,23 +3,24 @@ package com.icysnex.ghosttap.gui;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.Gui;
 
-// Nine numbered cells for the hotbar-slot whitelist. Click a cell to toggle it.
-public class GuiSlots {
+// Nine numbered cells for the hotbar-slot whitelist.
+public class GuiSlots extends Widget {
 
-    public static final int ROW_HEIGHT = 18;
     private static final int LABEL_W = 40;
 
-    final String label;
     private final boolean[] slots;
 
-    public String tooltip;
-    public int x, y, width;
-
     public GuiSlots(String label, boolean[] slots) {
-        this.label = label;
+        super(label);
         this.slots = slots;
     }
 
+    @Override
+    public int height() {
+        return 18;
+    }
+
+    @Override
     public void draw(FontRenderer fr, int mouseX, int mouseY) {
         fr.drawString(label, x, y + 3, 0xFFB8B8B8);
 
@@ -29,7 +30,6 @@ public class GuiSlots {
         for (int i = 0; i < slots.length; i++) {
             int cx = cellsX + i * cellW;
             boolean hover = mouseX >= cx && mouseX <= cx + cellW && mouseY >= y && mouseY <= y + 14;
-
             int bg = slots[i] ? 0xFF5A9BD4 : (hover ? 0xFF3A3A3A : 0xFF262626);
             Gui.drawRect(cx, y, cx + cellW - 1, y + 14, bg);
 
@@ -39,6 +39,7 @@ public class GuiSlots {
         }
     }
 
+    @Override
     public boolean mouseClicked(int mouseX, int mouseY) {
         int cellsX = x + LABEL_W;
         int cellW = (x + width - cellsX) / slots.length;

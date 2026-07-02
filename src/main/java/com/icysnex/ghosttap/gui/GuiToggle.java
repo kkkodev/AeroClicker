@@ -6,28 +6,26 @@ import net.minecraft.client.gui.Gui;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
-// Boolean row: label on the left, ON/OFF pill on the right. Reads live state
-// through a supplier so external changes (e.g. hotkey toggles) stay in sync.
-public class GuiToggle {
+// Label + ON/OFF pill. Reads live state so external changes stay in sync.
+public class GuiToggle extends Widget {
 
-    public static final int ROW_HEIGHT = 18;
-
-    final String label;
     private final BooleanSupplier getter;
     private final Consumer<Boolean> onChange;
 
-    public String tooltip;
-    public int x, y, width;
-
     public GuiToggle(String label, BooleanSupplier getter, Consumer<Boolean> onChange) {
-        this.label = label;
+        super(label);
         this.getter = getter;
         this.onChange = onChange;
     }
 
+    @Override
+    public int height() {
+        return 18;
+    }
+
+    @Override
     public void draw(FontRenderer fr, int mouseX, int mouseY) {
         boolean on = getter.getAsBoolean();
-
         fr.drawString(label, x, y + 3, 0xFFB8B8B8);
 
         String text = on ? "ON" : "OFF";
@@ -38,21 +36,19 @@ public class GuiToggle {
             color |= 0x00202020;
 
         Gui.drawRect(pillX, y, pillX + pillW, y + 14, color);
-        int textX = pillX + (pillW - fr.getStringWidth(text)) / 2;
-        fr.drawString(text, textX, y + 3, 0xFFFFFFFF);
+        fr.drawString(text, pillX + (pillW - fr.getStringWidth(text)) / 2, y + 3, 0xFFFFFFFF);
     }
 
+    @Override
     public boolean mouseClicked(int mouseX, int mouseY) {
         if (!contains(mouseX, mouseY))
             return false;
-
         onChange.accept(!getter.getAsBoolean());
         return true;
     }
 
     private boolean contains(int mouseX, int mouseY) {
-        int pillW = 34;
-        int pillX = x + width - pillW;
-        return mouseX >= pillX && mouseX <= pillX + pillW && mouseY >= y && mouseY <= y + 14;
+        int pillX = x + width - 34;
+        return mouseX >= pillX && mouseX <= pillX + 34 && mouseY >= y && mouseY <= y + 14;
     }
 }

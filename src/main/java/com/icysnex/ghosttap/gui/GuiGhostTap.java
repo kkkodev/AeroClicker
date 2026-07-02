@@ -515,24 +515,6 @@ public class GuiGhostTap extends GuiScreen {
             drawHoveringText(Arrays.asList(hoverTooltip.split("\n")), mouseX, mouseY);
     }
 
-    // Hover only the title text of a labelled widget, so the tooltip shows when
-    // pointing at the name rather than anywhere on the row.
-    private void captureHoverTitle(int mouseX, int mouseY, int titleTop, String label, String tip) {
-        int titleWidth = fontRendererObj.getStringWidth(label);
-        captureHover(mouseX, mouseY, contentX, titleTop, titleWidth, 9, tip);
-    }
-
-    // Records a tooltip if the mouse is inside the given rect, clipped to the
-    // visible content region. Drawn later, after the scissor is disabled.
-    private void captureHover(int mouseX, int mouseY, int rx, int ry, int rw, int rh, String tip) {
-        if (tip == null || tip.isEmpty())
-            return;
-        if (mouseY < contentTop || mouseY > contentBottom)
-            return;
-        if (mouseX >= rx && mouseX <= rx + rw && mouseY >= ry && mouseY <= ry + rh)
-            hoverTooltip = tip;
-    }
-
     private void drawTabs(int mouseX, int mouseY) {
         int tabY = top + TITLE_H;
         int tabW = PANEL_W / tabs.size();
@@ -575,20 +557,15 @@ public class GuiGhostTap extends GuiScreen {
         }
     }
 
-    // Places every row (sets widget coords) and optionally draws. Returns the
-    // total content height so scroll can be clamped.
+    // Lays out every row and optionally draws it. Returns total content height.
     private int walk(List<Object> rows, boolean draw, int mouseX, int mouseY) {
         int cursor = contentTop - scroll;
         int start = cursor;
 
         for (Object entry : rows) {
-            Object row = entry;
-            if (row instanceof Cond) {
-                Cond c = (Cond) row;
-                if (!c.show.getAsBoolean())
-                    continue;
-                row = c.row;
-            }
+            Object row = unwrap(entry);
+            if (row == null)
+                continue;
 
             if (row instanceof String) {
                 if (draw && cursor + SECTION_H >= contentTop && cursor <= contentBottom) {
@@ -596,105 +573,34 @@ public class GuiGhostTap extends GuiScreen {
                     drawRect(contentX, cursor + 16, contentX + contentW, cursor + 17, 0xFF333333);
                 }
                 cursor += SECTION_H;
-            } else if (row instanceof GuiSlider) {
-                GuiSlider s = (GuiSlider) row;
-                s.x = contentX;
-                s.y = cursor;
-                s.width = contentW;
-                if (draw) {
-                    s.draw(fontRendererObj, mouseX, mouseY);
-                    captureHoverTitle(mouseX, mouseY, cursor, s.label, s.tooltip);
-                }
-                cursor += GuiSlider.ROW_HEIGHT;
-            } else if (row instanceof GuiToggle) {
-                GuiToggle t = (GuiToggle) row;
-                t.x = contentX;
-                t.y = cursor;
-                t.width = contentW;
-                if (draw) {
-                    t.draw(fontRendererObj, mouseX, mouseY);
-                    captureHoverTitle(mouseX, mouseY, cursor + 3, t.label, t.tooltip);
-                }
-                cursor += GuiToggle.ROW_HEIGHT;
-            } else if (row instanceof GuiKeybind) {
-                GuiKeybind k = (GuiKeybind) row;
-                k.x = contentX;
-                k.y = cursor;
-                k.width = contentW;
-                if (draw) {
-                    k.draw(fontRendererObj, mouseX, mouseY);
-                    captureHoverTitle(mouseX, mouseY, cursor + 3, k.label, k.tooltip);
-                }
-                cursor += GuiKeybind.ROW_HEIGHT;
-            } else if (row instanceof GuiSegment) {
-                GuiSegment sg = (GuiSegment) row;
-                sg.x = contentX;
-                sg.y = cursor;
-                sg.width = contentW;
-                if (draw) {
-                    sg.draw(fontRendererObj, mouseX, mouseY);
-                    captureHoverTitle(mouseX, mouseY, cursor + 3, sg.label, sg.tooltip);
-                }
-                cursor += GuiSegment.ROW_HEIGHT;
-            } else if (row instanceof GuiHexField) {
-                GuiHexField f = (GuiHexField) row;
-                f.x = contentX;
-                f.y = cursor;
-                f.width = contentW;
-                if (draw) {
-                    f.draw(fontRendererObj, mouseX, mouseY);
-                    captureHoverTitle(mouseX, mouseY, cursor + 3, f.label, f.tooltip);
-                }
-                cursor += GuiHexField.ROW_HEIGHT;
-            } else if (row instanceof GuiSlots) {
-                GuiSlots sl = (GuiSlots) row;
-                sl.x = contentX;
-                sl.y = cursor;
-                sl.width = contentW;
-                if (draw) {
-                    sl.draw(fontRendererObj, mouseX, mouseY);
-                    captureHoverTitle(mouseX, mouseY, cursor + 3, sl.label, sl.tooltip);
-                }
-                cursor += GuiSlots.ROW_HEIGHT;
-            } else if (row instanceof GuiStat) {
-                GuiStat s = (GuiStat) row;
-                s.x = contentX;
-                s.y = cursor;
-                s.width = contentW;
-                if (draw) {
-                    s.draw(fontRendererObj, mouseX, mouseY);
-                    captureHoverTitle(mouseX, mouseY, cursor, s.label, s.tooltip);
-                }
-                cursor += GuiStat.ROW_HEIGHT;
-            } else if (row instanceof GuiActionButton) {
-                GuiActionButton b = (GuiActionButton) row;
-                b.x = contentX;
-                b.y = cursor;
-                b.width = contentW;
-                if (draw) {
-                    b.draw(fontRendererObj, mouseX, mouseY);
-                    // Buttons have centered text and no left title, so hover the
-                    // whole button.
-                    captureHover(mouseX, mouseY, contentX, cursor, contentW, 16, b.tooltip);
-                }
-                cursor += GuiActionButton.ROW_HEIGHT;
-            } else if (row instanceof GuiButtonRow) {
-                GuiButtonRow br = (GuiButtonRow) row;
-                br.x = contentX;
-                br.y = cursor;
-                br.width = contentW;
-                if (draw) {
-                    br.draw(fontRendererObj, mouseX, mouseY);
-                    if (br.label != null)
-                        captureHoverTitle(mouseX, mouseY, cursor + 3, br.label, br.tooltip);
-                    for (GuiActionButton b : br.buttons)
-                        captureHover(mouseX, mouseY, b.x, cursor, b.width, 16, b.tooltip);
-                }
-                cursor += GuiButtonRow.ROW_HEIGHT;
+                continue;
             }
+
+            Widget w = (Widget) row;
+            w.x = contentX;
+            w.y = cursor;
+            w.width = contentW;
+            if (draw) {
+                w.draw(fontRendererObj, mouseX, mouseY);
+                if (mouseY >= contentTop && mouseY <= contentBottom) {
+                    String tip = w.tooltipAt(fontRendererObj, mouseX, mouseY);
+                    if (tip != null)
+                        hoverTooltip = tip;
+                }
+            }
+            cursor += w.height();
         }
 
         return cursor - start;
+    }
+
+    // Unwraps a conditional row: returns the inner row, or null when hidden.
+    private Object unwrap(Object entry) {
+        if (entry instanceof Cond) {
+            Cond c = (Cond) entry;
+            return c.show.getAsBoolean() ? c.row : null;
+        }
+        return entry;
     }
 
     private List<Object> currentRows() {
@@ -754,47 +660,17 @@ public class GuiGhostTap extends GuiScreen {
         clearListening();
         clearFocus();
         for (Object entry : currentRows()) {
-            Object row = entry;
-            if (row instanceof Cond) {
-                Cond c = (Cond) row;
-                if (!c.show.getAsBoolean())
-                    continue;
-                row = c.row;
-            }
+            Object row = unwrap(entry);
+            if (!(row instanceof Widget))
+                continue;
 
-            if (row instanceof GuiSlider) {
-                GuiSlider s = (GuiSlider) row;
-                if (s.mouseClicked(mouseX, mouseY)) {
-                    activeSlider = s;
-                    return;
-                }
-            } else if (row instanceof GuiHexField) {
-                GuiHexField f = (GuiHexField) row;
-                if (f.mouseClicked(mouseX, mouseY)) {
-                    activeField = f;
-                    return;
-                }
-            } else if (row instanceof GuiToggle) {
-                if (((GuiToggle) row).mouseClicked(mouseX, mouseY))
-                    return;
-            } else if (row instanceof GuiKeybind) {
-                GuiKeybind k = (GuiKeybind) row;
-                if (k.mouseClicked(mouseX, mouseY)) {
-                    activeKeybind = k;
-                    return;
-                }
-            } else if (row instanceof GuiSegment) {
-                if (((GuiSegment) row).mouseClicked(mouseX, mouseY))
-                    return;
-            } else if (row instanceof GuiSlots) {
-                if (((GuiSlots) row).mouseClicked(mouseX, mouseY))
-                    return;
-            } else if (row instanceof GuiActionButton) {
-                if (((GuiActionButton) row).mouseClicked(mouseX, mouseY))
-                    return;
-            } else if (row instanceof GuiButtonRow) {
-                if (((GuiButtonRow) row).mouseClicked(mouseX, mouseY))
-                    return;
+            Widget w = (Widget) row;
+            if (w.mouseClicked(mouseX, mouseY)) {
+                // Widgets that keep interacting after the click are tracked.
+                if (w instanceof GuiSlider) activeSlider = (GuiSlider) w;
+                else if (w instanceof GuiKeybind) activeKeybind = (GuiKeybind) w;
+                else if (w instanceof GuiHexField) activeField = (GuiHexField) w;
+                return;
             }
         }
     }

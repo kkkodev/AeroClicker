@@ -2,24 +2,25 @@ package com.icysnex.ghosttap.gui;
 
 import net.minecraft.client.gui.FontRenderer;
 
-// Lays out several action buttons side by side. An optional left label lines the
-// row up with the other titled rows.
-public class GuiButtonRow {
+// Several action buttons side by side, with an optional left label.
+public class GuiButtonRow extends Widget {
 
-    public static final int ROW_HEIGHT = 20;
     private static final int GAP = 4;
     private static final int LABEL_W = 44;
 
-    final String label;
-    final GuiActionButton[] buttons;
-    public String tooltip;
-    public int x, y, width;
+    private final GuiActionButton[] buttons;
 
     public GuiButtonRow(String label, GuiActionButton... buttons) {
-        this.label = label;
+        super(label);
         this.buttons = buttons;
     }
 
+    @Override
+    public int height() {
+        return 20;
+    }
+
+    @Override
     public void draw(FontRenderer fr, int mouseX, int mouseY) {
         layout();
         if (label != null)
@@ -28,6 +29,7 @@ public class GuiButtonRow {
             b.draw(fr, mouseX, mouseY);
     }
 
+    @Override
     public boolean mouseClicked(int mouseX, int mouseY) {
         for (GuiActionButton b : buttons) {
             if (b.mouseClicked(mouseX, mouseY))
@@ -36,12 +38,19 @@ public class GuiButtonRow {
         return false;
     }
 
-    void layout() {
+    @Override
+    public String tooltipAt(FontRenderer fr, int mouseX, int mouseY) {
+        for (GuiActionButton b : buttons) {
+            if (b.tooltip != null && b.contains(mouseX, mouseY))
+                return b.tooltip;
+        }
+        return null;
+    }
+
+    private void layout() {
         int startX = label != null ? x + LABEL_W : x;
-        int avail = x + width - startX;
-        int n = buttons.length;
-        int each = (avail - GAP * (n - 1)) / n;
-        for (int i = 0; i < n; i++) {
+        int each = (x + width - startX - GAP * (buttons.length - 1)) / buttons.length;
+        for (int i = 0; i < buttons.length; i++) {
             GuiActionButton b = buttons[i];
             b.x = startX + i * (each + GAP);
             b.y = y;

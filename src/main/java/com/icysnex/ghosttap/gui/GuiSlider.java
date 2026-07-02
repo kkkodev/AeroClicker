@@ -6,15 +6,10 @@ import net.minecraft.client.gui.Gui;
 import java.util.function.DoubleConsumer;
 import java.util.function.DoubleSupplier;
 
-// Single-value horizontal slider. Reads and writes the backing value live
-// through the getter/setter (no cached copy). The knob rides a fixed absolute
-// scale [absMin, absMax]; any cross-value relationships (e.g. Min pushing Mean)
-// are enforced by the supplied setter, not the widget.
-public class GuiSlider {
+// Reads/writes its value live through the getter/setter. Any cross-value rules
+// (e.g. Min pushing Mean) live in the setter, not here.
+public class GuiSlider extends Widget {
 
-    public static final int ROW_HEIGHT = 24;
-
-    final String label;
     private final double absMin;
     private final double absMax;
     private final int decimals;
@@ -22,12 +17,10 @@ public class GuiSlider {
     private final DoubleSupplier getter;
     private final DoubleConsumer setter;
 
-    public String tooltip;
     public boolean dragging;
-    public int x, y, width;
 
     public GuiSlider(String label, double min, double max, int decimals, boolean percent, DoubleSupplier getter, DoubleConsumer setter) {
-        this.label = label;
+        super(label);
         this.absMin = min;
         this.absMax = max;
         this.decimals = decimals;
@@ -36,6 +29,17 @@ public class GuiSlider {
         this.setter = setter;
     }
 
+    @Override
+    public int height() {
+        return 24;
+    }
+
+    @Override
+    protected int labelTop() {
+        return y;
+    }
+
+    @Override
     public void draw(FontRenderer fr, int mouseX, int mouseY) {
         double value = clamp(getter.getAsDouble(), absMin, absMax);
 
@@ -50,17 +54,16 @@ public class GuiSlider {
 
         double t = (value - absMin) / (absMax - absMin);
         int knobX = x + (int) Math.round(clamp(t, 0, 1) * width);
-
         Gui.drawRect(x, trackTop, knobX, trackBottom, 0xFF5A9BD4);
 
         boolean hover = dragging || contains(mouseX, mouseY);
         Gui.drawRect(knobX - 2, y + 10, knobX + 3, y + 20, hover ? 0xFFFFFFFF : 0xFFD0D0D0);
     }
 
+    @Override
     public boolean mouseClicked(int mouseX, int mouseY) {
         if (!contains(mouseX, mouseY))
             return false;
-
         dragging = true;
         updateFromMouse(mouseX);
         return true;
@@ -77,8 +80,7 @@ public class GuiSlider {
 
     private void updateFromMouse(int mouseX) {
         double t = (mouseX - x) / (double) width;
-        double raw = absMin + t * (absMax - absMin);
-        setter.accept(clamp(round(raw), absMin, absMax));
+        setter.accept(clamp(round(absMin + t * (absMax - absMin)), absMin, absMax));
     }
 
     private boolean contains(int mouseX, int mouseY) {

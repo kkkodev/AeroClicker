@@ -7,33 +7,32 @@ import org.lwjgl.input.Keyboard;
 import java.util.function.IntConsumer;
 import java.util.function.IntSupplier;
 
-// Hex colour input: label, an editable "#RRGGBB" (or "#AARRGGBB") field, and a
-// live swatch. Applies on every keystroke; re-syncs its text if the colour is
-// changed elsewhere (preset, reset, import) while unfocused.
-public class GuiHexField {
+// Editable "#RRGGBB" (or "#AARRGGBB") colour field with a live swatch. Applies on
+// every keystroke; re-syncs if the colour changes elsewhere while unfocused.
+public class GuiHexField extends Widget {
 
-    public static final int ROW_HEIGHT = 18;
     private static final int BOX_W = 62;
     private static final int SWATCH_W = 14;
 
-    final String label;
     private final boolean alpha;
     private final IntSupplier getter;
     private final IntConsumer setter;
 
-    public String tooltip;
     public boolean focused;
-    public int x, y, width;
-
     private String text;
     private int lastExternal;
 
     public GuiHexField(String label, boolean alpha, IntSupplier getter, IntConsumer setter) {
-        this.label = label;
+        super(label);
         this.alpha = alpha;
         this.getter = getter;
         this.setter = setter;
         pull();
+    }
+
+    @Override
+    public int height() {
+        return 18;
     }
 
     private void pull() {
@@ -41,6 +40,7 @@ public class GuiHexField {
         text = alpha ? String.format("%08X", lastExternal) : String.format("%06X", lastExternal & 0xFFFFFF);
     }
 
+    @Override
     public void draw(FontRenderer fr, int mouseX, int mouseY) {
         if (!focused && getter.getAsInt() != lastExternal)
             pull();
@@ -56,11 +56,11 @@ public class GuiHexField {
         Gui.drawRect(swatchX, y, swatchX + SWATCH_W, y + 14, 0xFF000000 | (getter.getAsInt() & 0xFFFFFF));
     }
 
+    @Override
     public boolean mouseClicked(int mouseX, int mouseY) {
         int boxX = x + width - SWATCH_W - 2 - BOX_W;
-        boolean inside = mouseX >= boxX && mouseX <= boxX + BOX_W && mouseY >= y && mouseY <= y + 14;
-        focused = inside;
-        return inside;
+        focused = mouseX >= boxX && mouseX <= boxX + BOX_W && mouseY >= y && mouseY <= y + 14;
+        return focused;
     }
 
     public void keyTyped(char typedChar, int keyCode) {
