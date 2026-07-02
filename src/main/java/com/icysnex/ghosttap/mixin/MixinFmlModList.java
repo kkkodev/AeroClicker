@@ -19,7 +19,7 @@ public abstract class MixinFmlModList {
     @Shadow
     private Map<String, String> modTags;
 
-    @Inject(method = "<init>(Ljava/util/List;)V", at = @At("TAIL"))
+    @Inject(method = "<init>(Ljava/util/List;)V", at = @At("RETURN"))
     private void ghostTap$hide(List<?> modList, CallbackInfo ci) {
         modTags.remove(GhostTap.MODID);
     }
