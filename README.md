@@ -37,13 +37,13 @@
 
 ## Motivation
 
-Anyone who plays Minecraft PvP 1.8.9 knows how exhausting it is to spam-click for hours on end. That’s where an autoclicker comes in - but most of them simply suck
+Anyone who plays Minecraft PvP 1.8.9 knows how exhausting it is to spam-click for hours on end. That’s where an autoclicker comes in - but most of them simply suck!
 
-Starting with external autoclickers: running as a separate OS process not only consumes more resources and ruins cross-platform support, but it also means they miss out on crucial quality-of-life features - like being able to break blocks, whitelist certain hotbar slots, automatically stop clicking inside menus and inventory or other game-aware filters
+Starting with external autoclickers: running as a separate OS process not only consumes more resources and ruins cross-platform support, but it also means they miss out on crucial quality-of-life features - like being able to break blocks, whitelist certain hotbar slots, automatically stop clicking inside menus and inventory or other game-aware filters. And don't get me starting on all the malware they often include...
 
 Finding a good internal autoclicker is just as hard though. The few that exist either fire rigid, metronome-perfect clicks, lack basic features like a right-clicker, or use `java.awt.Robot` / send direct hit packets, which breaks HUD elements like CPS displays and Keystrokes.
 
-GhostTap was built to fix this around two main goals:
+GhostTap was built to fix this around two main goals while being fully open-source:
 
 1. **Look human.** Every click's timing and hold duration is drawn from tunable statistical distributions - including mean, deviation, min/max bounds, random spikes and stutters, occasional "heavy" holds, and a slow rhythmic drift - so no two clicks are identical.
 2. **Be low-footprint and controllable.** Input is spoofed at the **LWJGL layer**, not through fake OS events, so the game reads it through its normal mouse pipeline. Everything is configured through a clean in-game GUI - no config-file editing required.
