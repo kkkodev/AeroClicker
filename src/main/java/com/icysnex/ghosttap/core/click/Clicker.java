@@ -103,6 +103,8 @@ public class Clicker implements Runnable {
         rhythmVolatility = defaults.rhythmVolatility;
         rhythmTension = defaults.rhythmTension;
         startDelayMs = defaults.startDelayMs;
+
+        gates.resetTo(defaults);
     }
 
 
@@ -297,6 +299,11 @@ public class Clicker implements Runnable {
             cps = cpsMax + (Variance.range(-cpsMinMaxFallout, cpsMinMaxFallout));
         if (cps < cpsMin)
             cps = cpsMin + (Variance.range(-cpsMinMaxFallout, cpsMinMaxFallout));
+
+        // Floor so fallout past a low Min can never make the rate zero/negative,
+        // which would yield a negative interval and runaway clicking.
+        if (cps < 0.5)
+            cps = 0.5;
 
         return (long)(1_000_000_000.0 / cps);
     }

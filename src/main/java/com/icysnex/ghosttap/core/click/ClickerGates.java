@@ -34,6 +34,11 @@ public class ClickerGates {
 
 
     public ClickerGates(Defaults.Profile d) {
+        resetTo(d);
+    }
+
+    // Copy every gate from a defaults profile (used on construct and on reset).
+    public void resetTo(Defaults.Profile d) {
         weapons = d.weapons;
         tools = d.tools;
         blocks = d.blocks;
