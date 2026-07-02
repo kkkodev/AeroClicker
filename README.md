@@ -25,13 +25,13 @@
     <td width="99999" align="center">
       <b>A lightweight internal auto‑clicker focused on customization and undetectability.</b>
       <br/>
-      Independent clickers for L/R  · depp humanization · fully customizable with in-game UI · live HUD · click analysis
+      Independent clickers for Left/Right  · depp humanization · fully customizable with in-game UI · live HUD · click analysis
     </td>
   </tr>
 </table>
 
 <h3 align="center">
-  <a href="[https://github.com/IcySnex/Melora/releases/latest](https://minecraft.wiki/w/Java_Edition_1.8.9)">
+  <a href="https://minecraft.wiki/w/Java_Edition_1.8.9">
     <img alt="Static Badge" src="https://img.shields.io/badge/Minecraft-1.8.9-62B47A?style=for-the-badge">
   </a>
   <span> ˙ </span>
