@@ -78,10 +78,11 @@ public class GhostTapKeybindListener {
         boolean delayMet = mode != ActivationMode.MOUSE
                 || System.currentTimeMillis() - st.intentSince >= clicker.startDelayMs;
 
-        boolean enabled = intent && delayMet && context && Gates.pass(clicker.gates, button);
+        boolean engaged = intent && delayMet && context;
+        boolean enabled = engaged && Gates.pass(clicker.gates, button);
         clicker.setEnabled(enabled);
 
-        InputMouse.setMask(button, enabled);
+        InputMouse.setMask(button, mode == ActivationMode.MOUSE ? engaged : enabled);
     }
 
     private static boolean isDown(int code) {
