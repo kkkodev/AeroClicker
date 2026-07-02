@@ -1,5 +1,6 @@
 package com.icysnex.ghosttap.events;
 
+import com.icysnex.ghosttap.commands.SilentChat;
 import com.icysnex.ghosttap.config.ConfigHandler;
 import com.icysnex.ghosttap.core.ActivationMode;
 import com.icysnex.ghosttap.core.click.Clicker;
@@ -29,7 +30,7 @@ public class GhostTapKeybindListener {
         boolean screenOpen = mc.currentScreen != null;
 
         boolean openDown = !screenOpen && isDown(ConfigHandler.openGuiKey);
-        if (openDown && !wasOpenDown)
+        if ((openDown && !wasOpenDown) || (!screenOpen && SilentChat.consumeOpenRequest()))
             mc.displayGuiScreen(new GuiGhostTap());
         wasOpenDown = openDown;
 
