@@ -32,6 +32,7 @@ public class ConfigHandler {
 
     // On-screen HUD.
     public static boolean hudEnabled = Defaults.HUD_ENABLED;
+    public static boolean hudHideInMenu = Defaults.HUD_HIDE_IN_MENU;
     public static boolean hudCpsLeft = Defaults.HUD_CPS_LEFT;
     public static boolean hudCpsRight = Defaults.HUD_CPS_RIGHT;
     public static boolean hudShowStatus = Defaults.HUD_STATUS;
@@ -54,6 +55,7 @@ public class ConfigHandler {
 
     public static void resetHud() {
         hudEnabled = Defaults.HUD_ENABLED;
+        hudHideInMenu = Defaults.HUD_HIDE_IN_MENU;
         hudCpsLeft = Defaults.HUD_CPS_LEFT;
         hudCpsRight = Defaults.HUD_CPS_RIGHT;
         hudShowStatus = Defaults.HUD_STATUS;
@@ -72,6 +74,7 @@ public class ConfigHandler {
     public static String exportHud() {
         Map<String, String> m = ConfigCodec.map();
         ConfigCodec.put(m, "enabled", hudEnabled);
+        ConfigCodec.put(m, "hideInMenu", hudHideInMenu);
         ConfigCodec.put(m, "cpsLeft", hudCpsLeft);
         ConfigCodec.put(m, "cpsRight", hudCpsRight);
         ConfigCodec.put(m, "showStatus", hudShowStatus);
@@ -92,6 +95,7 @@ public class ConfigHandler {
             return false;
 
         hudEnabled = ConfigCodec.flag(m, "enabled", hudEnabled);
+        hudHideInMenu = ConfigCodec.flag(m, "hideInMenu", hudHideInMenu);
         hudCpsLeft = ConfigCodec.flag(m, "cpsLeft", hudCpsLeft);
         hudCpsRight = ConfigCodec.flag(m, "cpsRight", hudCpsRight);
         hudShowStatus = ConfigCodec.flag(m, "showStatus", hudShowStatus);
@@ -144,6 +148,7 @@ public class ConfigHandler {
             Tracker.enabled = analytics.getBoolean();
 
         hudEnabled = bool(CAT_HUD, "enabled", hudEnabled, save);
+        hudHideInMenu = bool(CAT_HUD, "hideInMenu", hudHideInMenu, save);
         hudCpsLeft = bool(CAT_HUD, "cpsLeft", hudCpsLeft, save);
         hudCpsRight = bool(CAT_HUD, "cpsRight", hudCpsRight, save);
         hudShowStatus = bool(CAT_HUD, "showStatus", hudShowStatus, save);

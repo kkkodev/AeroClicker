@@ -77,6 +77,7 @@ public final class Defaults {
 
     // HUD (global).
     public static final boolean HUD_ENABLED = true;
+    public static final boolean HUD_HIDE_IN_MENU = false;
     public static final boolean HUD_CPS_LEFT = true;
     public static final boolean HUD_CPS_RIGHT = true;
     public static final boolean HUD_STATUS = false;

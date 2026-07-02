@@ -34,6 +34,10 @@ public class ClickerHUD {
         if (mc.thePlayer == null)
             return;
 
+        // Hide while a screen (chat, inventory) is open or the F3 debug overlay is up.
+        if (ConfigHandler.hudHideInMenu && mc.gameSettings.showDebugInfo)
+            return;
+
         List<Line> lines = buildLines();
         if (lines.isEmpty())
             return;
