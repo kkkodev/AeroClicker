@@ -52,6 +52,7 @@ public class GuiGhostTap extends GuiScreen {
     private int scroll = 0;
 
     private GuiSlider activeSlider;
+    private GuiSlider hoveredSlider;
     private GuiKeybind activeKeybind;
     private GuiHexField activeField;
     private String hoverTooltip;
@@ -515,6 +516,7 @@ public class GuiGhostTap extends GuiScreen {
 
         if (activeSlider != null)
             activeSlider.mouseDragged(mouseX);
+        hoveredSlider = null;
         walk(currentRows(), true, mouseX, mouseY);
 
         GL11.glDisable(GL11.GL_SCISSOR_TEST);
@@ -612,6 +614,8 @@ public class GuiGhostTap extends GuiScreen {
                     String tip = w.tooltipAt(fontRendererObj, mouseX, mouseY);
                     if (tip != null)
                         hoverTooltip = tip;
+                    if (w instanceof GuiSlider && ((GuiSlider) w).hovers(mouseX, mouseY))
+                        hoveredSlider = (GuiSlider) w;
                 }
             }
             cursor += w.height();
@@ -717,6 +721,13 @@ public class GuiGhostTap extends GuiScreen {
         int wheel = Mouse.getEventDWheel();
         if (wheel == 0)
             return;
+
+        // Over a slider, the wheel nudges it one step for precise values; elsewhere
+        // it scrolls the list.
+        if (hoveredSlider != null) {
+            hoveredSlider.nudge(Integer.signum(wheel));
+            return;
+        }
 
         scroll -= Integer.signum(wheel) * 14;
         clampScroll();

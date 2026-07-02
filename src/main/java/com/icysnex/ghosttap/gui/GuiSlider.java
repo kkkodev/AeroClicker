@@ -78,6 +78,17 @@ public class GuiSlider extends Widget {
         dragging = false;
     }
 
+    public boolean hovers(int mouseX, int mouseY) {
+        return contains(mouseX, mouseY);
+    }
+
+    // One smallest-representable step, for precise scroll-wheel adjustment.
+    public void nudge(int direction) {
+        double step = 1.0 / Math.pow(10, percent ? decimals + 2 : decimals);
+        double v = clamp(getter.getAsDouble(), absMin, absMax);
+        setter.accept(clamp(round(v + direction * step), absMin, absMax));
+    }
+
     private void updateFromMouse(int mouseX) {
         double t = (mouseX - x) / (double) width;
         setter.accept(clamp(round(absMin + t * (absMax - absMin)), absMin, absMax));
