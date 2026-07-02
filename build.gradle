@@ -41,15 +41,11 @@ repositories {
 }
 
 dependencies {
-    // 0.7.11 matches what the common 1.8.9 mods (ModHider, BetterPingMod, ...) ship,
-    // so the bundled copy never clashes with another version in the instance.
     compile("org.spongepowered:mixin:0.7.11-SNAPSHOT") {
         transitive = false
     }
 }
 
-// Feed the MCP->SRG mappings to the Mixin annotation processor so mixins into
-// obfuscated Minecraft methods generate a refmap and work in production.
 afterEvaluate {
     tasks.compileJava.dependsOn 'genSrgs'
     tasks.compileJava.options.compilerArgs += [
@@ -73,8 +69,6 @@ processResources {
 }
 
 jar {
-    // Bundle Mixin so the mod also works in an instance that has no other Mixin
-    // provider. It's booted by the MixinTweaker below (never by our coremod).
     from {
         configurations.compile.findAll { it.name.contains('mixin') }.collect { zipTree(it) }
     }
