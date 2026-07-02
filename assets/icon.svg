@@ -1,13 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
-  <!-- GhostTap icon — flat ghost + tap ripple, app blue on dark -->
+  <!-- GhostTap icon — flat ghost + click burst, app blue on dark -->
   <rect width="256" height="256" rx="56" fill="#16161C"/>
 
-  <!-- tap ripple under the ghost -->
-  <g fill="none" stroke="#5A9BD4" stroke-width="6" stroke-linecap="round">
-    <ellipse cx="128" cy="196" rx="20" ry="6" opacity="0.55"/>
-    <ellipse cx="128" cy="196" rx="36" ry="11" opacity="0.28"/>
-  </g>
+  <!-- ghost (eyes cut out via evenodd) -->
+  <path fill="#5A9BD4" fill-rule="evenodd" d="M 68 102 C 68 68 94 44 128 44 C 162 44 188 68 188 102 L 188 142 L 174 154 L 158 142 L 142 154 L 128 142 L 114 154 L 98 142 L 82 154 L 68 142 Z M 102 86 a 8 8 0 1 0 16 0 a 8 8 0 1 0 -16 0 Z M 138 86 a 8 8 0 1 0 16 0 a 8 8 0 1 0 -16 0 Z"/>
 
-  <!-- ghost (eyes are cut out via evenodd) -->
-  <path fill="#5A9BD4" fill-rule="evenodd" d="M 64 118 C 64 82 92 56 128 56 C 164 56 192 82 192 118 L 192 160 L 176 174 L 160 160 L 144 174 L 128 160 L 112 174 L 96 160 L 80 174 L 64 160 Z M 102 100 a 8 8 0 1 0 16 0 a 8 8 0 1 0 -16 0 Z M 138 100 a 8 8 0 1 0 16 0 a 8 8 0 1 0 -16 0 Z"/>
+  <!-- click burst under the ghost -->
+  <g stroke="#5A9BD4" fill="none" stroke-linecap="round">
+    <circle cx="128" cy="194" r="6" fill="#5A9BD4" stroke="none"/>
+    <circle cx="128" cy="194" r="14" stroke-width="5"/>
+    <circle cx="128" cy="194" r="25" stroke-width="4" opacity="0.5"/>
+    <g stroke-width="4">
+      <line x1="148" y1="214" x2="155" y2="221"/>
+      <line x1="108" y1="214" x2="101" y2="221"/>
+      <line x1="108" y1="174" x2="101" y2="167"/>
+      <line x1="148" y1="174" x2="155" y2="167"/>
+    </g>
+  </g>
 </svg>
