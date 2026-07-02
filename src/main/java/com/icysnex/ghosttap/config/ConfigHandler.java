@@ -3,16 +3,14 @@ package com.icysnex.ghosttap.config;
 import com.icysnex.ghosttap.core.ActivationMode;
 import com.icysnex.ghosttap.core.Clicker;
 import com.icysnex.ghosttap.core.ClickerGates;
+import com.icysnex.ghosttap.core.Defaults;
 import com.icysnex.ghosttap.core.HudAnchor;
 import com.icysnex.ghosttap.core.analytics.Tracker;
+import com.icysnex.ghosttap.utils.ConfigCodec;
 import net.minecraftforge.common.config.Configuration;
 import net.minecraftforge.common.config.Property;
-import org.lwjgl.input.Keyboard;
 
 import java.io.File;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.function.DoubleConsumer;
 import java.util.function.DoubleSupplier;
@@ -26,28 +24,26 @@ public class ConfigHandler {
 
     private static Configuration config;
 
-    // Keybinds (LWJGL key codes). Rebindable from the GUI.
-    public static int openGuiKey = Keyboard.KEY_RSHIFT;
-    public static int toggleLeftKey = Keyboard.KEY_N;
-    public static int toggleRightKey = Keyboard.KEY_M;
-
-    // Per-clicker activation mode.
-    public static ActivationMode leftMode = ActivationMode.MOUSE;
-    public static ActivationMode rightMode = ActivationMode.MOUSE;
+    // Keybinds (LWJGL key codes) and activation modes.
+    public static int openGuiKey = Defaults.KEY_OPEN;
+    public static int toggleLeftKey = Defaults.KEY_LEFT;
+    public static int toggleRightKey = Defaults.KEY_RIGHT;
+    public static ActivationMode leftMode = Defaults.MODE_LEFT;
+    public static ActivationMode rightMode = Defaults.MODE_RIGHT;
 
     // On-screen HUD.
-    public static boolean hudEnabled = true;
-    public static boolean hudCpsLeft = true;
-    public static boolean hudCpsRight = true;
-    public static boolean hudShowStatus = false;
-    public static boolean hudBackground = true;
-    public static int hudPadding = 5;
-    public static int hudTextColor = 0xFFFFFFFF;
-    public static int hudBgColor = 0x90000000;
-    public static HudAnchor hudAnchor = HudAnchor.TOP_LEFT;
-    public static int hudMargin = 4;
-    public static int hudX = 4;
-    public static int hudY = 4;
+    public static boolean hudEnabled = Defaults.HUD_ENABLED;
+    public static boolean hudCpsLeft = Defaults.HUD_CPS_LEFT;
+    public static boolean hudCpsRight = Defaults.HUD_CPS_RIGHT;
+    public static boolean hudShowStatus = Defaults.HUD_STATUS;
+    public static boolean hudBackground = Defaults.HUD_BACKGROUND;
+    public static int hudPadding = Defaults.HUD_PADDING;
+    public static int hudTextColor = Defaults.HUD_TEXT_COLOR;
+    public static int hudBgColor = Defaults.HUD_BG_COLOR;
+    public static HudAnchor hudAnchor = Defaults.HUD_ANCHOR;
+    public static int hudMargin = Defaults.HUD_MARGIN;
+    public static int hudX = Defaults.HUD_X;
+    public static int hudY = Defaults.HUD_Y;
 
 
     public static void loadConfig(File file) {
@@ -58,93 +54,61 @@ public class ConfigHandler {
     }
 
     public static void resetHud() {
-        hudEnabled = true;
-        hudCpsLeft = true;
-        hudCpsRight = true;
-        hudShowStatus = false;
-        hudBackground = true;
-        hudPadding = 5;
-        hudTextColor = 0xFFFFFFFF;
-        hudBgColor = 0x90000000;
-        hudAnchor = HudAnchor.TOP_LEFT;
-        hudMargin = 4;
-        hudX = 4;
-        hudY = 4;
+        hudEnabled = Defaults.HUD_ENABLED;
+        hudCpsLeft = Defaults.HUD_CPS_LEFT;
+        hudCpsRight = Defaults.HUD_CPS_RIGHT;
+        hudShowStatus = Defaults.HUD_STATUS;
+        hudBackground = Defaults.HUD_BACKGROUND;
+        hudPadding = Defaults.HUD_PADDING;
+        hudTextColor = Defaults.HUD_TEXT_COLOR;
+        hudBgColor = Defaults.HUD_BG_COLOR;
+        hudAnchor = Defaults.HUD_ANCHOR;
+        hudMargin = Defaults.HUD_MARGIN;
+        hudX = Defaults.HUD_X;
+        hudY = Defaults.HUD_Y;
     }
 
-    // HUD settings as a shareable base64 token.
+    private static final String HUD_TOKEN = "ghosttap-hud";
+
     public static String exportHud() {
-        StringBuilder sb = new StringBuilder("ghosttap-hud\n");
-        sb.append("enabled=").append(hudEnabled ? 1 : 0).append('\n');
-        sb.append("cpsLeft=").append(hudCpsLeft ? 1 : 0).append('\n');
-        sb.append("cpsRight=").append(hudCpsRight ? 1 : 0).append('\n');
-        sb.append("showStatus=").append(hudShowStatus ? 1 : 0).append('\n');
-        sb.append("background=").append(hudBackground ? 1 : 0).append('\n');
-        sb.append("padding=").append(hudPadding).append('\n');
-        sb.append("textColor=").append(hudTextColor).append('\n');
-        sb.append("bgColor=").append(hudBgColor).append('\n');
-        sb.append("anchor=").append(hudAnchor.name()).append('\n');
-        sb.append("margin=").append(hudMargin).append('\n');
-        sb.append("x=").append(hudX).append('\n');
-        sb.append("y=").append(hudY).append('\n');
-        return Base64.getEncoder().encodeToString(sb.toString().getBytes(StandardCharsets.UTF_8));
+        Map<String, String> m = ConfigCodec.map();
+        ConfigCodec.put(m, "enabled", hudEnabled);
+        ConfigCodec.put(m, "cpsLeft", hudCpsLeft);
+        ConfigCodec.put(m, "cpsRight", hudCpsRight);
+        ConfigCodec.put(m, "showStatus", hudShowStatus);
+        ConfigCodec.put(m, "background", hudBackground);
+        ConfigCodec.put(m, "padding", hudPadding);
+        ConfigCodec.put(m, "textColor", hudTextColor);
+        ConfigCodec.put(m, "bgColor", hudBgColor);
+        ConfigCodec.put(m, "anchor", hudAnchor.name());
+        ConfigCodec.put(m, "margin", hudMargin);
+        ConfigCodec.put(m, "x", hudX);
+        ConfigCodec.put(m, "y", hudY);
+        return ConfigCodec.encode(HUD_TOKEN, m);
     }
 
     public static boolean importHud(String token) {
-        if (token == null)
+        Map<String, String> m = ConfigCodec.decode(HUD_TOKEN, token);
+        if (m == null)
             return false;
 
-        String data;
-        try {
-            data = new String(Base64.getDecoder().decode(token.trim()), StandardCharsets.UTF_8);
-        } catch (IllegalArgumentException e) {
-            data = token;
-        }
-        if (!data.trim().startsWith("ghosttap-hud"))
-            return false;
-
-        Map<String, String> m = new HashMap<>();
-        for (String line : data.split("\\r?\\n")) {
-            int eq = line.indexOf('=');
-            if (eq > 0)
-                m.put(line.substring(0, eq).trim(), line.substring(eq + 1).trim());
-        }
-
-        hudEnabled = flag(m, "enabled", hudEnabled);
-        hudCpsLeft = flag(m, "cpsLeft", hudCpsLeft);
-        hudCpsRight = flag(m, "cpsRight", hudCpsRight);
-        hudShowStatus = flag(m, "showStatus", hudShowStatus);
-        hudBackground = flag(m, "background", hudBackground);
-        hudPadding = num(m, "padding", hudPadding);
-        hudTextColor = num(m, "textColor", hudTextColor);
-        hudBgColor = num(m, "bgColor", hudBgColor);
-        hudMargin = num(m, "margin", hudMargin);
-        hudX = num(m, "x", hudX);
-        hudY = num(m, "y", hudY);
+        hudEnabled = ConfigCodec.flag(m, "enabled", hudEnabled);
+        hudCpsLeft = ConfigCodec.flag(m, "cpsLeft", hudCpsLeft);
+        hudCpsRight = ConfigCodec.flag(m, "cpsRight", hudCpsRight);
+        hudShowStatus = ConfigCodec.flag(m, "showStatus", hudShowStatus);
+        hudBackground = ConfigCodec.flag(m, "background", hudBackground);
+        hudPadding = ConfigCodec.integer(m, "padding", hudPadding);
+        hudTextColor = ConfigCodec.integer(m, "textColor", hudTextColor);
+        hudBgColor = ConfigCodec.integer(m, "bgColor", hudBgColor);
+        hudMargin = ConfigCodec.integer(m, "margin", hudMargin);
+        hudX = ConfigCodec.integer(m, "x", hudX);
+        hudY = ConfigCodec.integer(m, "y", hudY);
         try {
             if (m.containsKey("anchor"))
                 hudAnchor = HudAnchor.valueOf(m.get("anchor"));
         } catch (IllegalArgumentException ignored) {
         }
         return true;
-    }
-
-    private static boolean flag(Map<String, String> m, String key, boolean current) {
-        String v = m.get(key);
-        if (v == null)
-            return current;
-        return v.equals("1") || v.equalsIgnoreCase("true");
-    }
-
-    private static int num(Map<String, String> m, String key, int current) {
-        String v = m.get(key);
-        if (v == null)
-            return current;
-        try {
-            return Integer.parseInt(v);
-        } catch (NumberFormatException e) {
-            return current;
-        }
     }
 
     public static void saveConfig() {
@@ -158,8 +122,7 @@ public class ConfigHandler {
     }
 
 
-    // One code path for both directions: save=false reads config into the live
-    // fields, save=true writes the live fields back into the config.
+    // save=false loads config into the live fields; save=true writes them back.
     private static void sync(boolean save) {
         syncClicker(CAT_LEFT, Clicker.LEFT, save);
         syncClicker(CAT_RIGHT, Clicker.RIGHT, save);

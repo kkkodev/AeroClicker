@@ -2,33 +2,28 @@ package com.icysnex.ghosttap.core;
 
 import java.util.Arrays;
 
-// Per-clicker conditions that decide whether clicking is allowed in the current
-// context. Pure data; evaluated on the main thread by Gates.
+// Per-clicker conditions deciding whether clicking is allowed right now. Pure
+// data; evaluated on the main thread by Gates.
 public class ClickerGates {
 
-    // Only click when the selected hotbar slot (0-8) is whitelisted.
     public final boolean[] slots = new boolean[9];
 
-    // Held-item categories that are allowed. All true = any item.
-    public boolean weapons = true;
-    public boolean tools = true;
-    public boolean blocks = true;
-    public boolean other = true;
+    // Allowed held-item categories (all true = any item).
+    public boolean weapons = Defaults.GATE_ITEM;
+    public boolean tools = Defaults.GATE_ITEM;
+    public boolean blocks = Defaults.GATE_ITEM;
+    public boolean other = Defaults.GATE_ITEM;
 
-    // When on, pause the (left) clicker while aimed at a reachable block so you
-    // can mine it yourself. Off by default = the clicker works everywhere.
-    public boolean allowBlockBreak = false;
-    // Allow clicking while a screen (inventory, chat, ...) is open.
-    public boolean allowInMenu = false;
-    // Pause while the player is using an item (eating, bow, blocking).
-    public boolean pauseWhileUsingItem = true;
+    public boolean allowBlockBreak = Defaults.ALLOW_BLOCK_BREAK;
+    public boolean allowInMenu = Defaults.ALLOW_IN_MENU;
+    public boolean pauseWhileUsingItem = Defaults.PAUSE_ON_ITEM_USE;
 
-    // Game modes the clicker is allowed to run in.
-    public boolean survival = true;
-    public boolean creative = true;
-    public boolean adventure = true;
+    // Allowed game modes.
+    public boolean survival = Defaults.GATE_GAMEMODE;
+    public boolean creative = Defaults.GATE_GAMEMODE;
+    public boolean adventure = Defaults.GATE_GAMEMODE;
 
     public ClickerGates() {
-        Arrays.fill(slots, true);
+        Arrays.fill(slots, Defaults.GATE_SLOT);
     }
 }

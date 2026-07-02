@@ -1,20 +1,17 @@
 package com.icysnex.ghosttap.core;
 
 import com.icysnex.ghosttap.core.analytics.Tracker;
+import com.icysnex.ghosttap.utils.ConfigCodec;
 
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.DoubleConsumer;
 import java.util.function.DoubleSupplier;
 
+// Two independent clickers, one per mouse button, each with its own thread,
+// humanization params and gates.
 public class Clicker implements Runnable {
 
-    // Two independent clickers, one per mouse button. Each runs its own daemon
-    // thread and owns its own humanization parameters so left and right can be
-    // tuned separately.
     public static final Clicker LEFT = new Clicker(InputMouse.BUTTON_LEFT);
     public static final Clicker RIGHT = new Clicker(InputMouse.BUTTON_RIGHT);
 
@@ -49,9 +46,8 @@ public class Clicker implements Runnable {
     public final Tracker tracker = new Tracker();
     public final ClickerGates gates = new ClickerGates();
 
-    // Persistent intent for Toggle mode (survives so gates can keep gating it).
+    // Toggle-mode intent (persists so gates keep gating it); Mouse-mode arm gate.
     public volatile boolean toggledOn = false;
-    // Mouse-mode gate: press the key to arm, then the real mouse button drives it.
     public volatile boolean armed = false;
 
     private final byte button;
@@ -71,34 +67,32 @@ public class Clicker implements Runnable {
         thread.start();
     }
 
-    // Single source of the default tuning values, used at construction and by the
-    // reset button.
     public void resetParams() {
-        cpsMean = 12.0;
-        cpsStandardDeviation = 1.5;
-        cpsMin = 8.0;
-        cpsMax = 18.0;
-        cpsMinMaxFallout = 0.8;
+        cpsMean = Defaults.CPS_MEAN;
+        cpsStandardDeviation = Defaults.CPS_STD_DEV;
+        cpsMin = Defaults.CPS_MIN;
+        cpsMax = Defaults.CPS_MAX;
+        cpsMinMaxFallout = Defaults.CPS_FALLOUT;
 
-        spikeChance = 0.04;
-        spikeMin = 1;
-        spikeMax = 3;
+        spikeChance = Defaults.SPIKE_CHANCE;
+        spikeMin = Defaults.SPIKE_MIN;
+        spikeMax = Defaults.SPIKE_MAX;
 
-        stutterChance = 0.03;
-        stutterMin = 4;
-        stutterMax = 7;
+        stutterChance = Defaults.STUTTER_CHANCE;
+        stutterMin = Defaults.STUTTER_MIN;
+        stutterMax = Defaults.STUTTER_MAX;
 
-        holdMsMean = 38;
-        holdMsStandardDeviation = 6.5;
-        holdMsMin = 18;
-        holdMsMax = 75;
+        holdMsMean = Defaults.HOLD_MEAN;
+        holdMsStandardDeviation = Defaults.HOLD_STD_DEV;
+        holdMsMin = Defaults.HOLD_MIN;
+        holdMsMax = Defaults.HOLD_MAX;
 
-        holdMsHeavyChance = 0.015;
-        holdMsHeavyMin = 15;
-        holdMsHeavyMax = 35;
+        holdMsHeavyChance = Defaults.HEAVY_CHANCE;
+        holdMsHeavyMin = Defaults.HEAVY_MIN;
+        holdMsHeavyMax = Defaults.HEAVY_MAX;
 
-        rhythmVolatility = 0.5;
-        rhythmTension = 0.04;
+        rhythmVolatility = Defaults.RHYTHM_VOLATILITY;
+        rhythmTension = Defaults.RHYTHM_TENSION;
     }
 
 
@@ -106,8 +100,7 @@ public class Clicker implements Runnable {
         void accept(String name, DoubleSupplier get, DoubleConsumer set);
     }
 
-    // Single table of every tunable param, used to serialize and deserialize a
-    // clicker without repeating the field list per operation.
+    // Table of every tunable param, so serialize/config never repeat the field list.
     public void params(ParamSink s) {
         s.accept("cpsMean", () -> cpsMean, v -> cpsMean = v);
         s.accept("cpsStandardDeviation", () -> cpsStandardDeviation, v -> cpsStandardDeviation = v);
@@ -131,93 +124,51 @@ public class Clicker implements Runnable {
         s.accept("rhythmTension", () -> rhythmTension, v -> rhythmTension = v);
     }
 
-    // Serialize all params and gates to a shareable text blob.
+    private static final String TOKEN = "ghosttap-clicker";
+
+    // Params + gates as a shareable clipboard token.
     public String export() {
-        StringBuilder sb = new StringBuilder("ghosttap-clicker\n");
-        params((name, get, set) -> sb.append(name).append('=').append(get.getAsDouble()).append('\n'));
+        Map<String, String> m = ConfigCodec.map();
+        params((name, get, set) -> ConfigCodec.put(m, name, get.getAsDouble()));
 
-        appendFlag(sb, "weapons", gates.weapons);
-        appendFlag(sb, "tools", gates.tools);
-        appendFlag(sb, "blocks", gates.blocks);
-        appendFlag(sb, "other", gates.other);
-        appendFlag(sb, "allowBlockBreak", gates.allowBlockBreak);
-        appendFlag(sb, "allowInMenu", gates.allowInMenu);
-        appendFlag(sb, "pauseWhileUsingItem", gates.pauseWhileUsingItem);
-        appendFlag(sb, "survival", gates.survival);
-        appendFlag(sb, "creative", gates.creative);
-        appendFlag(sb, "adventure", gates.adventure);
+        ConfigCodec.put(m, "gate.weapons", gates.weapons);
+        ConfigCodec.put(m, "gate.tools", gates.tools);
+        ConfigCodec.put(m, "gate.blocks", gates.blocks);
+        ConfigCodec.put(m, "gate.other", gates.other);
+        ConfigCodec.put(m, "gate.allowBlockBreak", gates.allowBlockBreak);
+        ConfigCodec.put(m, "gate.allowInMenu", gates.allowInMenu);
+        ConfigCodec.put(m, "gate.pauseWhileUsingItem", gates.pauseWhileUsingItem);
+        ConfigCodec.put(m, "gate.survival", gates.survival);
+        ConfigCodec.put(m, "gate.creative", gates.creative);
+        ConfigCodec.put(m, "gate.adventure", gates.adventure);
         for (int i = 0; i < gates.slots.length; i++)
-            appendFlag(sb, "slot" + (i + 1), gates.slots[i]);
+            ConfigCodec.put(m, "gate.slot" + (i + 1), gates.slots[i]);
 
-        // Base64 so the whole config is one easy-to-share token.
-        return Base64.getEncoder().encodeToString(sb.toString().getBytes(StandardCharsets.UTF_8));
+        return ConfigCodec.encode(TOKEN, m);
     }
 
-    // Apply params and gates from an exported blob. Unknown keys are ignored;
-    // missing ones keep their current value. Returns false if the text isn't a
-    // valid export.
-    public boolean importFrom(String text) {
-        if (text == null)
+    // Unknown keys are ignored, missing ones keep their current value.
+    public boolean importFrom(String token) {
+        Map<String, String> m = ConfigCodec.decode(TOKEN, token);
+        if (m == null)
             return false;
 
-        String data = decode(text.trim());
-        if (!data.trim().startsWith("ghosttap-clicker"))
-            return false;
+        params((name, get, set) -> set.accept(ConfigCodec.number(m, name, get.getAsDouble())));
 
-        Map<String, String> values = new HashMap<>();
-        for (String line : data.split("\\r?\\n")) {
-            int eq = line.indexOf('=');
-            if (eq > 0)
-                values.put(line.substring(0, eq).trim(), line.substring(eq + 1).trim());
-        }
-
-        if (values.isEmpty())
-            return false;
-
-        params((name, get, set) -> {
-            String v = values.get(name);
-            if (v != null) {
-                try {
-                    set.accept(Double.parseDouble(v));
-                } catch (NumberFormatException ignored) {
-                }
-            }
-        });
-
-        gates.weapons = flag(values, "gate.weapons", gates.weapons);
-        gates.tools = flag(values, "gate.tools", gates.tools);
-        gates.blocks = flag(values, "gate.blocks", gates.blocks);
-        gates.other = flag(values, "gate.other", gates.other);
-        gates.allowBlockBreak = flag(values, "gate.allowBlockBreak", gates.allowBlockBreak);
-        gates.allowInMenu = flag(values, "gate.allowInMenu", gates.allowInMenu);
-        gates.pauseWhileUsingItem = flag(values, "gate.pauseWhileUsingItem", gates.pauseWhileUsingItem);
-        gates.survival = flag(values, "gate.survival", gates.survival);
-        gates.creative = flag(values, "gate.creative", gates.creative);
-        gates.adventure = flag(values, "gate.adventure", gates.adventure);
+        gates.weapons = ConfigCodec.flag(m, "gate.weapons", gates.weapons);
+        gates.tools = ConfigCodec.flag(m, "gate.tools", gates.tools);
+        gates.blocks = ConfigCodec.flag(m, "gate.blocks", gates.blocks);
+        gates.other = ConfigCodec.flag(m, "gate.other", gates.other);
+        gates.allowBlockBreak = ConfigCodec.flag(m, "gate.allowBlockBreak", gates.allowBlockBreak);
+        gates.allowInMenu = ConfigCodec.flag(m, "gate.allowInMenu", gates.allowInMenu);
+        gates.pauseWhileUsingItem = ConfigCodec.flag(m, "gate.pauseWhileUsingItem", gates.pauseWhileUsingItem);
+        gates.survival = ConfigCodec.flag(m, "gate.survival", gates.survival);
+        gates.creative = ConfigCodec.flag(m, "gate.creative", gates.creative);
+        gates.adventure = ConfigCodec.flag(m, "gate.adventure", gates.adventure);
         for (int i = 0; i < gates.slots.length; i++)
-            gates.slots[i] = flag(values, "gate.slot" + (i + 1), gates.slots[i]);
+            gates.slots[i] = ConfigCodec.flag(m, "gate.slot" + (i + 1), gates.slots[i]);
 
         return true;
-    }
-
-    // Decode a base64 token; fall back to the raw text for old plaintext exports.
-    private static String decode(String s) {
-        try {
-            return new String(Base64.getDecoder().decode(s), StandardCharsets.UTF_8);
-        } catch (IllegalArgumentException e) {
-            return s;
-        }
-    }
-
-    private static void appendFlag(StringBuilder sb, String name, boolean value) {
-        sb.append("gate.").append(name).append('=').append(value ? 1 : 0).append('\n');
-    }
-
-    private static boolean flag(Map<String, String> values, String key, boolean current) {
-        String v = values.get(key);
-        if (v == null)
-            return current;
-        return v.equals("1") || v.equalsIgnoreCase("true");
     }
 
 
@@ -236,8 +187,7 @@ public class Clicker implements Runnable {
         }
     }
 
-    // The persistent on-state for the current mode (not whether it's mid-click):
-    // Mouse = armed, Toggle = toggled on, Hold = live key state.
+    // On-state for the mode (not whether it's mid-click): Mouse=armed, Toggle=toggled, Hold=live.
     public boolean isActive(ActivationMode mode) {
         switch (mode) {
             case MOUSE: return armed;
@@ -254,7 +204,7 @@ public class Clicker implements Runnable {
         }
     }
 
-    // Full reset, used when the activation mode changes so nothing stays stuck on.
+    // Clears all state; used on mode change so nothing stays stuck on.
     public void deactivate() {
         setEnabled(false);
         toggledOn = false;
