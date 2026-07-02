@@ -5,15 +5,34 @@
 <h1 align="center">
   GhostTap
 </h1>
+<h3 align="center">
+  <a href="https://github.com/IcySnex/Melora/releases/latest">
+    <img alt="GitHub Downloads (all assets, total)" src="https://img.shields.io/github/downloads/IcySnex/GhostTap/total?style=for-the-badge&label=Download%20&color=5a95ce">
+  </a>
+  <span> ˙ </span>
+  <a href="https://www.curseforge.com/minecraft/mc-mods/ghosttap-clicker">
+    <img alt="CurseForge Downloads" src="https://img.shields.io/curseforge/dt/1596026?style=for-the-badge&label=CurseForge&color=eb622b">
+  </a>
+  <span> ˙ </span>
+  <a href="https://modrinth.com/mod/ghosttap-clicker">
+    <img alt="Modrinth Downloads" src="https://img.shields.io/modrinth/dt/qzibnuGY?style=for-the-badge&label=Modrinth&color=1bd769">
+  </a>
+</h3>
+
 
 <table>
   <tr>
-    <td width="99999" align="center"><b>A lightweight internal auto‑clicker focused on customization and undetectability.</b><br/>Independent clickers for L/R  · depp humanization · fully customizable with in-game UI · live HUD · click analysis</td>
+    <td width="99999" align="center">
+      <b>A lightweight internal auto‑clicker focused on customization and undetectability.</b>
+      <br/>
+      Independent clickers for L/R  · depp humanization · fully customizable with in-game UI · live HUD · click analysis
+    </td>
   </tr>
 </table>
 
 <h3 align="center">
   <img alt="Static Badge" src="https://img.shields.io/badge/Minecraft-1.8.9-62B47A?style=for-the-badge">
+  <span> ˙ </span>
   <img alt="Static Badge" src="https://img.shields.io/badge/Forge-11.15.1.2318-1E2D42?style=for-the-badge">
 </h3>
 
