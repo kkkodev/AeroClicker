@@ -48,6 +48,14 @@ public class MixinLoader implements IFMLLoadingPlugin {
 
     @Override
     public void injectData(Map<String, Object> data) {
+        // Prod is obfuscated and bootstraps Mixin via the manifest MixinTweaker.
+        // Dev is deobfuscated and has no manifest, so bootstrap it here instead.
+        Object flag = data.get("runtimeDeobfuscationEnabled");
+        boolean obfuscated = flag instanceof Boolean && (Boolean) flag;
+        if (!obfuscated) {
+            System.out.println("[GhostTap] Dev environment: bootstrapping Mixin directly.");
+            DevMixinBootstrap.init();
+        }
     }
 
     @Override
