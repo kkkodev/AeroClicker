@@ -1,6 +1,9 @@
-package com.icysnex.ghosttap.core;
+package com.icysnex.ghosttap.core.click;
 
+import com.icysnex.ghosttap.core.ActivationMode;
+import com.icysnex.ghosttap.core.Defaults;
 import com.icysnex.ghosttap.core.analytics.Tracker;
+import com.icysnex.ghosttap.core.input.InputMouse;
 import com.icysnex.ghosttap.utils.ConfigCodec;
 
 import java.util.Map;

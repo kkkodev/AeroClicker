@@ -1,6 +1,6 @@
 package com.icysnex.ghosttap.core.analytics;
 
-import com.icysnex.ghosttap.core.Clicker;
+import com.icysnex.ghosttap.core.click.Clicker;
 import com.icysnex.ghosttap.utils.FileIO;
 import com.icysnex.ghosttap.utils.Notice;
 

@@ -2,9 +2,9 @@ package com.icysnex.ghosttap.events;
 
 import com.icysnex.ghosttap.config.ConfigHandler;
 import com.icysnex.ghosttap.core.ActivationMode;
-import com.icysnex.ghosttap.core.Clicker;
-import com.icysnex.ghosttap.core.Gates;
-import com.icysnex.ghosttap.core.InputMouse;
+import com.icysnex.ghosttap.core.click.Clicker;
+import com.icysnex.ghosttap.core.click.Gates;
+import com.icysnex.ghosttap.core.input.InputMouse;
 import com.icysnex.ghosttap.gui.GuiGhostTap;
 import net.minecraft.client.Minecraft;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;

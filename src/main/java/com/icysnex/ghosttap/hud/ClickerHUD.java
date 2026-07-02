@@ -1,9 +1,9 @@
 package com.icysnex.ghosttap.hud;
 
 import com.icysnex.ghosttap.config.ConfigHandler;
-import com.icysnex.ghosttap.core.Clicker;
-import com.icysnex.ghosttap.core.Cps;
 import com.icysnex.ghosttap.core.HudAnchor;
+import com.icysnex.ghosttap.core.click.Clicker;
+import com.icysnex.ghosttap.core.input.Cps;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.Gui;

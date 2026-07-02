@@ -2,10 +2,10 @@ package com.icysnex.ghosttap.gui;
 
 import com.icysnex.ghosttap.config.ConfigHandler;
 import com.icysnex.ghosttap.core.ActivationMode;
-import com.icysnex.ghosttap.core.Clicker;
 import com.icysnex.ghosttap.core.HudAnchor;
 import com.icysnex.ghosttap.core.analytics.Analytics;
 import com.icysnex.ghosttap.core.analytics.Tracker;
+import com.icysnex.ghosttap.core.click.Clicker;
 import com.icysnex.ghosttap.utils.Notice;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.ScaledResolution;

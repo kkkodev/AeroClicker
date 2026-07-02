@@ -1,8 +1,8 @@
 package com.icysnex.ghosttap.mixin;
 
-import com.icysnex.ghosttap.core.Clicker;
-import com.icysnex.ghosttap.core.Cps;
-import com.icysnex.ghosttap.core.InputMouse;
+import com.icysnex.ghosttap.core.click.Clicker;
+import com.icysnex.ghosttap.core.input.Cps;
+import com.icysnex.ghosttap.core.input.InputMouse;
 import net.minecraft.client.Minecraft;
 import org.lwjgl.input.Mouse;
 import org.spongepowered.asm.mixin.Mixin;

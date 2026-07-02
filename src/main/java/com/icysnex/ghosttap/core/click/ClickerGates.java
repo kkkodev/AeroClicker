@@ -1,4 +1,6 @@
-package com.icysnex.ghosttap.core;
+package com.icysnex.ghosttap.core.click;
+
+import com.icysnex.ghosttap.core.Defaults;
 
 import java.util.Arrays;
 

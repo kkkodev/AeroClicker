@@ -1,5 +1,6 @@
-package com.icysnex.ghosttap.core;
+package com.icysnex.ghosttap.core.click;
 
+import com.icysnex.ghosttap.core.input.InputMouse;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.item.Item;

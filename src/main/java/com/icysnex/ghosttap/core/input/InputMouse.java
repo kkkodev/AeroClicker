@@ -1,4 +1,4 @@
-package com.icysnex.ghosttap.core;
+package com.icysnex.ghosttap.core.input;
 
 import java.util.ArrayDeque;
 import java.util.Deque;

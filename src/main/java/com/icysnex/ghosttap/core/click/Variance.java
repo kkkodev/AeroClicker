@@ -1,4 +1,4 @@
-package com.icysnex.ghosttap.core;
+package com.icysnex.ghosttap.core.click;
 
 import java.util.concurrent.ThreadLocalRandom;
 
