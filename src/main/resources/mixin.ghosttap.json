@@ -6,7 +6,8 @@
 	"compatibilityLevel": "JAVA_8",
 	"client": [
 		"MixinLwjglInputMouseInject",
-		"MixinPlayerChat"
+		"MixinPlayerChat",
+		"MixinFmlModList"
 	],
 	"injectors": {
 		"defaultRequire": 1
