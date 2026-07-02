@@ -63,7 +63,16 @@ public class GhostTapKeybindListener {
         }
         st.wasKeyDown = keyDown;
 
-        boolean enabled = intent && context && Gates.pass(clicker.gates, button);
+        // Start delay (Hold/Mouse only): the trigger must be held continuously for
+        // startDelayMs before clicking begins, so a quick tap passes through as a
+        // single click. Toggle is a deliberate press, so it's immediate.
+        if (intent && !st.wasIntent)
+            st.intentSince = System.currentTimeMillis();
+        st.wasIntent = intent;
+        boolean delayMet = mode == ActivationMode.TOGGLE
+                || System.currentTimeMillis() - st.intentSince >= clicker.startDelayMs;
+
+        boolean enabled = intent && delayMet && context && Gates.pass(clicker.gates, button);
         clicker.setEnabled(enabled);
 
         InputMouse.setMask(button, enabled);
@@ -77,5 +86,7 @@ public class GhostTapKeybindListener {
 
     private static class ButtonState {
         boolean wasKeyDown;
+        boolean wasIntent;
+        long intentSince;
     }
 }

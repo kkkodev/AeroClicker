@@ -299,6 +299,9 @@ public class GuiGhostTap extends GuiScreen {
                 i -> { ConfigHandler.leftMode = ActivationMode.values()[i]; Clicker.LEFT.deactivate(); }));
         r.add(keybind("Key", "Left clicker key (toggle / hold / arm depending on mode).",
                 () -> ConfigHandler.toggleLeftKey, v -> ConfigHandler.toggleLeftKey = v));
+        r.add(cond(() -> ConfigHandler.leftMode != ActivationMode.TOGGLE, slider("Start delay", 0, 500, 0, false,
+                "How long the trigger must be held (ms) before autoclicking starts.\nLets a quick tap through as a single click.",
+                () -> Clicker.LEFT.startDelayMs, v -> Clicker.LEFT.startDelayMs = v)));
         r.add(configRow(Clicker.LEFT));
 
         r.add("Right clicker");
@@ -310,6 +313,9 @@ public class GuiGhostTap extends GuiScreen {
                 i -> { ConfigHandler.rightMode = ActivationMode.values()[i]; Clicker.RIGHT.deactivate(); }));
         r.add(keybind("Key", "Right clicker key (toggle / hold / arm depending on mode).",
                 () -> ConfigHandler.toggleRightKey, v -> ConfigHandler.toggleRightKey = v));
+        r.add(cond(() -> ConfigHandler.rightMode != ActivationMode.TOGGLE, slider("Start delay", 0, 500, 0, false,
+                "How long the trigger must be held (ms) before autoclicking starts.\nLets a quick tap through as a single click.",
+                () -> Clicker.RIGHT.startDelayMs, v -> Clicker.RIGHT.startDelayMs = v)));
         r.add(configRow(Clicker.RIGHT));
 
         r.add("HUD");

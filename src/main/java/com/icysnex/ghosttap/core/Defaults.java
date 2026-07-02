@@ -35,6 +35,10 @@ public final class Defaults {
         public double rhythmVolatility = 0.5;
         public double rhythmTension = 0.04;
 
+        // Milliseconds the trigger must be held before autoclicking starts
+        // (Hold/Mouse modes only). Lets a quick tap through as a single click.
+        public double startDelayMs = 0;
+
         public boolean weapons = true;
         public boolean tools = true;
         public boolean blocks = true;

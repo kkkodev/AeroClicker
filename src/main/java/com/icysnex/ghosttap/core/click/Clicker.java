@@ -45,6 +45,8 @@ public class Clicker implements Runnable {
     public double rhythmVolatility;
     public double rhythmTension;
 
+    public double startDelayMs;
+
 
     public final Tracker tracker = new Tracker();
     public final ClickerGates gates;
@@ -100,6 +102,7 @@ public class Clicker implements Runnable {
 
         rhythmVolatility = defaults.rhythmVolatility;
         rhythmTension = defaults.rhythmTension;
+        startDelayMs = defaults.startDelayMs;
     }
 
 
@@ -129,6 +132,7 @@ public class Clicker implements Runnable {
         s.accept("holdMsHeavyMax", () -> holdMsHeavyMax, v -> holdMsHeavyMax = v);
         s.accept("rhythmVolatility", () -> rhythmVolatility, v -> rhythmVolatility = v);
         s.accept("rhythmTension", () -> rhythmTension, v -> rhythmTension = v);
+        s.accept("startDelayMs", () -> startDelayMs, v -> startDelayMs = v);
     }
 
     private static final String TOKEN = "ghosttap-clicker";
