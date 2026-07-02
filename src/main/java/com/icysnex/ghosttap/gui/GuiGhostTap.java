@@ -136,16 +136,16 @@ public class GuiGhostTap extends GuiScreen {
         // Mean widens the range if dragged past Min/Max; Min/Max also push Mean
         // back in — the relationship is kept from both sides.
         r.add(slider("Mean", 1, 30, 1, false,
-                "Average click speed. Drag past Min or Max to widen the range.",
+                "Average click speed.",
                 () -> c.cpsMean, v -> { c.cpsMean = v; if (v < c.cpsMin) c.cpsMin = v; if (v > c.cpsMax) c.cpsMax = v; }));
         r.add(slider("Std deviation", 0, 6, 2, false,
                 "How much the speed randomly varies around the Mean.\nHigher = more human, less consistent.",
                 () -> c.cpsStandardDeviation, v -> c.cpsStandardDeviation = v));
         r.add(slider("Min", 1, 30, 1, false,
-                "Lowest allowed click speed. Pushes Max and Mean up if needed.",
+                "Lowest allowed click speed.",
                 () -> c.cpsMin, v -> { c.cpsMin = v; if (c.cpsMax < v) c.cpsMax = v; if (c.cpsMean < v) c.cpsMean = v; }));
         r.add(slider("Max", 1, 30, 1, false,
-                "Highest allowed click speed. Pulls Min and Mean down if needed.",
+                "Highest allowed click speed.",
                 () -> c.cpsMax, v -> { c.cpsMax = v; if (c.cpsMin > v) c.cpsMin = v; if (c.cpsMean > v) c.cpsMean = v; }));
         r.add(slider("Min/Max fallout", 0, 3, 2, false,
                 "How far the speed may drift past Min/Max before being reeled back in.",
@@ -181,16 +181,16 @@ public class GuiGhostTap extends GuiScreen {
 
         r.add("Hold (ms)");
         r.add(slider("Mean", 1, 200, 1, false,
-                "Average hold time per click. Drag past Min or Max to widen the range.",
+                "Average hold time per click.",
                 () -> c.holdMsMean, v -> { c.holdMsMean = v; if (v < c.holdMsMin) c.holdMsMin = v; if (v > c.holdMsMax) c.holdMsMax = v; }));
         r.add(slider("Std deviation", 0, 30, 1, false,
                 "How much the hold time randomly varies.",
                 () -> c.holdMsStandardDeviation, v -> c.holdMsStandardDeviation = v));
         r.add(slider("Min", 1, 200, 1, false,
-                "Shortest allowed hold time (ms).",
+                "Shortest allowed hold time (in ms).",
                 () -> c.holdMsMin, v -> { c.holdMsMin = v; if (c.holdMsMax < v) c.holdMsMax = v; if (c.holdMsMean < v) c.holdMsMean = v; }));
         r.add(slider("Max", 1, 200, 1, false,
-                "Longest allowed hold time (ms).",
+                "Longest allowed hold time (in ms).",
                 () -> c.holdMsMax, v -> { c.holdMsMax = v; if (c.holdMsMin > v) c.holdMsMin = v; if (c.holdMsMean > v) c.holdMsMean = v; }));
 
         r.add("Heavy hold");
@@ -198,10 +198,10 @@ public class GuiGhostTap extends GuiScreen {
                 "Chance per click of an occasional extra-long hold.",
                 () -> c.holdMsHeavyChance, v -> c.holdMsHeavyChance = v));
         r.add(slider("Min", 0, 80, 1, false,
-                "Smallest extra time a heavy hold adds (ms).",
+                "Smallest extra time a heavy hold adds (in ms).",
                 () -> c.holdMsHeavyMin, v -> { c.holdMsHeavyMin = v; if (c.holdMsHeavyMax < v) c.holdMsHeavyMax = v; }));
         r.add(slider("Max", 0, 80, 1, false,
-                "Largest extra time a heavy hold adds (ms).",
+                "Largest extra time a heavy hold adds (in ms).",
                 () -> c.holdMsHeavyMax, v -> { c.holdMsHeavyMax = v; if (c.holdMsHeavyMin > v) c.holdMsHeavyMin = v; }));
 
         r.add("Rhythm");
@@ -240,17 +240,17 @@ public class GuiGhostTap extends GuiScreen {
         if (!left)
             r.add(toggle("Placeable only", "Only fire when the held block could actually be placed where you're aiming.\nStops wasting clicks on the floor or occupied space.",
                     () -> c.gates.placeableOnly, v -> c.gates.placeableOnly = v));
-        r.add(toggle("In menus", "Allow clicking while a screen (inventory, chat) is open.",
+        r.add(toggle("In menus", "Allow clicking while a screen (like inventory, chat) is open.",
                 () -> c.gates.allowInMenu, v -> c.gates.allowInMenu = v));
         r.add(toggle("Pause on item use", "Pause while eating, drawing a bow or blocking.",
                 () -> c.gates.pauseWhileUsingItem, v -> c.gates.pauseWhileUsingItem = v));
         r.add(toggle("Entity only", "Only click when a living entity is in sight within reach (randomly from min to max).",
                 () -> c.gates.entityOnly, v -> c.gates.entityOnly = v));
         r.add(cond(() -> c.gates.entityOnly, slider("Reach min", 1, 6, 1, false,
-                "Distance the entity must be to always click (blocks).",
+                "Distance the entity must be to always click (in blocks).",
                 () -> c.gates.reachMin, v -> { c.gates.reachMin = v; if (c.gates.reachMax < v) c.gates.reachMax = v; })));
         r.add(cond(() -> c.gates.entityOnly, slider("Reach max", 1, 6, 1, false,
-                "Farthest the entity can be and still be clicked (blocks).",
+                "Farthest the entity can be and still be clicked (in blocks).",
                 () -> c.gates.reachMax, v -> { c.gates.reachMax = v; if (c.gates.reachMin > v) c.gates.reachMin = v; })));
 
         r.add("Game mode");
@@ -291,7 +291,7 @@ public class GuiGhostTap extends GuiScreen {
                 + "Hold: clicks only while key is held.\n"
                 + "Mouse: press key to arm, then hold the real mouse button to click.";
 
-        String enabledTip = "Turn the clicker on or off. In Hold mode this follows your key;\n"
+        String enabledTip = "Turn the clicker on or off. In Toggle/Hold mode this follows your key;\n"
                 + "in Mouse mode it arms/disarms the mouse-hold gate.";
 
         r.add("Left clicker");
@@ -302,7 +302,7 @@ public class GuiGhostTap extends GuiScreen {
                 () -> ConfigHandler.leftMode.ordinal(),
                 i -> { ConfigHandler.leftMode = ActivationMode.values()[i]; Clicker.LEFT.deactivate(); }));
         r.add(cond(() -> ConfigHandler.leftMode == ActivationMode.MOUSE, slider("Start delay", 0, 500, 0, false,
-                "How long the mouse must be held (ms) before autoclicking starts.\nLets a quick tap through as a single click.",
+                "How long the mouse must be held (in ms) before autoclicking starts.\nLets a quick tap through as a single click.",
                 () -> Clicker.LEFT.startDelayMs, v -> Clicker.LEFT.startDelayMs = v)));
         r.add(keybind("Key", "Left clicker key (toggle / hold / arm depending on mode).",
                 () -> ConfigHandler.toggleLeftKey, v -> ConfigHandler.toggleLeftKey = v));
@@ -316,14 +316,14 @@ public class GuiGhostTap extends GuiScreen {
                 () -> ConfigHandler.rightMode.ordinal(),
                 i -> { ConfigHandler.rightMode = ActivationMode.values()[i]; Clicker.RIGHT.deactivate(); }));
         r.add(cond(() -> ConfigHandler.rightMode == ActivationMode.MOUSE, slider("Start delay", 0, 500, 0, false,
-                "How long the mouse must be held (ms) before autoclicking starts.\nLets a quick tap through as a single click.",
+                "How long the mouse must be held (in ms) before autoclicking starts.\nLets a quick tap through as a single click.",
                 () -> Clicker.RIGHT.startDelayMs, v -> Clicker.RIGHT.startDelayMs = v)));
         r.add(keybind("Key", "Right clicker key (toggle / hold / arm depending on mode).",
                 () -> ConfigHandler.toggleRightKey, v -> ConfigHandler.toggleRightKey = v));
         r.add(configRow(Clicker.RIGHT));
 
         r.add("HUD");
-        r.add(toggle("Enabled", "Show the on-screen HUD (configure it on the HUD tab).",
+        r.add(toggle("Enabled", "Show the on-screen HUD.",
                 () -> ConfigHandler.hudEnabled, v -> ConfigHandler.hudEnabled = v));
         r.add(new GuiButtonRow("Config",
                 button("Reset", "Restore HUD settings to their defaults.",
@@ -332,7 +332,7 @@ public class GuiGhostTap extends GuiScreen {
                 button("Import", "Load HUD settings from the clipboard.", this::importHud)));
 
         r.add("Analytics");
-        r.add(toggle("Enabled", "Record click data for stats and export (Analytics tab).",
+        r.add(toggle("Enabled", "Record click data for stats and export.",
                 () -> Tracker.enabled, v -> Tracker.enabled = v));
 
         r.add("Server");
@@ -360,10 +360,10 @@ public class GuiGhostTap extends GuiScreen {
                 () -> ConfigHandler.hudHideInMenu, v -> ConfigHandler.hudHideInMenu = v));
 
         r.add("Formatting");
-        r.add(hexField("Text colour", false, () -> ConfigHandler.hudTextColor, v -> ConfigHandler.hudTextColor = v));
+        r.add(hexField("Text color", false, () -> ConfigHandler.hudTextColor, v -> ConfigHandler.hudTextColor = v));
         r.add(toggle("Background", "Draw a box behind the HUD for readability.",
                 () -> ConfigHandler.hudBackground, v -> ConfigHandler.hudBackground = v));
-        r.add(cond(() -> ConfigHandler.hudBackground, hexField("Background colour", true, () -> ConfigHandler.hudBgColor, v -> ConfigHandler.hudBgColor = v)));
+        r.add(cond(() -> ConfigHandler.hudBackground, hexField("Background color", true, () -> ConfigHandler.hudBgColor, v -> ConfigHandler.hudBgColor = v)));
         r.add(cond(() -> ConfigHandler.hudBackground, slider("Padding", 0, 12, 0, false, "Space between the text and the box edge.",
                 () -> ConfigHandler.hudPadding, v -> ConfigHandler.hudPadding = (int) v)));
 
@@ -413,7 +413,7 @@ public class GuiGhostTap extends GuiScreen {
 
     private GuiHexField hexField(String label, boolean alpha, java.util.function.IntSupplier get, java.util.function.IntConsumer set) {
         GuiHexField f = new GuiHexField(label, alpha, get, set);
-        f.tooltip = alpha ? "Hex colour #AARRGGBB (alpha first)." : "Hex colour #RRGGBB.";
+        f.tooltip = alpha ? "Hex color #AARRGGBB (alpha first)." : "Hex color #RRGGBB.";
         return f;
     }
 
@@ -433,7 +433,7 @@ public class GuiGhostTap extends GuiScreen {
                 () -> String.format("%.2f", Clicker.RIGHT.tracker.getAverageCps())));
 
         r.add("Actions");
-        r.add(button("Export CSV", "Save recorded data to a CSV file in the config folder.",
+        r.add(button("Export CSV", "Save recorded data to a CSV file on the Desktop.",
                 Analytics::export));
         r.add(button("Clear data", "Delete all recorded data.", Analytics::clear));
 

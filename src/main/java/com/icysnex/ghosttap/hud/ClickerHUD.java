@@ -115,7 +115,7 @@ public class ClickerHUD {
         return edgePad();
     }
 
-    // A HUD line: either plain text, or a status line. Status shows two coloured
+    // A HUD line: either plain text, or a status line. Status shows two colored
     // states: whether the clicker is on/armed, and whether it's clicking right now.
     private static final class Line {
         private final String plain;

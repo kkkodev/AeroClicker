@@ -7,8 +7,8 @@ import org.lwjgl.input.Keyboard;
 import java.util.function.IntConsumer;
 import java.util.function.IntSupplier;
 
-// Editable "#RRGGBB" (or "#AARRGGBB") colour field with a live swatch. Applies on
-// every keystroke; re-syncs if the colour changes elsewhere while unfocused.
+// Editable "#RRGGBB" (or "#AARRGGBB") color field with a live swatch. Applies on
+// every keystroke; re-syncs if the color changes elsewhere while unfocused.
 public class GuiHexField extends Widget {
 
     private static final int BOX_W = 62;
