@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/icon.svg" width="120" alt="GhostTap icon">
+</p>
+
 # GhostTap
 
 A lightweight internal auto-clicker for **Minecraft 1.8.9 (Forge)**, focused on
