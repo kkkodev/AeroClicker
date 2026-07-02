@@ -10,6 +10,7 @@ import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
 
 @Mod(modid = GhostTap.MODID, name = GhostTap.MODNAME, version = GhostTap.VERSION,
+        clientSideOnly = true, acceptableRemoteVersions = "*",
         guiFactory = "com.icysnex.ghosttap.gui.GhostTapGuiFactory")
 public class GhostTap {
 
