@@ -37,7 +37,7 @@ public class Analytics {
         String fileName = "analytics_" + label + "_" + System.currentTimeMillis() + ".csv";
         List<ClickData> snapshot = c.tracker.copy();
 
-        FileIO.saveAsync("analytics/" + fileName, (writer) -> {
+        FileIO.saveAsync(fileName, (writer) -> {
             writer.printf("# --- START METADATA (%s) ---%n", label.toUpperCase());
             writer.printf("# CPS: %.1f (SD: %.1f, Range %.1f-%.1f +-%.1f)%n", c.cpsMean, c.cpsStandardDeviation, c.cpsMin, c.cpsMax, c.cpsMinMaxFallout);
             writer.printf("# - Spike %.1f%% (%.1f-%.1f) %n", c.spikeChance * 100, c.spikeMin, c.spikeMax);

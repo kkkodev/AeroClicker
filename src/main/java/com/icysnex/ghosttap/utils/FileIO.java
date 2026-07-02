@@ -1,7 +1,5 @@
 package com.icysnex.ghosttap.utils;
 
-import net.minecraft.client.Minecraft;
-
 import java.io.File;
 import java.io.PrintWriter;
 import java.util.function.Consumer;
@@ -11,7 +9,9 @@ public class FileIO {
     public static void saveAsync(String fileName, Consumer<PrintWriter> writerConsumer, Consumer<Boolean> onComplete) {
         new Thread(() -> {
             try {
-                File baseDir = new File(Minecraft.getMinecraft().mcDataDir, "GhostTap");
+                File home = new File(System.getProperty("user.home"));
+                File desktop = new File(home, "Desktop");
+                File baseDir = desktop.isDirectory() ? desktop : home;
                 File targetFile = new File(baseDir, fileName);
 
                 File parentFolder = targetFile.getParentFile();
