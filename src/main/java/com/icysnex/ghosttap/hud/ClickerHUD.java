@@ -21,6 +21,7 @@ public class ClickerHUD {
 
     private static final int GREEN = 0xFF55FF55;
     private static final int RED = 0xFFFF5555;
+    private static final int GRAY = 0xFF888888;
 
     @SubscribeEvent
     public void onRenderGameOverlay(RenderGameOverlayEvent.Post event) {
@@ -68,8 +69,8 @@ public class ClickerHUD {
             lines.add(Line.plain(cps));
 
         if (ConfigHandler.hudShowStatus) {
-            lines.add(Line.status("Left", Clicker.LEFT.isActive(ConfigHandler.leftMode), ConfigHandler.leftMode.label));
-            lines.add(Line.status("Right", Clicker.RIGHT.isActive(ConfigHandler.rightMode), ConfigHandler.rightMode.label));
+            lines.add(Line.status("Left", Clicker.LEFT.isActive(ConfigHandler.leftMode), Clicker.LEFT.isEnabled(), ConfigHandler.leftMode.label));
+            lines.add(Line.status("Right", Clicker.RIGHT.isActive(ConfigHandler.rightMode), Clicker.RIGHT.isEnabled(), ConfigHandler.rightMode.label));
         }
 
         return lines;
@@ -110,32 +111,36 @@ public class ClickerHUD {
         return edgePad();
     }
 
-    // A HUD line: either plain text, or a status line whose ON/OFF is coloured.
+    // A HUD line: either plain text, or a status line. Status shows two coloured
+    // states: whether the clicker is on/armed, and whether it's clicking right now.
     private static final class Line {
         private final String plain;
         private final String name;
         private final boolean on;
+        private final boolean clicking;
         private final String mode;
 
-        private Line(String plain, String name, boolean on, String mode) {
+        private Line(String plain, String name, boolean on, boolean clicking, String mode) {
             this.plain = plain;
             this.name = name;
             this.on = on;
+            this.clicking = clicking;
             this.mode = mode;
         }
 
         static Line plain(String text) {
-            return new Line(text, null, false, null);
+            return new Line(text, null, false, false, null);
         }
 
-        static Line status(String name, boolean on, String mode) {
-            return new Line(null, name, on, mode);
+        static Line status(String name, boolean on, boolean clicking, String mode) {
+            return new Line(null, name, on, clicking, mode);
         }
 
         int width(FontRenderer fr) {
             if (plain != null)
                 return fr.getStringWidth(plain);
-            return fr.getStringWidth(name + ": ") + fr.getStringWidth(on ? "ON" : "OFF") + fr.getStringWidth(" (" + mode + ")");
+            return fr.getStringWidth(name + ": ") + fr.getStringWidth(onText())
+                    + fr.getStringWidth(" " + clickText()) + fr.getStringWidth(" (" + mode + ")");
         }
 
         void draw(FontRenderer fr, int x, int y, int color) {
@@ -144,12 +149,21 @@ public class ClickerHUD {
                 return;
             }
             String prefix = name + ": ";
-            String state = on ? "ON" : "OFF";
             fr.drawStringWithShadow(prefix, x, y, color);
             int x2 = x + fr.getStringWidth(prefix);
-            fr.drawStringWithShadow(state, x2, y, on ? GREEN : RED);
-            int x3 = x2 + fr.getStringWidth(state);
-            fr.drawStringWithShadow(" (" + mode + ")", x3, y, color);
+            fr.drawStringWithShadow(onText(), x2, y, on ? GREEN : RED);
+            int x3 = x2 + fr.getStringWidth(onText());
+            fr.drawStringWithShadow(" " + clickText(), x3, y, clicking ? GREEN : GRAY);
+            int x4 = x3 + fr.getStringWidth(" " + clickText());
+            fr.drawStringWithShadow(" (" + mode + ")", x4, y, color);
+        }
+
+        private String onText() {
+            return on ? "ON" : "OFF";
+        }
+
+        private String clickText() {
+            return clicking ? "FIRE" : "IDLE";
         }
     }
 }
