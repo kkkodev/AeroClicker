@@ -352,7 +352,7 @@ public class GuiGhostTap extends GuiScreen {
                 () -> ConfigHandler.hudCpsRight, v -> ConfigHandler.hudCpsRight = v));
         r.add(toggle("Clicker status", "Show each clicker's on/off state and mode.",
                 () -> ConfigHandler.hudShowStatus, v -> ConfigHandler.hudShowStatus = v));
-        r.add(toggle("Hide in menus", "Hide the HUD while the F3 menu is up.",
+        r.add(toggle("Hide on F3", "Hide the HUD while the F3 debug overlay is up.",
                 () -> ConfigHandler.hudHideInMenu, v -> ConfigHandler.hudHideInMenu = v));
 
         r.add("Formatting");

@@ -65,6 +65,17 @@ public final class Defaults {
     public static final Profile LEFT = new Profile();
     public static final Profile RIGHT = new Profile();
 
+    static {
+        // Both clickers start from the identical Profile above. To give a side
+        // its own defaults, override only the fields that should differ here:
+        //
+        //   LEFT.cpsMean = 13;
+        //   LEFT.entityOnly = true;
+        //
+        //   RIGHT.cpsMean = 8;
+        //   RIGHT.placeableOnly = true;
+    }
+
     // Keys and modes (per button).
     public static final int KEY_OPEN = Keyboard.KEY_RSHIFT;
     public static final int KEY_LEFT = Keyboard.KEY_N;
