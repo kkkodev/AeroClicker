@@ -92,3 +92,9 @@ task copyModsToRun(type: Copy) {
     include "*.jar"
 }
 copyModsToRun.dependsOn build
+
+// The dev client only discovers @Mods (and reads the Mixin manifest) from run/mods,
+// so build + drop the jar there before launching. FML remaps it for the dev env.
+afterEvaluate {
+    tasks.runClient.dependsOn copyModsToRun
+}
