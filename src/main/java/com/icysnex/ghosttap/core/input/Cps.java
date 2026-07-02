@@ -12,7 +12,12 @@ public final class Cps {
     }
 
     public static void hit(byte button) {
-        (button == InputMouse.BUTTON_LEFT ? LEFT : RIGHT).add(System.currentTimeMillis());
+        ConcurrentLinkedQueue<Long> window = button == InputMouse.BUTTON_LEFT ? LEFT : RIGHT;
+        long now = System.currentTimeMillis();
+        window.add(now);
+        // Prune on write too, so the queue stays bounded even when nothing reads
+        // it (e.g. the HUD is off) — otherwise it grows unbounded and leaks.
+        prune(window, now);
     }
 
     public static int left() {
@@ -25,11 +30,14 @@ public final class Cps {
 
     private static int count(ConcurrentLinkedQueue<Long> window) {
         long now = System.currentTimeMillis();
-        // Timestamps are FIFO, so the expired ones are at the head — drop them
-        // without allocating a lambda every call.
+        prune(window, now);
+        return window.size();
+    }
+
+    // Timestamps are FIFO, so the expired ones are at the head.
+    private static void prune(ConcurrentLinkedQueue<Long> window, long now) {
         Long head;
         while ((head = window.peek()) != null && now - head > 1000)
             window.poll();
-        return window.size();
     }
 }

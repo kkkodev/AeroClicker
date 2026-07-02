@@ -13,3 +13,5 @@ run
 # tools
 tools/analytics/*.csv
 tools/plots/*.png
+# heap dumps
+*.hprof
