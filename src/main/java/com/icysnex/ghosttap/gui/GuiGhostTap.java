@@ -335,13 +335,13 @@ public class GuiGhostTap extends GuiScreen {
         r.add(toggle("Enabled", "Record click data for stats and export (Analytics tab).",
                 () -> Tracker.enabled, v -> Tracker.enabled = v));
 
-        r.add("Menu");
-        r.add(keybind("Open menu", "Key that opens this config screen.",
-                () -> ConfigHandler.openGuiKey, v -> ConfigHandler.openGuiKey = v));
-
         r.add("Server");
         r.add(toggle("Hide from servers", "Strip the mod from the mod list sent to servers on connect.\nTakes effect on the next connection.",
                 () -> ConfigHandler.hideFromServers, v -> ConfigHandler.hideFromServers = v));
+
+        r.add("Menu");
+        r.add(keybind("Open menu", "Key that opens this config screen.",
+                () -> ConfigHandler.openGuiKey, v -> ConfigHandler.openGuiKey = v));
 
         return r;
     }
