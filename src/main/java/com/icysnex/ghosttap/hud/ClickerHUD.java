@@ -14,8 +14,9 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import java.util.ArrayList;
 import java.util.List;
 
-// Configurable overlay: a classic "CPS: L | R" counter and/or per-clicker status,
-// drawn at a user-set position in a chosen colour (ON/OFF stay green/red).
+// Configurable overlay:
+// - A classic "CPS: L | R" counter
+// - And/Or per-clicker status
 public class ClickerHUD {
 
     private static final int GREEN = 0xFF55FF55;

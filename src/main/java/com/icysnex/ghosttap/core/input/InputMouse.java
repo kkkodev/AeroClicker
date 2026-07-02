@@ -1,7 +1,5 @@
 package com.icysnex.ghosttap.core.input;
 
-import java.util.ArrayDeque;
-import java.util.Deque;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -28,13 +26,11 @@ public abstract class InputMouse {
     public static byte spoofedLeft = STATE_UP;
     public static byte spoofedRight = STATE_UP;
 
-    // Real hardware button state, published by the mixin each poll. Used by Mouse
-    // mode to know when the physical button is held.
+    // Real hardware button state, published by the mixin each poll.
     public static volatile byte realLeft = STATE_UP;
     public static volatile byte realRight = STATE_UP;
 
-    // When set, the mixin drops the real hold for that button and outputs only the
-    // spoofed clicks (Mouse mode: the real hold is a trigger, not real input).
+    // When set, the mixin drops the real hold for that button and outputs only the spoofed clicks.
     public static volatile boolean maskLeft = false;
     public static volatile boolean maskRight = false;
 
@@ -65,7 +61,6 @@ public abstract class InputMouse {
     }
 
 
-    // Generic dispatch by button, used by the Clicker so one code path drives both.
     public static void down(byte button) {
         if (button == BUTTON_LEFT) downLeft();
         else downRight();

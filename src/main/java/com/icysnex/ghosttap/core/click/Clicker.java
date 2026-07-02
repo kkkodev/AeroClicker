@@ -4,7 +4,7 @@ import com.icysnex.ghosttap.core.ActivationMode;
 import com.icysnex.ghosttap.core.Defaults;
 import com.icysnex.ghosttap.core.analytics.Tracker;
 import com.icysnex.ghosttap.core.input.InputMouse;
-import com.icysnex.ghosttap.utils.ConfigCodec;
+import com.icysnex.ghosttap.config.ConfigCodec;
 
 import java.util.Map;
 import java.util.concurrent.locks.LockSupport;

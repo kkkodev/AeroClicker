@@ -14,8 +14,7 @@ import net.minecraft.item.ItemTool;
 import net.minecraft.util.MovingObjectPosition;
 import net.minecraft.world.WorldSettings;
 
-// Evaluates a clicker's gates against live client state. Must be called on the
-// client thread.
+// Evaluates a clicker's gates against live client state.
 public final class Gates {
 
     private Gates() {
@@ -32,7 +31,7 @@ public final class Gates {
             case SURVIVAL: if (!g.survival) return false; break;
             case CREATIVE: if (!g.creative) return false; break;
             case ADVENTURE: if (!g.adventure) return false; break;
-            default: return false; // spectator etc: no interaction
+            default: return false; // spectator etc.: no interaction
         }
 
         if (g.pauseWhileUsingItem && player.isUsingItem())
@@ -45,8 +44,6 @@ public final class Gates {
         if (!categoryAllowed(g, player.getHeldItem()))
             return false;
 
-        // "Break blocks" (left only): pause the auto-clicker while aimed at a
-        // reachable block, so the physical mouse can mine it normally.
         if (button == InputMouse.BUTTON_LEFT && g.allowBlockBreak && aimingBlock(mc))
             return false;
 
@@ -74,7 +71,6 @@ public final class Gates {
     }
 
     private static boolean aimingBlock(Minecraft mc) {
-        return mc.objectMouseOver != null
-                && mc.objectMouseOver.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK;
+        return mc.objectMouseOver != null && mc.objectMouseOver.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK;
     }
 }

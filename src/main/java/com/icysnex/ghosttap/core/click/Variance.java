@@ -27,8 +27,5 @@ public abstract class Variance {
         double move = range(-volatility, volatility);
         return (current + move) * (1.0 - tension);
     }
-
-    public static double lerp(double start, double end, double amount) {
-        return start + amount * (end - start);
-    }
+    
 }

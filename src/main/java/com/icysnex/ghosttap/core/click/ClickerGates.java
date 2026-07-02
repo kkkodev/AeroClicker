@@ -4,8 +4,7 @@ import com.icysnex.ghosttap.core.Defaults;
 
 import java.util.Arrays;
 
-// Per-clicker conditions deciding whether clicking is allowed right now. Pure
-// data; evaluated on the main thread by Gates.
+// Per-clicker conditions deciding whether clicking is allowed right now.
 public class ClickerGates {
 
     public final boolean[] slots = new boolean[9];
@@ -25,6 +24,7 @@ public class ClickerGates {
     public boolean creative;
     public boolean adventure;
 
+    
     public ClickerGates(Defaults.Profile d) {
         weapons = d.weapons;
         tools = d.tools;

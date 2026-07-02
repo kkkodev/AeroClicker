@@ -6,7 +6,6 @@ import com.icysnex.ghosttap.core.HudAnchor;
 import com.icysnex.ghosttap.core.analytics.Tracker;
 import com.icysnex.ghosttap.core.click.Clicker;
 import com.icysnex.ghosttap.core.click.ClickerGates;
-import com.icysnex.ghosttap.utils.ConfigCodec;
 import net.minecraftforge.common.config.Configuration;
 import net.minecraftforge.common.config.Property;
 
@@ -108,6 +107,7 @@ public class ConfigHandler {
                 hudAnchor = HudAnchor.valueOf(m.get("anchor"));
         } catch (IllegalArgumentException ignored) {
         }
+        
         return true;
     }
 
@@ -138,8 +138,10 @@ public class ConfigHandler {
         rightMode = mode(CAT_KEYS, "rightMode", rightMode, save);
 
         Property analytics = config.get(CAT_KEYS, "analyticsEnabled", Tracker.enabled, "Record click analytics for tuning/export");
-        if (save) analytics.set(Tracker.enabled);
-        else Tracker.enabled = analytics.getBoolean();
+        if (save)
+            analytics.set(Tracker.enabled);
+        else
+            Tracker.enabled = analytics.getBoolean();
 
         hudEnabled = bool(CAT_HUD, "enabled", hudEnabled, save);
         hudCpsLeft = bool(CAT_HUD, "cpsLeft", hudCpsLeft, save);
@@ -151,11 +153,13 @@ public class ConfigHandler {
         hudBgColor = integer(CAT_HUD, "bgColor", hudBgColor, save);
 
         Property anchor = config.get(CAT_HUD, "anchor", hudAnchor.name());
-        if (save) anchor.set(hudAnchor.name());
-        else try {
-            hudAnchor = HudAnchor.valueOf(anchor.getString());
-        } catch (IllegalArgumentException ignored) {
-        }
+        if (save)
+            anchor.set(hudAnchor.name());
+        else
+            try {
+                hudAnchor = HudAnchor.valueOf(anchor.getString());
+            } catch (IllegalArgumentException ignored) {
+            }
 
         hudMargin = integer(CAT_HUD, "margin", hudMargin, save);
         hudX = integer(CAT_HUD, "x", hudX, save);
@@ -228,8 +232,10 @@ public class ConfigHandler {
 
     private static void bind(String cat, String key, DoubleSupplier get, DoubleConsumer set, boolean save) {
         Property p = config.get(cat, key, get.getAsDouble());
-        if (save) p.set(get.getAsDouble());
-        else set.accept(p.getDouble());
+        if (save)
+            p.set(get.getAsDouble());
+        else
+            set.accept(p.getDouble());
     }
 
     private static int key(String cat, String name, int current, boolean save) {
@@ -247,6 +253,7 @@ public class ConfigHandler {
             p.set(current.name());
             return current;
         }
+        
         try {
             return ActivationMode.valueOf(p.getString());
         } catch (IllegalArgumentException e) {

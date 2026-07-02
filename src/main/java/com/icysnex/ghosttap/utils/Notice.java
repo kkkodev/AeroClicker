@@ -1,7 +1,5 @@
 package com.icysnex.ghosttap.utils;
 
-// Transient status message shown by the config screen. Replaces chat feedback so
-// actions work even with no world/player (e.g. opened from the Forge mods menu).
 public final class Notice {
 
     private static volatile String message = "";

@@ -1,7 +1,6 @@
 package com.icysnex.ghosttap.core;
 
-// Where the HUD sits. The corner anchors follow the screen edges (so they stay
-// put when the window resizes); MANUAL uses a free X/Y position.
+// Where the HUD sits.
 public enum HudAnchor {
 
     TOP_LEFT("TL"),

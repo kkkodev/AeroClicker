@@ -6,8 +6,7 @@ import com.icysnex.ghosttap.utils.Notice;
 
 import java.util.List;
 
-// Export/clear used by the config UI; one CSV per button. Feedback via Notice so
-// it works with no world/player.
+// Export/clear used by the config UI; one CSV per button.
 public class Analytics {
 
     private static int totalSize() {

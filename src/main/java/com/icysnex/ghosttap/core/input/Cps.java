@@ -2,8 +2,7 @@ package com.icysnex.ghosttap.core.input;
 
 import java.util.concurrent.ConcurrentLinkedQueue;
 
-// Counts clicks per second as the game actually sees them (real + spoofed),
-// recorded by the mixin on each button down-edge. Always on, cheap.
+// Counts clicks per second as the game actually sees them (real + spoofed)
 public final class Cps {
 
     private static final ConcurrentLinkedQueue<Long> LEFT = new ConcurrentLinkedQueue<>();

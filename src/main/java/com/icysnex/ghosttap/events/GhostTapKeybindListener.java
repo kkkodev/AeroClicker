@@ -12,14 +12,14 @@ import net.minecraftforge.fml.common.gameevent.TickEvent;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 
-// Polled every client tick rather than driven by key events, so Hold mode sees
-// releases reliably and Mouse mode can watch the real mouse button.
+// Polled every client tick rather than driven by key events
 public class GhostTapKeybindListener {
 
     private final ButtonState left = new ButtonState();
     private final ButtonState right = new ButtonState();
     private boolean wasOpenDown = false;
 
+    
     @SubscribeEvent
     public void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END)
@@ -38,11 +38,9 @@ public class GhostTapKeybindListener {
     }
 
     private void process(Clicker clicker, int key, ActivationMode mode, byte button, ButtonState st, boolean screenOpen) {
-        // A clicker only acts when in the world, unless it's allowed in menus.
         boolean context = !screenOpen || clicker.gates.allowInMenu;
         boolean keyDown = context && isDown(key);
 
-        // "Intent" = does the user want it clicking, before context gates apply.
         boolean intent = false;
         switch (mode) {
             case TOGGLE:
@@ -67,12 +65,9 @@ public class GhostTapKeybindListener {
         boolean enabled = intent && context && Gates.pass(clicker.gates, button);
         clicker.setEnabled(enabled);
 
-        // Mask the real button only while actually clicking, so gates let the
-        // physical mouse behave normally (e.g. mining a block).
         InputMouse.setMask(button, enabled);
     }
 
-    // A hotkey is a keyboard code, or a mouse button stored as (button - 100).
     private static boolean isDown(int code) {
         if (code < 0)
             return Mouse.isButtonDown(code + 100);

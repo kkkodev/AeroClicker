@@ -1,4 +1,4 @@
-package com.icysnex.ghosttap.utils;
+package com.icysnex.ghosttap.config;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -6,8 +6,9 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-// Shared encoding for the clipboard config tokens: a header line plus key=value
-// lines, base64'd. Import tolerates plain (un-encoded) text for old exports.
+// Shared encoding for the clipboard config tokens:
+// - A header line plus key=value lines, base64'd.
+// - Import tolerates plain (un-encoded) text for old exports.
 public final class ConfigCodec {
 
     private ConfigCodec() {
@@ -15,9 +16,19 @@ public final class ConfigCodec {
 
     public static String encode(String header, Map<String, String> data) {
         StringBuilder sb = new StringBuilder(header).append('\n');
+        
         for (Map.Entry<String, String> e : data.entrySet())
-            sb.append(e.getKey()).append('=').append(e.getValue()).append('\n');
-        return Base64.getEncoder().encodeToString(sb.toString().getBytes(StandardCharsets.UTF_8));
+            sb
+                .append(e.getKey())
+                .append('=')
+                .append(e.getValue())
+                .append('\n');
+        
+        return Base64
+            .getEncoder()
+            .encodeToString(sb
+                .toString()
+                .getBytes(StandardCharsets.UTF_8));
     }
 
     // Returns the parsed key/value pairs, or null if the token isn't valid.

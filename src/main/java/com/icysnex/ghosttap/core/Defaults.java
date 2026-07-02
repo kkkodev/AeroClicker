@@ -2,14 +2,12 @@ package com.icysnex.ghosttap.core;
 
 import org.lwjgl.input.Keyboard;
 
-// Every default value in one place. LEFT and RIGHT start identical; set any
-// per-side differences in the static block below.
+// Every default value in one place.
 public final class Defaults {
 
     private Defaults() {
     }
 
-    // Per-clicker defaults: tuning params and gate options.
     public static final class Profile {
         public double cpsMean = 12.0;
         public double cpsStandardDeviation = 1.5;
@@ -53,14 +51,10 @@ public final class Defaults {
         public boolean slot = true;
     }
 
+
+    // Per-clicker defaults: tuning params and gate options.
     public static final Profile LEFT = new Profile();
     public static final Profile RIGHT = new Profile();
-
-    static {
-        // Diverge left/right here, e.g.:
-        // RIGHT.cpsMean = 8.0;
-        // RIGHT.allowBlockBreak = true;
-    }
 
     // Keys and modes (per button).
     public static final int KEY_OPEN = Keyboard.KEY_RSHIFT;
@@ -69,6 +63,7 @@ public final class Defaults {
     public static final ActivationMode MODE_LEFT = ActivationMode.MOUSE;
     public static final ActivationMode MODE_RIGHT = ActivationMode.MOUSE;
 
+    // Analytics
     public static final boolean ANALYTICS = false;
 
     // HUD (global).
