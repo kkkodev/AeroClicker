@@ -81,8 +81,7 @@ jar {
                 "FMLCorePlugin": "com.icysnex.ghosttap.mixin.MixinLoader",
                 "ModSide": "CLIENT",
                 "ForceLoadAsMod": true,
-                "FMLCorePluginContainsFMLMod": true,
-                "TweakClass": "org.spongepowered.asm.launch.MixinTweaker"
+                "FMLCorePluginContainsFMLMod": true
         )
     }
 }
