@@ -28,18 +28,21 @@ public class GhostTapKeybindListener {
 
         Minecraft mc = Minecraft.getMinecraft();
         boolean screenOpen = mc.currentScreen != null;
+        // Never autoclick inside our own config screen, even with "In menus" on,
+        // or the user can't operate the sliders/buttons.
+        boolean ownGui = mc.currentScreen instanceof GuiGhostTap;
 
         boolean openDown = !screenOpen && isDown(ConfigHandler.openGuiKey);
         if ((openDown && !wasOpenDown) || (!screenOpen && SilentChat.consumeOpenRequest()))
             mc.displayGuiScreen(new GuiGhostTap());
         wasOpenDown = openDown;
 
-        process(Clicker.LEFT, ConfigHandler.toggleLeftKey, ConfigHandler.leftMode, InputMouse.BUTTON_LEFT, left, screenOpen);
-        process(Clicker.RIGHT, ConfigHandler.toggleRightKey, ConfigHandler.rightMode, InputMouse.BUTTON_RIGHT, right, screenOpen);
+        process(Clicker.LEFT, ConfigHandler.toggleLeftKey, ConfigHandler.leftMode, InputMouse.BUTTON_LEFT, left, screenOpen, ownGui);
+        process(Clicker.RIGHT, ConfigHandler.toggleRightKey, ConfigHandler.rightMode, InputMouse.BUTTON_RIGHT, right, screenOpen, ownGui);
     }
 
-    private void process(Clicker clicker, int key, ActivationMode mode, byte button, ButtonState st, boolean screenOpen) {
-        boolean context = !screenOpen || clicker.gates.allowInMenu;
+    private void process(Clicker clicker, int key, ActivationMode mode, byte button, ButtonState st, boolean screenOpen, boolean ownGui) {
+        boolean context = !ownGui && (!screenOpen || clicker.gates.allowInMenu);
         boolean keyDown = context && isDown(key);
 
         boolean intent = false;
