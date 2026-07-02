@@ -37,6 +37,8 @@ public final class Defaults {
 
         public double startDelayMs = 0;
 
+        public boolean slot = true;
+
         public boolean weapons = true;
         public boolean tools = true;
         public boolean blocks = true;
@@ -46,15 +48,16 @@ public final class Defaults {
         public boolean allowInMenu = false;
         public boolean pauseWhileUsingItem = true;
 
+        public boolean entityOnly = false;
+        public double reachMin = 3.0;
+        public double reachMax = 3.5;
+
+        public boolean placeableOnly = false;
+
         public boolean survival = true;
         public boolean creative = true;
         public boolean adventure = true;
 
-        public boolean slot = true;
-
-        public boolean entityOnly = false;
-        public double reachMin = 3.0;
-        public double reachMax = 3.5;
     }
 
 

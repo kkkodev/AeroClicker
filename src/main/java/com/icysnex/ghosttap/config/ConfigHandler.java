@@ -211,6 +211,7 @@ public class ConfigHandler {
         g.entityOnly = bool(cat, "entityOnly", g.entityOnly, save);
         bind(cat, "reachMin", () -> g.reachMin, v -> g.reachMin = v, save);
         bind(cat, "reachMax", () -> g.reachMax, v -> g.reachMax = v, save);
+        g.placeableOnly = bool(cat, "placeableOnly", g.placeableOnly, save);
 
         for (int i = 0; i < g.slots.length; i++)
             g.slots[i] = bool(cat, "slot" + (i + 1), g.slots[i], save);

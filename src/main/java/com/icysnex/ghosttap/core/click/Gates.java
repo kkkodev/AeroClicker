@@ -1,6 +1,7 @@
 package com.icysnex.ghosttap.core.click;
 
 import com.icysnex.ghosttap.core.input.InputMouse;
+import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.entity.Entity;
@@ -14,8 +15,11 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.item.ItemSword;
 import net.minecraft.item.ItemTool;
 import net.minecraft.util.AxisAlignedBB;
+import net.minecraft.util.BlockPos;
+import net.minecraft.util.EnumFacing;
 import net.minecraft.util.MovingObjectPosition;
 import net.minecraft.util.Vec3;
+import net.minecraft.world.World;
 import net.minecraft.world.WorldSettings;
 
 // Evaluates a clicker's gates against live client state.
@@ -60,7 +64,33 @@ public final class Gates {
         if (g.entityOnly && !entityInReach(mc, player, Variance.range(g.reachMin, g.reachMax)))
             return false;
 
+        if (button == InputMouse.BUTTON_RIGHT && g.placeableOnly && !canPlace(mc, player))
+            return false;
+
         return true;
+    }
+
+    // True if the held block would actually be placed where the player is aiming.
+    // Mirrors ItemBlock.onItemUse: shift to the neighbour cell when the clicked
+    // block isn't replaceable, then defer to the game's own placement test (which
+    // also rejects cells an entity — including the player — is standing in).
+    private static boolean canPlace(Minecraft mc, EntityPlayerSP player) {
+        MovingObjectPosition mop = mc.objectMouseOver;
+        if (mop == null || mop.typeOfHit != MovingObjectPosition.MovingObjectType.BLOCK)
+            return false;
+
+        ItemStack held = player.getHeldItem();
+        if (held == null || !(held.getItem() instanceof ItemBlock))
+            return false;
+        Block toPlace = ((ItemBlock) held.getItem()).getBlock();
+
+        World world = mc.theWorld;
+        BlockPos hit = mop.getBlockPos();
+        EnumFacing side = mop.sideHit;
+        BlockPos place = world.getBlockState(hit).getBlock().isReplaceable(world, hit) ? hit : hit.offset(side);
+
+        return player.canPlayerEdit(place, side, held)
+                && world.canBlockBePlaced(toPlace, place, false, side, null, held);
     }
 
     // True if a living entity is intersected by the look ray within `reach` blocks.

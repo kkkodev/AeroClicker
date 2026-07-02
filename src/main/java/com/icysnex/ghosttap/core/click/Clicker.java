@@ -155,6 +155,7 @@ public class Clicker implements Runnable {
         ConfigCodec.put(m, "gate.entityOnly", gates.entityOnly);
         ConfigCodec.put(m, "gate.reachMin", gates.reachMin);
         ConfigCodec.put(m, "gate.reachMax", gates.reachMax);
+        ConfigCodec.put(m, "gate.placeableOnly", gates.placeableOnly);
         for (int i = 0; i < gates.slots.length; i++)
             ConfigCodec.put(m, "gate.slot" + (i + 1), gates.slots[i]);
 
@@ -182,6 +183,7 @@ public class Clicker implements Runnable {
         gates.entityOnly = ConfigCodec.flag(m, "gate.entityOnly", gates.entityOnly);
         gates.reachMin = ConfigCodec.number(m, "gate.reachMin", gates.reachMin);
         gates.reachMax = ConfigCodec.number(m, "gate.reachMax", gates.reachMax);
+        gates.placeableOnly = ConfigCodec.flag(m, "gate.placeableOnly", gates.placeableOnly);
         for (int i = 0; i < gates.slots.length; i++)
             gates.slots[i] = ConfigCodec.flag(m, "gate.slot" + (i + 1), gates.slots[i]);
 

@@ -236,6 +236,10 @@ public class GuiGhostTap extends GuiScreen {
         if (left)
             r.add(toggle("Break blocks", "Pause the auto-clicker while aimed at a reachable block.\nOnly really makes sense if 'Mouse' mode is set.",
                     () -> c.gates.allowBlockBreak, v -> c.gates.allowBlockBreak = v));
+        // Placement is a right-click concept only.
+        if (!left)
+            r.add(toggle("Placeable only", "Only fire when the held block could actually be placed where you're aiming.\nStops wasting clicks on the floor or occupied space.",
+                    () -> c.gates.placeableOnly, v -> c.gates.placeableOnly = v));
         r.add(toggle("In menus", "Allow clicking while a screen (inventory, chat) is open.",
                 () -> c.gates.allowInMenu, v -> c.gates.allowInMenu = v));
         r.add(toggle("Pause on item use", "Pause while eating, drawing a bow or blocking.",

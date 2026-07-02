@@ -29,6 +29,9 @@ public class ClickerGates {
     public double reachMin;
     public double reachMax;
 
+    // Right-click only: fire only when a block can be placed where aimed.
+    public boolean placeableOnly;
+
 
     public ClickerGates(Defaults.Profile d) {
         weapons = d.weapons;
@@ -44,6 +47,7 @@ public class ClickerGates {
         entityOnly = d.entityOnly;
         reachMin = d.reachMin;
         reachMax = d.reachMax;
+        placeableOnly = d.placeableOnly;
         Arrays.fill(slots, d.slot);
     }
 }
