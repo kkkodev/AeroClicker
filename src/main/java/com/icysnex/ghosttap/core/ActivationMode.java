@@ -1,10 +1,7 @@
 package com.icysnex.ghosttap.core;
 
-// How a clicker is activated by its key.
-//   TOGGLE - press the key to switch clicking on/off.
-//   HOLD   - clicks only while the key is held.
-//   MOUSE  - press the key to arm; while armed, holding the real mouse button
-//            autoclicks (the real hold is masked so it becomes clicks).
+// TOGGLE: key flips on/off. HOLD: clicks while key held. MOUSE: key arms, then
+// holding the real mouse button autoclicks.
 public enum ActivationMode {
 
     TOGGLE("Toggle"),

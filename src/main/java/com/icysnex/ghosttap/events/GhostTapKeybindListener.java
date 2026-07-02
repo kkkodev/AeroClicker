@@ -67,9 +67,8 @@ public class GhostTapKeybindListener {
         boolean enabled = intent && context && Gates.pass(clicker.gates, button);
         clicker.setEnabled(enabled);
 
-        // Mask (suppress the real button) exactly while the spoofer is clicking.
-        // When a gate stops clicking, the mask lifts so the physical mouse behaves
-        // normally again (e.g. so you can mine a block yourself).
+        // Mask the real button only while actually clicking, so gates let the
+        // physical mouse behave normally (e.g. mining a block).
         InputMouse.setMask(button, enabled);
     }
 

@@ -231,7 +231,6 @@ public class Clicker implements Runnable {
             if (!enabled)
                 continue;
 
-            // --- CLICK START ---
             InputMouse.down(button);
             long thisClickStartTime = System.nanoTime();
 
@@ -241,7 +240,6 @@ public class Clicker implements Runnable {
             waitUntil(thisClickStartTime + holdNanos);
 
             InputMouse.up(button);
-            // --- CLICK END ---
 
             tracker.record(
                     1_000_000_000.0 / intervalNanos,

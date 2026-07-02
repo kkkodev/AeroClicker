@@ -6,12 +6,11 @@ import com.icysnex.ghosttap.utils.Notice;
 
 import java.util.List;
 
-// Shared analytics actions used by the config UI. Each button exports to its own
-// CSV keeping the single-button format the python analyzer expects. Feedback goes
-// through Notice so it works with no world/player.
+// Export/clear used by the config UI; one CSV per button. Feedback via Notice so
+// it works with no world/player.
 public class Analytics {
 
-    public static int totalSize() {
+    private static int totalSize() {
         return Clicker.LEFT.tracker.size() + Clicker.RIGHT.tracker.size();
     }
 
