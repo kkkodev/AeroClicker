@@ -48,6 +48,14 @@ public abstract class MixinLwjglInputMouseInject {
     @Unique
     private static ClickData ghostTap$pendingRight;
 
+    @Inject(method = "poll", at = @At("HEAD"), remap = false)
+    private static void beforePoll(CallbackInfo ci) {
+        if (buttons == null)
+            return;
+        buttons.put(0, InputMouse.realLeft);
+        buttons.put(1, InputMouse.realRight);
+    }
+
     @Inject(method = "poll", at = @At("RETURN"), remap = false)
     private static void afterPoll(CallbackInfo ci) {
         // Count clicks everywhere except our own config screen, where clicks on
