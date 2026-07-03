@@ -18,7 +18,7 @@ apply plugin: "java"
 
 
 // Project info
-version = "1.0"
+version = "1.0.1"
 group = "com.icysnex.ghosttap"
 archivesBaseName = "GhostTap"
 

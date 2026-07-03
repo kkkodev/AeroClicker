@@ -222,7 +222,7 @@ Use it where you're allowed to. Don't use it to break rules you've agreed to.
 ## Installation
 
 1. Install **Minecraft 1.8.9** with **Forge** (`11.15.1.2318` or compatible).
-2. Drop `GhostTap-1.0.jar` into your `.minecraft/mods/` folder.
+2. Drop `GhostTap-1.0.1.jar` into your `.minecraft/mods/` folder.
 3. Launch, and press **Right Shift** in-game to open the menu.
 
 ---
@@ -235,7 +235,7 @@ Requires **JDK 8** - the toolchain (ForgeGradle 2.1) will not run on newer JDKs.
 JAVA_HOME=<path-to-jdk8> ./gradlew build
 ```
 
-The built jar lands in `build/libs/GhostTap-1.0.jar`.
+The built jar lands in `build/libs/GhostTap-1.0.1.jar`.
 
 ---
 
