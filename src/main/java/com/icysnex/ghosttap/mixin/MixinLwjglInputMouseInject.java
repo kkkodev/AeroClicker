@@ -175,9 +175,15 @@ public abstract class MixinLwjglInputMouseInject {
 
     @Inject(method = "next", at = @At("HEAD"), remap = false)
     private static void onNext(CallbackInfoReturnable<Boolean> cir) {
-        InputMouse.Event event = InputMouse.pendingEvents.poll();
+        InputMouse.Event event = InputMouse.pendingEvents.peek();
         if (event == null)
             return;
+
+        final int EVENT_SIZE = 22;
+        if (readBuffer.capacity() - readBuffer.limit() < EVENT_SIZE)
+            return;
+
+        InputMouse.pendingEvents.poll();
 
         // Save old position
         int oldPos = readBuffer.position();
