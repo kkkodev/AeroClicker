@@ -28,8 +28,6 @@ public class GhostTapKeybindListener {
 
         Minecraft mc = Minecraft.getMinecraft();
         boolean screenOpen = mc.currentScreen != null;
-        // Never autoclick inside our own config screen, even with "In menus" on,
-        // or the user can't operate the sliders/buttons.
         boolean ownGui = mc.currentScreen instanceof GuiGhostTap;
 
         boolean openDown = !screenOpen && isDown(ConfigHandler.openGuiKey);
@@ -54,8 +52,6 @@ public class GhostTapKeybindListener {
                 break;
 
             case HOLD:
-                // Track the raw key so the HUD shows ON while held, even if a gate
-                // is currently blocking the actual clicking.
                 clicker.held = isDown(key);
                 intent = keyDown;
                 break;
@@ -69,9 +65,6 @@ public class GhostTapKeybindListener {
         }
         st.wasKeyDown = keyDown;
 
-        // Start delay (Mouse mode only): the mouse must be held continuously for
-        // startDelayMs before clicking begins, so a quick tap passes through as a
-        // single click.
         if (intent && !st.wasIntent)
             st.intentSince = System.currentTimeMillis();
         st.wasIntent = intent;
@@ -82,7 +75,10 @@ public class GhostTapKeybindListener {
         boolean enabled = engaged && Gates.pass(clicker.gates, button);
         clicker.setEnabled(enabled);
 
-        InputMouse.setMask(button, mode == ActivationMode.MOUSE ? engaged : enabled);
+        boolean mask = mode == ActivationMode.MOUSE
+                ? engaged && !Gates.blockBreakHold(clicker.gates, button)
+                : enabled;
+        InputMouse.setMask(button, mask);
     }
 
     private static boolean isDown(int code) {

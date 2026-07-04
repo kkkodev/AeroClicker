@@ -42,8 +42,6 @@ public final class Gates {
             default: return false; // spectator etc.: no interaction
         }
 
-        // In a GUI, the aim/item/slot gates are about in-world clicking and would
-        // veto inventory clicking, so only the game-mode gate above applies.
         if (mc.currentScreen != null)
             return true;
 
@@ -60,7 +58,6 @@ public final class Gates {
         if (button == InputMouse.BUTTON_LEFT && g.allowBlockBreak && aimingBlock(mc))
             return false;
 
-        // Random reach each check so the engagement distance varies like a human's.
         if (g.entityOnly && !entityInReach(mc, player, Variance.range(g.reachMin, g.reachMax)))
             return false;
 
@@ -70,10 +67,6 @@ public final class Gates {
         return true;
     }
 
-    // True if the held block would actually be placed where the player is aiming.
-    // Mirrors ItemBlock.onItemUse: shift to the neighbour cell when the clicked
-    // block isn't replaceable, then defer to the game's own placement test (which
-    // also rejects cells an entity — including the player — is standing in).
     private static boolean canPlace(Minecraft mc, EntityPlayerSP player) {
         MovingObjectPosition mop = mc.objectMouseOver;
         if (mop == null || mop.typeOfHit != MovingObjectPosition.MovingObjectType.BLOCK)
@@ -137,6 +130,12 @@ public final class Gates {
         if (!isWeapon && !isTool && !isBlock && g.other) return true;
 
         return false;
+    }
+
+    public static boolean blockBreakHold(ClickerGates g, byte button) {
+        if (button != InputMouse.BUTTON_LEFT || !g.allowBlockBreak)
+            return false;
+        return aimingBlock(Minecraft.getMinecraft());
     }
 
     private static boolean aimingBlock(Minecraft mc) {
