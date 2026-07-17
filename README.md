@@ -25,7 +25,7 @@
     <td width="99999" align="center">
       <b>A lightweight internal auto‑clicker focused on customization and undetectability.</b>
       <br/>
-      Independent clickers for Left/Right  · depp humanization · fully customizable with in-game UI · live HUD · click analysis
+      Independent clickers for Left/Right  - deep humanization - fully customizable with in-game UI - live HUD - click analysis
     </td>
   </tr>
 </table>
@@ -48,158 +48,123 @@
 
 ## Features
 
-- **Two fully independent clickers:** left and right, each with its own timing, filters, mode, and keybind.
-- **Three activation modes:** Toggle, Hold, and Mouse (arm-then-hold your real button).
-- **Deep humanization:** Gaussian CPS, random spikes/stutters, a full hold-time model, and rhythmic drift.
-- **Filters / gates:** restrict clicking by hotbar slot, held-item type, game mode, in menus, entity-in-reach, block-breaking (for LMB), and block-placement (for RMB).
-- **Live HUD:** CPS counter and per-clicker armed/firing status, fully themeable and anchorable.
-- **Per-click analytics:** record every click's timing and export it to CSV to evaluate it later with a Python plotting tool.
-- **Config sharing:** export/import any clicker or the HUD as a base64 clipboard token.
+- **Independent Left & Right Clickers:** Separate timing, filters, activation modes, and keybinds for each side.
+- **3 Activation Modes:** Toggle, Hold, or Mouse mode (arms the clicker, but only clicks when you hold your physical mouse button).
+- **Humanization:** Custom Gaussian CPS distributions, random spikes/stutters, variable hold times, and rhythmic pace drift.
+- **Smart Filters (Gates):** Restrict clicking by hotbar slot, held item type, gamemode, in-game menus, entity reach, block-breaking (LMB), and block-placement (RMB).
+- **Live HUD:** Customizable CPS counter and clicker status overlay.
+- **Click Analytics:** Export precise timing data to CSV and plot the distributions using the included Python tool.
+- **Config Sharing:** Import and export your settings instantly as base64 clipboard tokens.
 
 ---
 
-## Motivation
+## Why GhostTap?
 
-Anyone who plays Minecraft PvP 1.8.9 knows how exhausting it is to spam-click for hours on end. That’s where an autoclicker comes in - but most of them simply suck!
+Spam-clicking for hours in 1.8.9 PvP is exhausting, but most existing auto-clickers have major flaws:
 
-Starting with external autoclickers: running as a separate OS process not only consumes more resources and ruins cross-platform support, but it also means they miss out on crucial quality-of-life features - like being able to break blocks, whitelist certain hotbar slots, automatically stop clicking inside menus and inventory or other game-aware filters. And don't get me starting on all the malware they often include...
+* **External clickers** run as separate OS processes which means they eat up resources, lack cross-platform support, and (*most importantly*) can't read game state. That means they can't stop clicking in menus, pause while you break blocks, or whitelist specific hotbar slots. Plus, many are closed-source sketchware.
+* **Internal clickers** are often poorly coded. They either fire at rigid, metronome-perfect intervals, lack basic featuers like a right-clicker, or rely on `java.awt.Robot` / direct network packets, which breaks other HUD mods like CPS displays and Keystrokes.
 
-Finding a good internal autoclicker is just as hard though. The few that exist either fire rigid, metronome-perfect clicks, lack basic features like a right-clicker, or use `java.awt.Robot` / send direct hit packets, which breaks HUD elements like CPS displays and Keystrokes.
+GhostTap is a fully open-source internal mod built to solve this with two goals:
 
-GhostTap was built to fix this around two main goals while being fully open-source:
-
-1. **Look human.** Every click's timing and hold duration is drawn from tunable statistical distributions - including mean, deviation, min/max bounds, random spikes and stutters, occasional "heavy" holds, and a slow rhythmic drift - so no two clicks are identical.
-2. **Be low-footprint and controllable.** Input is spoofed at the **LWJGL layer**, not through fake OS events, so the game reads it through its normal mouse pipeline. Everything is configured through a clean in-game GUI - no config-file editing required.
-
----
-
-## How it works
-
-GhostTap installs a SpongePowered **Mixin** into LWJGL's `org.lwjgl.input.Mouse` - specifically the `poll()` and `next()` methods the game calls every frame to read the mouse.
-
-- When a clicker is **firing**, it injects synthetic **press/release edges** for the target button into the mouse event queue.
-- When your clicker is **masked**, GhostTap can hide or combine your **real** physical button state with the spoofed state, so autoclicking and your own mouse never fight each other.
-- Nothing uses `java.awt.Robot` or fake keyboard events. The input enters through the same path as a normal mouse. This means **all** HUD mods like *CPS Display* or *Keystrokes* still work flawlessly.
-- Clicks are timed on two dedicated worker threads that stay parked (zero CPU) whenever the clicker is idle, making the mod super lighweight.
-- Gates (the filters) are evaluated once per client tick on the main thread, where reading game state is safe - so the only real work happens while a clicker is actively firing.
-
-> [!NOTE]
-> Because it is a coremod that transforms a class at load time, GhostTap is visible to client-side anti-cheats that scan for loaded transformers or mixin platform. It hides your input pattern and the modinfo from servers; it does not hide the fact that a coremod is present. See [Fair use](#fair-use--detectability).
+1. **Look Human:** Every click interval and hold duration is pulled from tunable statistical models. With random stutters, heavy holds, and rhythmic drift, no two clicks look identical.
+2. **A Low-footprint and controllable:** Input is spoofed at the **LWJGL layer**, not through fake OS events, so the game reads it through its normal mouse pipeline. Everything is managed through a clean in-game GUI - no config files required. 
 
 ---
 
-## The config menu
+## How It Works
 
-Open it with **Right Shift**. If this button is currently taken you can use `.ghosttap key <KEY>` in chat to rebind it. The menu is a custom dark panel with a tab per area.
+GhostTap uses SpongePowered **Mixins** to hook into LWJGL's `org.lwjgl.input.Mouse` (`poll()` and `next()`), which the game uses to read hardware inputs every frame.
+
+- When active, it injects synthetic press and release events directly into the mouse queue.
+- It automatically masks your physical clicks so your manual clicking and the mod don't conflict.
+- Because it avoids `java.awt.Robot` and network-level packet manipulation, all standard HUD mods (Keystrokes, CPS counters) still register the clicks properly.
+- Clicks are handled on two dedicated worker threads that sleep when idle, keeping CPU overhead at zero. Filters are evaluated safely on the main thread once per client tick.
+
+> [!WARNING]
+> While GhostTap humanizes your click patterns perfectly to bypass server-side checks, it is still a coremod. Client-side anti-cheats that scan for loaded transformers or mixin modifications *will* see that the mod is present.
+
+---
+
+## The Configuration Menu
+
+Press **Right Shift** in-game to open the menu. If you need to rebind this key, type `.ghosttap key <KEY>` in the game chat.
 
 <p align="center">
   <img src="assets/screenshots/gui-general.png" alt="General tab">
 </p>
 
-### General
+### General Settings
+Controls global toggles, activation styles, analytics, and an option to hide the mod from Forge server queries.
 
-Per-clicker activation, plus the HUD and Analytics master switches. Also a toggle to hide the mod from Forge servers.
+| Setting | Description |
+| :--- | :--- |
+| **Enabled** | Master switch for the clicker. |
+| **Mode** | Choose between Toggle, Hold, or Mouse mode. |
+| **Start Delay** | *(Mouse mode only)* Delay before clicking starts so quick taps pass through normally. |
+| **Key** | Keybind for the clicker (supports keyboard and mouse side buttons). |
+| **Config** | Reset, export, or import profiles via clipboard tokens. |
 
-| Setting | Description                                                                                                                      |
-|---|----------------------------------------------------------------------------------------------------------------------------------|
-| **Enabled** | Turn the clicker on/off. In Toggle/Hold mode this follows your key; in Mouse mode it arms/disarms.                               |
-| **Mode** | Toggle / Hold / Mouse (see [Activation modes](#activation-modes)).                                                               |
-| **Start delay** | *(Mouse mode only)* How long the mouse must be held before autoclicking starts, so a quick tap passes through as a single click. |
-| **Key** | The clicker's key - supports keyboard keys **and** mouse buttons (side buttons, scroll-click).                                   |
-| **Config** | Reset / Export / Import this clicker's settings.                                                                                 |
+#### Activation Modes
+* **Toggle:** Tap the key once to turn the clicker on; tap again to turn it off.
+* **Hold:** Clicks only while the key is actively held down.
+* **Mouse:** Press the key to **arm** the clicker. It will only start clicking when you hold down your **real** mouse button. Perfect for natural PvP or bridging.
 
-#### Activation modes
+> Settings automatically save to your local config folder at `.minecraft/config/ghosttap.cfg`.
 
-| Mode | Behaviour                                                                                                                                                                                                                                                                                                              |
-|---|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Toggle** | Press the key once to switch the clicker on; press again to switch off.                                                                                                                                                                                                                                                |
-| **Hold** | Clicks only while the key is held down.                                                                                                                                                                                                                                                                                |
-| **Mouse** | Press the key to **arm** the clicker, then hold your **real** mouse button to click. Disarm with the key again. Ideal for combat/bridging where you want the autoclicker "ready" but only active while you're actually holding the button - optionally with a **Start delay** so a quick tap is a normal single click. |
+---
 
-#### Config sharing
+### Left & Right Clicker Customization
 
-Every clicker and the HUD can be **exported to a base64 token** (copied to your clipboard) and **imported** the same way - perfect for sharing a tuned profile or backing one up. Settings also persist automatically to the Forge config file between sessions (inside `.minecraft/config/ghosttap.cfg`).
-
-### Left & Right (per clicker)
-
-Each clicker tab is split into three sub-tabs.
+Each clicker features three sub-tabs for deep tuning:
 
 <p align="center">
   <img src="assets/screenshots/gui-left-cps.png" alt="Left/Right CPS tab">
 </p>
 
-**CPS:** the core click-rate model:
-
-| Group | Options                                                                                                                   |
-|---|---------------------------------------------------------------------------------------------------------------------------|
-| **CPS** | Mean, Std deviation, Min, Max, and Min/Max fallout (how far the rate may drift past the bounds before being reeled back). |
-| **Spike** | Chance, Min, Max - a short burst of *extra* speed.                                                                        |
-| **Stutter** | Chance, Min, Max - a short hitch that *slows down*.                                                                       |
+* **CPS:** Tune the core speed using Mean, Std Deviation, Min/Max limits, and "fallout" (how far the rate can drift before resetting). You can also configure random **Spikes** (bursts of speed) and **Stutters** (sudden slowdowns).
 
 <p align="center">
-  <img src="assets/screenshots/gui-left-fatigue.png" alt="Left/Right Fatgiue tab">
+  <img src="assets/screenshots/gui-left-fatigue.png" alt="Left/Right Fatigue tab">
 </p>
 
-**Fatigue:** how each individual click *feels*:
-
-| Group | Options                                                                                            |
-|---|----------------------------------------------------------------------------------------------------|
-| **Hold (ms)** | Mean, Std deviation, Min, Max - how long each click is physically held down.                       |
-| **Heavy hold** | Chance, Min, Max - an occasional noticeably longer hold.                                           |
-| **Rhythm** | Volatility and Tension - a slow random-walk drift of the pace, pulled gently back toward the Mean. |
+* **Fatigue:** Adjust individual click physics. Set standard click **Hold** times (in milliseconds), trigger random **Heavy Holds** (simulating a tired finger), and adjust **Rhythm** (how drastically the pace drifts over time).
 
 <p align="center">
   <img src="assets/screenshots/gui-left-filters.png" alt="Left Filters tab">
-</p>
-<p align="center">
   <img src="assets/screenshots/gui-right-filters.png" alt="Right Filters tab">
 </p>
 
-**Filters:** gates that decide when autoclicking is *allowed*:
+* **Filters:** Fine-tune when the clicker is allowed to fire:
+  * **Hotbar slots:** Whitelist specific slots (1–9).
+  * **Held item:** Filter by Weapons, Tools, Blocks, or Other items.
+  * **Rules:** Break Blocks (pauses LMB while mining), Placeable Only (fires RMB only when looking at a valid block collision), In Menus, Pause on Item Use, and Entity Only (with custom reach limits).
+  * **Game mode:** Whitelist Survival, Creative, or Adventure.
 
-| Group | Options                                                                                                                                                                                                                                          |
-|---|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Hotbar slots** | Per-slot 1–9 whitelist.                                                                                                                                                                                                                          |
-| **Held item** | Weapons, Tools, Blocks, Other.                                                                                                                                                                                                                   |
-| **Rules** | *Break blocks* (left only - pause while aimed at a mineable block), *Placeable only* (right only - click only when actually able to place down block; collision check), *In menus*, *Pause on item use*, *Entity only* + random *Reach min/max*. |
-| **Game mode** | Survival, Creative, Adventure.                                                                                                                                                                                                                   |
+---
 
-### HUD
+### HUD Options
 
 <p align="center">
   <img src="assets/screenshots/hud.png" width="400" alt="HUD">
-</p>
-<p align="center">
   <img src="assets/screenshots/gui-hud.png" alt="HUD tab">
 </p>
 
-| Setting                               | Description                                                                                                 |
-|---------------------------------------|-------------------------------------------------------------------------------------------------------------|
-| **Left / Right CPS**                  | Show each clicker's clicks-per-second (`CPS: L \| R`).                                                      |
-| **Clicker status**                    | Per-clicker `ON/OFF` (armed) **and** `FIRE/IDLE` (actually clicking now) + activation mode.                 |
-| **Hide on F3**                        | Hide the HUD while the F3 debug overlay is up.                                                              |
-| **Text color / Background / Padding** | Hex color for text and box, toggleable background, adjustable padding.                                    |
-| **Anchor / Margin**                   | Snap to any screen corner with an edge-gap margin or place manually.                                        |
+* **Left / Right CPS:** Toggle text readouts for active clicker speeds.
+* **Clicker Status:** Displays current activation state (`ON/OFF`) and firing state (`FIRE/IDLE`).
+* **Visuals:** Fully customizable colors (Hex), background opacity, margins, and anchoring to snap the HUD to any screen corner.
 
-### Analytics
+---
+
+### Analytics & Plotting
 
 <p align="center">
   <img src="assets/screenshots/gui-analytics.png" alt="Analytics tab">
 </p>
 
-Toggle recording on/off and export the collected data. See [Analytics](#analytics-1).
+When enabled, GhostTap logs every single click (both real and generated) with precise timestamps, target vs. actual CPS, hold durations, and intervals. 
 
----
-
-## Analytics
-
-When enabled, every click (spoofed **and** real) is recorded with:
-
-- timestamp, target CPS, actual measured CPS,
-- hold duration (measured precisely, even for real physical clicks in Mouse mode),
-- interval to the next click, and the current rhythm trend.
-
-Export writes a **CSV to your Desktop**. A small Python project under [`tools/`](tools/) reads the CSV and plots the distributions so you can visually tune your humanization.
+Exporting saves a `.csv` file directly to your desktop. You can run the Python script located in the `tools/` directory to plot your click distributions and verify how human your settings actually look.
 
 <p align="center">
   <img src="assets/plots/combined.png" alt="Analytics plots">
@@ -207,15 +172,14 @@ Export writes a **CSV to your Desktop**. A small Python project under [`tools/`]
 
 ---
 
-## Fair use & detectability
+## Fair Use & Detectability
 
-GhostTap is a research/personal project. A few honest points:
+GhostTap is an open-source personal research project. Keep the following in mind:
+* **Input:** The generated timing patterns and LWJGL injection layer make the clicks nearly impossible to differentiate from human input via server-side checks. BUT:
+* **Coremod:** Because it edits code at runtime, client-side anti-cheats checking for byte code manipulation or Mixin hooks will flag the presence of a mod, regardless of your settings - especially since it's a **Forge Mod** lol.
+* **Efficiency :** Filters like *Placeable only* make you mechanically flawless (100% valid placements, zero wasted clicks). That is efficient, but a perfectly clean pattern at a low click-rate can look non-human to an observer or a CPS meter. Tune with that trade-off in mind.
 
-- **Input pattern:** the humanized timing and LWJGL-layer spoofing make the *input* hard to distinguish from a real hand. There are no fake OS events and no perfectly even intervals.
-- **Coremod visibility:** it is still a coremod. Anti-cheats that scan the client (loaded transformers, the mixin platform, class presence) can detect that *a* coremod is running, regardless of how human the clicks look.
-- **Efficiency vs. realism:** filters like *Placeable only* make you mechanically flawless (100% valid placements, zero wasted clicks). That is efficient, but a perfectly clean pattern at a low click-rate can itself look non-human to an observer or a CPS meter. Tune with that trade-off in mind.
-
-Use it where you're allowed to. Don't use it to break rules you've agreed to.
+*Use this tool responsibly and respect the rules of the servers you play on.*
 
 ---
 
@@ -229,7 +193,7 @@ Use it where you're allowed to. Don't use it to break rules you've agreed to.
 
 ## Building from source
 
-Requires **JDK 8** - the toolchain (ForgeGradle 2.1) will not run on newer JDKs.
+Requires **JDK 8**. The toolchain (ForgeGradle 2.1) will not run on newer JDKs.
 
 ```sh
 JAVA_HOME=<path-to-jdk8> ./gradlew build
