@@ -42,7 +42,7 @@ static void preset_flow(const ClickerPreset* presets, ClickerProfile& profile, i
         }
         x_used += bw;
     }
-    ImGui::SetCursorPosY(line_y + btn_h + gap);
+    ImGui::SetCursorPosY(line_y + btn_h);   // no trailing gap: bottom pad == top pad
 }
 
 static int mode_to_idx(ActivationMode m) { return m == ActivationMode::TOGGLE ? 0 : (m == ActivationMode::HOLD ? 1 : 2); }
@@ -75,10 +75,21 @@ static void draw_home_tab(GuiState& state) {
     bool r_on = state.right.is_enabled() || state.right_armed;
     draw_clicker_card("Left clicker", state.config.left, state.config.left_mode,
                       state.left, state.config.key_left, LEFT_PRESETS, 0, card_w, l_on);
+    float y_left = ImGui::GetCursorScreenPos().y;
     ImGui::SetCursorScreenPos(ImVec2(c0.x + card_w + gap, c0.y));
     draw_clicker_card("Right clicker", state.config.right, state.config.right_mode,
                       state.right, state.config.key_right, RIGHT_PRESETS, 1, card_w, r_on);
-    ImGui::TextDisabled("Tip: press the toggle key anywhere in-game to start or stop clicking.");
+    float y_right = ImGui::GetCursorScreenPos().y;
+
+    // fresh full-width row below BOTH cards, tip centered
+    float y = y_left > y_right ? y_left : y_right;
+    const char* tip = "Tip: press the toggle key anywhere in-game to start or stop clicking.";
+    ImVec2 ts = ImGui::CalcTextSize(tip, nullptr, true);
+    float full_w = card_w * 2.0f + gap;
+    float x = c0.x + (full_w - ts.x) * 0.5f;
+    if (x < c0.x) x = c0.x;
+    ImGui::SetCursorScreenPos(ImVec2(x, y));
+    ImGui::TextDisabled("%s", tip);
 }
 
 // ---------------- Left / Right (advanced) ----------------
@@ -125,10 +136,10 @@ static void draw_side_tab(ClickerProfile& p) {
     begin_panel("Fatigue breaks");
     row_check("Enable Breaks", &p.breaks_enabled);
     if (p.breaks_enabled) {
-        row_slider("Break Every Min (s)", &p.break_interval_min, 5.0, 120.0, "%.1f");
-        row_slider("Break Every Max (s)", &p.break_interval_max, 5.0, 120.0, "%.1f");
-        row_slider("Break Duration Min (s)", &p.break_duration_min, 0.1, 5.0, "%.1f");
-        row_slider("Break Duration Max (s)", &p.break_duration_max, 0.1, 5.0, "%.1f");
+        row_slider("Interval Min (s)", &p.break_interval_min, 5.0, 120.0, "%.1f");
+        row_slider("Interval Max (s)", &p.break_interval_max, 5.0, 120.0, "%.1f");
+        row_slider("Duration Min (s)", &p.break_duration_min, 0.1, 5.0, "%.1f");
+        row_slider("Duration Max (s)", &p.break_duration_max, 0.1, 5.0, "%.1f");
     }
     end_panel();
 }
@@ -148,7 +159,6 @@ static void draw_macros_tab(GuiState& state) {
         if (m > 0) ImGui::SameLine();
         char mlabel[16]; snprintf(mlabel, sizeof(mlabel), "%d##mtab", m + 1);
         bool active = (state.selected_macro == m);
-        // accent-colored when selected (no more pink overrides)
         if (oxygen_button(mlabel, ImVec2(40, 0), 0, 0, active))
             state.selected_macro = m;
     }
@@ -157,7 +167,7 @@ static void draw_macros_tab(GuiState& state) {
     ImGui::InputText("##macname", mac.name, sizeof(mac.name));
     ImGui::SameLine();
     oxygen_checkbox("Loop", &mac.loop);
-    keybind_row("Macro Key", mac.key_bind);   // own row: label left, button at LABEL_W
+    keybind_row("Macro Key", mac.key_bind);
     end_panel();
 
     begin_panel("Steps");
@@ -245,15 +255,28 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
     end_panel();
 
     begin_panel("Profiles");
-    if (ImGui::BeginListBox("##profiles", ImVec2(-1, 100))) {
-        for (int i = 0; i < (int)profiles.size(); i++) {
-            bool selected = (selected_profile == i);
-            if (ImGui::Selectable(profiles[i].c_str(), selected)) selected_profile = i;
+    {
+        ImVec2 lsz(panel_inner(), 100);
+        ImVec2 lp0 = ImGui::GetCursorScreenPos();
+        ImDrawList* pdl = ImGui::GetWindowDrawList();
+        pdl->AddRectFilled(lp0, ImVec2(lp0.x + lsz.x, lp0.y + lsz.y), ImGui::GetColorU32(ImGuiCol_FrameBg), 4.0f);
+        pdl->AddRect(lp0, ImVec2(lp0.x + lsz.x, lp0.y + lsz.y), ImGui::GetColorU32(ImGuiCol_Border), 4.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4, 4));
+        if (ImGui::BeginChild("##profiles", lsz)) {
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 3));
+            for (int i = 0; i < (int)profiles.size(); i++) {
+                char iid[32]; snprintf(iid, sizeof(iid), "p%d", i);
+                if (oxygen_list_item(iid, profiles[i].c_str(), selected_profile == i)) selected_profile = i;
+            }
+            ImGui::PopStyleVar();
+            oxygen_scrollbar();
         }
-        ImGui::EndListBox();
+        ImGui::EndChild();
+        ImGui::PopStyleVar();
     }
+    ImGui::TextDisabled("Profile name");
     ImGui::SetNextItemWidth(panel_inner() * 0.6f);
-    ImGui::InputText("##profile_name", profile_name_buf, 64);
+    ImGui::InputTextWithHint("##profile_name", "New profile name...", profile_name_buf, 64);
     if (oxygen_button("Save", ImVec2(80, 0))) {
         std::string name = profile_name_buf[0] ? profile_name_buf : "config";
         if (ConfigFile::save(state.config, name)) {
@@ -309,10 +332,10 @@ static void draw_analytics_tab(GuiState& state, char* status_msg, float& status_
     begin_panel("Live");
     ImGui::TextDisabled("Left CPS");
     { const auto& t = state.left.tracker(); char ov[32]; snprintf(ov, sizeof(ov), "%.1f CPS", t.avg_cps());
-      ImGui::PlotLines("##lcps", t.graph_data(), t.graph_size(), t.graph_offset(), ov, 0.0f, 35.0f, ImVec2(-1, 60)); }
+      ImGui::PlotLines("##lcps", t.graph_data(), t.graph_size(), t.graph_offset(), ov, 0.0f, 35.0f, ImVec2(panel_inner(), 60)); }
     ImGui::TextDisabled("Right CPS");
     { const auto& t = state.right.tracker(); char ov[32]; snprintf(ov, sizeof(ov), "%.1f CPS", t.avg_cps());
-      ImGui::PlotLines("##rcps", t.graph_data(), t.graph_size(), t.graph_offset(), ov, 0.0f, 35.0f, ImVec2(-1, 60)); }
+      ImGui::PlotLines("##rcps", t.graph_data(), t.graph_size(), t.graph_offset(), ov, 0.0f, 35.0f, ImVec2(panel_inner(), 60)); }
     end_panel();
 
     begin_panel("Session");
@@ -394,7 +417,7 @@ void gui_run(GuiState& state) {
             "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
             "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf",
             "/usr/share/fonts/cantarell/Cantarell-VF.otf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/dejavu/DejaVuSans.ttf",
         };
         ImFont* font = nullptr;
         const char* chosen = nullptr;
