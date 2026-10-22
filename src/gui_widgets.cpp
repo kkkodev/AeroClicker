@@ -13,11 +13,12 @@ static int* g_binding_target = nullptr;
 static GLFWwindow* g_window = nullptr;
 static ImFont* g_font_big = nullptr;
 
-static const float LABEL_W   = 175.0f;
+static const float LABEL_W   = 150.0f;
 static const float OXY_R     = 4.0f;
 static const float PANEL_R   = 6.0f;
 static const float PANEL_PAD = 12.0f;   // inner padding of cards
 static const float PANEL_GAP = 14.0f;   // outer margin between cards
+static const float VALUE_W   = 64.0f;   // reserved readout slot right of sliders
 
 static float s_panel_inner = 0.0f;
 static float s_panel_x     = 0.0f;
@@ -130,7 +131,7 @@ static void OxFrame(ImDrawList* dl, ImVec2 mn, ImVec2 mx, float R,
 static void glass_gloss(ImDrawList* dl, ImVec2 mn, ImVec2 mx, float rr, float topY, float botY, int aTop) {
     const int N = 8;
     const float arcC = mn.y + rr;
-    auto narrow = [&](float y) {
+    auto narrow = [&](float y) -> float {
         if (y >= arcC) return 0.0f;
         float d = arcC - y;
         return rr - sqrtf(rr * rr - d * d);
@@ -370,13 +371,15 @@ bool oxygen_checkbox(const char* label, bool* v) {
     if (ls.x > 0.0f)
         dl->AddText(ImVec2(bx1.x + ImGui::GetStyle().ItemInnerSpacing.x, vcenter_top(mn.y, mn.y + sz)),
                     ImGui::GetColorU32(ImGuiCol_Text), label, tend ? tend : nullptr);
-        return clicked;
+    return clicked;
 }
 
 // ---------- sliders ----------
 
-static bool slider_widget(const char* id, double* v, double lo, double hi, const char* fmt) {
-    bool changed = ImGui::SliderScalar(id, ImGuiDataType_Double, v, &lo, &hi, fmt);
+static bool slider_widget(const char* id, double* v, double lo, double hi, const char* fmt, float slider_w)
+{
+    ImGui::SetNextItemWidth(slider_w);
+    bool changed = ImGui::SliderScalar(id, ImGuiDataType_Double, v, &lo, &hi, "");  // no text inside the track
     ImVec2 r0 = ImGui::GetItemRectMin(), r1 = ImGui::GetItemRectMax();
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const float FR = ImGui::GetStyle().FrameRounding;
@@ -388,12 +391,21 @@ static bool slider_widget(const char* id, double* v, double lo, double hi, const
     ImVec2 g0(gx, r0.y + 3), g1(gx + grab_w, r1.y - 3);
     bool hov = ImGui::IsItemHovered(); bool act = ImGui::IsItemActive();
     float ta = widget_anim(ImGui::GetID(id), hov || act);
-    ImU32 center_c = lerp_u32(OxCol(mulc(g_body_color, 4.60f)), OxCol(g_accent_hover), ta);
-    ImU32 edge_c   = lerp_u32(OxCol(mulc(g_body_color, 3.40f)), OxCol(g_accent_active), ta);
-    ImU32 rim_c    = lerp_u32(OxCol(mulc(g_body_color, 4.80f), 160), OxCol(OxLight(g_accent_color), 200), ta);
+    // thumb: constant gray fill, ONLY the rim eases to accent (same language as scrollbar)
+    ImU32 center_c = OxCol(mulc(g_body_color, 3.00f));
+    ImU32 edge_c   = OxCol(mulc(g_body_color, 2.40f));
+    ImU32 rim_c    = lerp_u32(OxCol(mulc(g_body_color, 3.60f), 140), OxCol(OxLight(g_accent_color), 220), ta);
     float gr = (g1.x - g0.x) * 0.5f; if (gr > OXY_R) gr = OXY_R;
     AddRoundedRectGradCenter(dl, g0, g1, center_c, edge_c, gr, 8);
     dl->AddRect(g0, g1, rim_c, gr, 0, 1.0f);
+
+    // value badge attached to the track's right end (never floats at the panel edge)
+    char buf[64]; snprintf(buf, sizeof(buf), fmt, *v);
+    ImVec2 ts = ImGui::CalcTextSize(buf, nullptr, true);
+    ImVec2 b0(r1.x + 8.0f, r0.y + 2.0f), b1(r1.x + 8.0f + ts.x + 14.0f, r1.y - 2.0f);
+    dl->AddRectFilled(b0, b1, OxCol(mulc(g_body_color, 0.85f), 235), 3.0f);
+    dl->AddRect(b0, b1, OxCol(mulc(g_body_color, 2.40f), 110), 3.0f);
+    dl->AddText(ImVec2(b0.x + 7.0f, vcenter_top(b0.y, b1.y)), OxCol(g_text_color, 210), buf, nullptr);
     return changed;
 }
 
@@ -401,16 +413,16 @@ bool row_slider(const char* label, double* v, double lo, double hi, const char* 
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(label);
     ImGui::SameLine(LABEL_W);
-    ImGui::SetNextItemWidth(s_panel_inner > 0.0f ? s_panel_inner - LABEL_W : -FLT_MIN);
+    float w = ImGui::GetContentRegionAvail().x;
+    if (s_panel_inner > 0.0f) w = s_panel_inner - LABEL_W;
     char id[96]; snprintf(id, sizeof(id), "##%s", label);
-    return slider_widget(id, v, lo, hi, fmt);
+    return slider_widget(id, v, lo, hi, fmt, w - VALUE_W - ImGui::GetStyle().ItemInnerSpacing.x);
 }
 
 bool stacked_slider(const char* label, double* v, double lo, double hi, const char* fmt, float w) {
     ImGui::TextDisabled("%s", label);
-    ImGui::SetNextItemWidth(w);
     char id[96]; snprintf(id, sizeof(id), "##%s", label);
-    return slider_widget(id, v, lo, hi, fmt);
+    return slider_widget(id, v, lo, hi, fmt, w - VALUE_W - ImGui::GetStyle().ItemInnerSpacing.x);
 }
 
 // ---------- combos ----------
@@ -421,7 +433,7 @@ bool combo_framed(const char* id, int* idx, const char* items) {
     const char* preview = items;
     for (int i = 0; i < *idx && *preview; i++) preview += strlen(preview) + 1;
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6, 4));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4, 4));   // even margins around popup items
     const float FR = ImGui::GetStyle().FrameRounding;
     const float arrow_sz = ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.x * 2.0f;
     ImVec2 f0 = ImGui::GetCursorScreenPos();
@@ -444,7 +456,7 @@ bool combo_framed(const char* id, int* idx, const char* items) {
                 lerp_u32(OxCol(g_text_color, 205), IM_COL32(238, 246, 255, 255), t_o), preview, nullptr);
     float ax = f1.x - arrow_sz * 0.5f, ay = (f0.y + f1.y) * 0.5f;
     if (open) {
-        float as = 4.5f;
+        float as = 6.0f;   // same size as the closed arrow
         dl->AddTriangleFilled(ImVec2(ax - as, ay + as * 0.5f), ImVec2(ax + as, ay + as * 0.5f), ImVec2(ax, ay - as * 0.5f), IM_COL32(255, 255, 255, 220));
     } else {
         float as = 6.0f;
@@ -475,7 +487,7 @@ bool combo_framed(const char* id, int* idx, const char* items) {
             float b_t = o_h > o_s ? o_h : o_s;
             if (b_t > 0.01f)
                 pdl->AddRect(ImVec2(p0.x + 0.5f, p0.y + 0.5f), ImVec2(r1.x - 0.5f, r1.y - 0.5f),
-                             lerp_u32(IM_COL32(0, 0, 0, 0), OxCol(OxLight(g_accent_color), 200), b_t), OXY_R, 0, 1.0f);
+                             lerp_u32(IM_COL32(0, 0, 0, 0), OxCol(OxLight(g_accent_color), 200), b_t), OXY_R);
             ImU32 tcol = (i == *idx) ? IM_COL32(240, 246, 255, 255) : ImGui::GetColorU32(ImGuiCol_Text);
             pdl->AddText(ImVec2(p0.x + ImGui::GetStyle().FramePadding.x, vcenter_top(p0.y, p0.y + h)), tcol, p, nullptr);
             if (clicked) { *idx = i; changed = true; ImGui::CloseCurrentPopup(); }
@@ -492,8 +504,8 @@ bool combo_framed(const char* id, int* idx, const char* items) {
 bool row_combo(const char* label, int* idx, const char* items) {
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(label);
-    ImGui::SameLine(LABEL_W);
-    ImGui::SetNextItemWidth(s_panel_inner > 0.0f ? s_panel_inner - LABEL_W : -FLT_MIN);
+    ImGui::SameLine(0.0f, 10.0f);          // tight: combo sits right after its label
+    ImGui::SetNextItemWidth(-FLT_MIN);
     char id[96]; snprintf(id, sizeof(id), "##%s", label);
     return combo_framed(id, idx, items);
 }
@@ -508,7 +520,7 @@ bool stacked_combo(const char* label, int* idx, const char* items, float w) {
 bool row_check(const char* label, bool* v) {
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(label);
-    ImGui::SameLine(LABEL_W);
+    ImGui::SameLine(0.0f, 10.0f);          // tight: checkbox sits right after its label
     char id[96]; snprintf(id, sizeof(id), "##%s", label);
     return oxygen_checkbox(id, v);
 }
@@ -535,7 +547,7 @@ void stacked_keybind(const char* label, int& key_code, float w) {
     if (oxygen_button(buf, ImVec2(w, 0))) g_binding_target = &key_code;
 }
 
-// ---------- flat panels (cards) with accent left border ----------
+// ---------- flat panels (cards) ----------
 
 float panel_inner() { return s_panel_inner; }
 
@@ -551,23 +563,8 @@ void begin_panel(const char* label, float width, int status) {
     s_panel_w = panel_w;
     ImVec2 p1(start.x + panel_w, start.y + h);
 
-    // hover glow: eases in, fades to the right, gone when not hovered
-    bool hov = ImGui::IsMouseHoveringRect(start, p1);
-    float t = widget_anim(ImGui::GetID("##panelglow"), hov);
-
     ImDrawList* dl = ImGui::GetWindowDrawList();
     dl->AddRectFilled(start, p1, OxCol(mulc(g_body_color, 1.16f), 235), PANEL_R);
-    if (t > 0.01f) {
-        const float GLOW_W = 26.0f;
-        ImU32 gc = OxCol(g_accent_color, (int)(110 * t));
-        ImU32 g0 = OxCol(g_accent_color, 0);
-        dl->AddRectFilledMultiColor(ImVec2(start.x + 1.0f, start.y + 1.0f),
-                                    ImVec2(start.x + GLOW_W, p1.y - 1.0f),
-                                    gc, g0, g0, gc);   // left -> right fade
-        dl->AddRectFilled(ImVec2(start.x, start.y + 1.0f),
-                          ImVec2(start.x + 2.0f, p1.y - 1.0f),
-                          OxCol(g_accent_color, (int)(200 * t)), 0.0f);
-    }
     dl->AddRect(start, p1, OxCol(mulc(g_body_color, 2.40f), 110), PANEL_R, 0, 1.0f);
 
     ImGui::SetCursorScreenPos(ImVec2(start.x + PANEL_PAD, start.y + 12.0f));
@@ -576,21 +573,30 @@ void begin_panel(const char* label, float width, int status) {
     ImGui::BeginGroup();
 
     ImGui::PushStyleColor(ImGuiCol_Text, OxCol(lerp4(g_text_color, g_accent_color, 0.45f), 200));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 4.0f));
     char up[128]; strtoupper(up, sizeof(up), label);
     ImGui::TextUnformatted(up);
     ImGui::PopStyleColor();
 
     if (status >= 0) {
         ImVec2 hmn = ImGui::GetItemRectMin(), hmx = ImGui::GetItemRectMax();
-        float r = 4.0f;
+        float r = 5.0f;
         ImVec2 c(start.x + panel_w - PANEL_PAD - r, (hmn.y + hmx.y) * 0.5f);
-        ImU32 fillc = status ? IM_COL32(46, 148, 84, 235) : IM_COL32(255, 255, 255, 30);
-        ImU32 rimc  = status ? IM_COL32(150, 230, 180, 160) : IM_COL32(255, 255, 255, 60);
-        dl->AddCircleFilled(c, r, fillc);
-        dl->AddCircle(c, r, rimc, 0, 1.0f);
+        if (status) {
+            dl->AddCircleFilled(c, r + 3.5f, IM_COL32(46, 148, 84, 40));   // soft outer glow
+            dl->AddCircleFilled(c, r + 1.5f, IM_COL32(70, 190, 110, 70));
+            dl->AddCircleFilled(c, r,        IM_COL32(52, 168, 96, 255));
+            dl->AddCircle(c, r, IM_COL32(150, 230, 180, 200), 0, 1.0f);
+            dl->AddCircleFilled(ImVec2(c.x - r * 0.30f, c.y - r * 0.35f), r * 0.45f, IM_COL32(255, 255, 255, 90));
+        } else {
+            dl->AddCircleFilled(c, r, IM_COL32(255, 255, 255, 26));
+            dl->AddCircle(c, r, IM_COL32(255, 255, 255, 70), 0, 1.0f);
+            dl->AddCircleFilled(ImVec2(c.x - r * 0.30f, c.y - r * 0.35f), r * 0.45f, IM_COL32(255, 255, 255, 24));
+        }
     }
 
-    ImGui::Dummy(ImVec2(s_panel_inner, 2.0f));
+    ImGui::Dummy(ImVec2(s_panel_inner, 0.0f));
+    ImGui::PopStyleVar();
 }
 
 void end_panel() {
@@ -603,6 +609,33 @@ void end_panel() {
     s_panel_inner = 0.0f;
     ImGui::SetCursorScreenPos(ImVec2(s_panel_x, cmn.y - 12.0f + h + PANEL_GAP));
     ImGui::PopID();
+}
+
+// ---------- list items (styled like combo dropdown options) ----------
+
+bool oxygen_list_item(const char* id, const char* label, bool selected) {
+    ImVec2 p0 = ImGui::GetCursorScreenPos();
+    float w = ImGui::GetContentRegionAvail().x;
+    float h = ImGui::GetFrameHeight();
+    ImVec2 r1(p0.x + w, p0.y + h);
+    bool clicked = ImGui::InvisibleButton(id, ImVec2(w, h));
+    bool hov = ImGui::IsItemHovered();
+    ImGuiID oid = ImGui::GetID(id);
+    float o_h = widget_anim(oid, hov);
+    float o_s = widget_anim(oid + 1, selected);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    if (o_s > 0.01f) {
+        dl->AddRectFilled(p0, r1, OxCol(g_accent_color, (int)(70 * o_s)), OXY_R);
+        glass_gloss(dl, p0, r1, OXY_R, p0.y + 1.0f, p0.y + (r1.y - p0.y) * 0.55f, (int)(26 * o_s));
+    }
+    if (hov && !selected) dl->AddRectFilled(p0, r1, OxCol(g_accent_color, (int)(38 * o_h)), OXY_R);
+    float b_t = o_h > o_s ? o_h : o_s;
+    if (b_t > 0.01f)
+        dl->AddRect(ImVec2(p0.x + 0.5f, p0.y + 0.5f), ImVec2(r1.x - 0.5f, r1.y - 0.5f),
+                    lerp_u32(IM_COL32(0, 0, 0, 0), OxCol(OxLight(g_accent_color), 200), b_t), OXY_R);
+    ImU32 tcol = selected ? IM_COL32(240, 246, 255, 255) : ImGui::GetColorU32(ImGuiCol_Text);
+    dl->AddText(ImVec2(p0.x + ImGui::GetStyle().FramePadding.x, vcenter_top(p0.y, r1.y)), tcol, label, nullptr);
+    return clicked;
 }
 
 // ---------- status ----------
