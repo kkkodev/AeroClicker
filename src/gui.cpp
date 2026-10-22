@@ -17,8 +17,12 @@ static ImVec4 g_accent_color(0.24f, 0.49f, 0.78f, 1.0f);  // Default Oxygen blue
 static ImVec4 g_accent_hover(0.33f, 0.58f, 0.86f, 1.0f);
 static ImVec4 g_accent_active(0.17f, 0.37f, 0.62f, 1.0f);
 
-// Read KDE accent color from kdeglobals
-static bool read_kde_accent_color(float &r, float &g, float &b) {
+// KDE scheme colors: window background + foreground (all neutral grays derive from these)
+static ImVec4 g_body_color(0.125f, 0.128f, 0.135f, 1.0f);
+static ImVec4 g_text_color(0.95f, 0.95f, 0.95f, 1.0f);
+
+// Generic kdeglobals reader with exact [Section] matching
+static bool read_kde_color(const char* section, const char* key, float &r, float &g, float &b) {
     const char* home = getenv("HOME");
     if (!home) return false;
 
@@ -27,26 +31,21 @@ static bool read_kde_accent_color(float &r, float &g, float &b) {
     if (!f) return false;
 
     char line[256];
-    bool in_colors = false;
+    bool in = false;
+    size_t slen = strlen(section);
 
     while (fgets(line, sizeof(line), f)) {
-        if (strstr(line, "[Colors:Selection]")) {
-            in_colors = true;
+        if (line[0] == '[') {
+            char* end = strchr(line, ']');
+            in = end && (size_t)(end - line - 1) == slen && strncmp(line + 1, section, slen) == 0;
             continue;
         }
-        if (line[0] == '[' && !strstr(line, "[Colors:Selection]")) {
-            in_colors = false;
-            continue;
-        }
-        if (in_colors) {
+        if (in) {
             char* eq = strchr(line, '=');
-            if (eq && strstr(line, "BackgroundNormal")) {
-                char* val = eq + 1;
+            if (eq && strstr(line, key)) {
                 int cr, cg, cb;
-                if (sscanf(val, "%d,%d,%d", &cr, &cg, &cb) == 3) {
-                    r = cr / 255.0f;
-                    g = cg / 255.0f;
-                    b = cb / 255.0f;
+                if (sscanf(eq + 1, "%d,%d,%d", &cr, &cg, &cb) == 3) {
+                    r = cr / 255.0f; g = cg / 255.0f; b = cb / 255.0f;
                     fclose(f);
                     return true;
                 }
@@ -57,11 +56,20 @@ static bool read_kde_accent_color(float &r, float &g, float &b) {
     return false;
 }
 
+static bool read_kde_accent_color(float &r, float &g, float &b) {
+    return read_kde_color("Colors:Selection", "BackgroundNormal", r, g, b);
+}
+
+static ImVec4 mulc(ImVec4 c, float k, float a = 1.0f) {
+    return ImVec4(c.x * k > 1.0f ? 1.0f : c.x * k,
+                  c.y * k > 1.0f ? 1.0f : c.y * k,
+                  c.z * k > 1.0f ? 1.0f : c.z * k, a);
+}
+
 // Apply complete Oxygen-style theme with custom accent
 static void setup_oxygen_theme(int preset, float custom_r, float custom_g, float custom_b) {
     ImGuiStyle& style = ImGui::GetStyle();
 
-    // Set base accent color based on preset
     if (preset == 0) {
         g_accent_color = ImVec4(0.24f, 0.49f, 0.78f, 1.0f); // Oxygen Blue
     } else if (preset == 1) {
@@ -81,7 +89,6 @@ static void setup_oxygen_theme(int preset, float custom_r, float custom_g, float
         }
     }
 
-    // Calculate variants (lighter/darker)
     g_accent_hover = ImVec4(
         g_accent_color.x + (1.0f - g_accent_color.x) * 0.15f,
         g_accent_color.y + (1.0f - g_accent_color.y) * 0.15f,
@@ -97,50 +104,54 @@ static void setup_oxygen_theme(int preset, float custom_r, float custom_g, float
 
     ImVec4* colors = style.Colors;
 
-    // Dark accent based backgrounds (eliminates hard-coded blue)
-    ImVec4 frame_bg = ImVec4(g_accent_active.x * 0.15f, g_accent_active.y * 0.15f, g_accent_active.z * 0.15f, 0.85f);
-    ImVec4 frame_hov = ImVec4(g_accent_color.x * 0.25f, g_accent_color.y * 0.25f, g_accent_color.z * 0.25f, 0.95f);
-    ImVec4 frame_act = ImVec4(g_accent_color.x * 0.35f, g_accent_color.y * 0.35f, g_accent_color.z * 0.35f, 1.0f);
+    // All neutral grays derived from the KDE window background so the UI matches the scheme
+    ImVec4 frame_bg   = mulc(g_body_color, 0.80f, 0.90f);
+    ImVec4 frame_hov  = mulc(g_body_color, 1.25f, 0.95f);
+    ImVec4 frame_act  = mulc(g_body_color, 1.45f, 1.00f);
+    ImVec4 win_bg     = g_body_color;
+    ImVec4 pop_bg     = mulc(g_body_color, 0.85f, 1.00f);
+    ImVec4 title_bg   = mulc(g_body_color, 0.75f, 1.00f);
+    ImVec4 text_dis   = ImVec4(g_text_color.x * 0.55f + g_body_color.x * 0.45f,
+                               g_text_color.y * 0.55f + g_body_color.y * 0.45f,
+                               g_text_color.z * 0.55f + g_body_color.z * 0.45f, 1.00f);
 
-    colors[ImGuiCol_Text]                   = ImVec4(0.95f, 0.95f, 0.95f, 1.00f);
-    colors[ImGuiCol_TextDisabled]           = ImVec4(0.50f, 0.55f, 0.60f, 1.00f);
-    colors[ImGuiCol_WindowBg]               = ImVec4(0.06f, 0.11f, 0.18f, 0.94f);
+    colors[ImGuiCol_Text]                   = g_text_color;
+    colors[ImGuiCol_TextDisabled]           = text_dis;
+    colors[ImGuiCol_WindowBg]               = win_bg;
     colors[ImGuiCol_ChildBg]                = ImVec4(frame_bg.x, frame_bg.y, frame_bg.z, 0.0f);
-    colors[ImGuiCol_PopupBg]                = ImVec4(frame_bg.x * 1.2f, frame_bg.y * 1.2f, frame_bg.z * 1.2f, 0.98f);
-    colors[ImGuiCol_Border]                 = ImVec4(g_accent_hover.x, g_accent_hover.y, g_accent_hover.z, 0.35f); // "Slight border"
+    colors[ImGuiCol_PopupBg]                = pop_bg;
+    colors[ImGuiCol_Border]                 = mulc(g_body_color, 3.60f, 0.55f);
     colors[ImGuiCol_BorderShadow]           = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
     colors[ImGuiCol_FrameBg]                = frame_bg;
     colors[ImGuiCol_FrameBgHovered]         = frame_hov;
     colors[ImGuiCol_FrameBgActive]          = frame_act;
-    colors[ImGuiCol_TitleBg]                = ImVec4(0.08f, 0.14f, 0.22f, 1.00f);
-    colors[ImGuiCol_TitleBgActive]          = g_accent_active;
-    colors[ImGuiCol_TitleBgCollapsed]       = ImVec4(0.08f, 0.14f, 0.22f, 1.00f);
-    colors[ImGuiCol_MenuBarBg]              = ImVec4(0.08f, 0.14f, 0.22f, 0.90f);
-    colors[ImGuiCol_ScrollbarBg]            = ImVec4(0.05f, 0.09f, 0.15f, 0.50f);
-    colors[ImGuiCol_ScrollbarGrab]          = g_accent_active;
-    colors[ImGuiCol_ScrollbarGrabHovered]   = g_accent_color;
-    colors[ImGuiCol_ScrollbarGrabActive]    = g_accent_hover;
-    colors[ImGuiCol_CheckMark]              = g_accent_hover;
-    colors[ImGuiCol_SliderGrab]             = ImVec4(0,0,0,0); // hidden; custom thumb drawn manually
+    colors[ImGuiCol_TitleBg]                = title_bg;
+    colors[ImGuiCol_TitleBgActive]          = title_bg;
+    colors[ImGuiCol_TitleBgCollapsed]       = mulc(g_body_color, 0.60f, 1.00f);
+    colors[ImGuiCol_MenuBarBg]              = mulc(g_body_color, 0.80f, 0.90f);
+    colors[ImGuiCol_ScrollbarBg]            = ImVec4(0, 0, 0, 0);
+    colors[ImGuiCol_ScrollbarGrab]          = ImVec4(0, 0, 0, 0);
+    colors[ImGuiCol_ScrollbarGrabHovered]   = ImVec4(0, 0, 0, 0);
+    colors[ImGuiCol_ScrollbarGrabActive]    = ImVec4(0, 0, 0, 0);
+    colors[ImGuiCol_CheckMark]              = mulc(g_body_color, 6.50f, 1.00f);
+    colors[ImGuiCol_SliderGrab]             = ImVec4(0,0,0,0);
     colors[ImGuiCol_SliderGrabActive]       = ImVec4(0,0,0,0);
     colors[ImGuiCol_Button]                 = g_accent_active;
     colors[ImGuiCol_ButtonHovered]          = g_accent_color;
     colors[ImGuiCol_ButtonActive]           = g_accent_hover;
-    // IMPORTANT: Header colors drive hover highlighting inside opened combo popups
-    // and listboxes. They must NOT be transparent (oxygen_section doesn't use them).
-    colors[ImGuiCol_Header]                 = ImVec4(g_accent_color.x, g_accent_color.y, g_accent_color.z, 0.25f);
-    colors[ImGuiCol_HeaderHovered]          = ImVec4(g_accent_color.x, g_accent_color.y, g_accent_color.z, 0.45f);
-    colors[ImGuiCol_HeaderActive]           = ImVec4(g_accent_color.x, g_accent_color.y, g_accent_color.z, 0.60f);
-    colors[ImGuiCol_Separator]              = ImVec4(0.20f, 0.28f, 0.38f, 0.60f);
-    colors[ImGuiCol_SeparatorHovered]       = g_accent_color;
-    colors[ImGuiCol_SeparatorActive]        = g_accent_hover;
-    colors[ImGuiCol_ResizeGrip]             = ImVec4(g_accent_color.x, g_accent_color.y, g_accent_color.z, 0.30f);
+    colors[ImGuiCol_Header]                 = mulc(g_body_color, 1.80f, 1.00f);
+    colors[ImGuiCol_HeaderHovered]          = mulc(g_body_color, 2.20f, 1.00f);
+    colors[ImGuiCol_HeaderActive]           = mulc(g_body_color, 2.60f, 1.00f);
+    colors[ImGuiCol_Separator]              = mulc(g_body_color, 2.80f, 0.60f);
+    colors[ImGuiCol_SeparatorHovered]       = mulc(g_body_color, 2.80f, 0.60f);
+    colors[ImGuiCol_SeparatorActive]        = mulc(g_body_color, 2.80f, 0.60f);
+    colors[ImGuiCol_ResizeGrip]             = mulc(g_body_color, 3.60f, 0.30f);
     colors[ImGuiCol_ResizeGripHovered]      = g_accent_color;
     colors[ImGuiCol_ResizeGripActive]       = g_accent_hover;
-    colors[ImGuiCol_Tab]                    = ImVec4(0.10f, 0.16f, 0.24f, 0.90f);
+    colors[ImGuiCol_Tab]                    = mulc(g_body_color, 1.10f, 0.90f);
     colors[ImGuiCol_TabHovered]             = g_accent_color;
     colors[ImGuiCol_TabActive]              = g_accent_active;
-    colors[ImGuiCol_TabUnfocused]           = ImVec4(0.08f, 0.14f, 0.22f, 0.90f);
+    colors[ImGuiCol_TabUnfocused]           = mulc(g_body_color, 0.95f, 0.90f);
     colors[ImGuiCol_TabUnfocusedActive]     = g_accent_active;
     colors[ImGuiCol_PlotLines]              = g_accent_color;
     colors[ImGuiCol_PlotLinesHovered]       = g_accent_hover;
@@ -153,10 +164,10 @@ static void setup_oxygen_theme(int preset, float custom_r, float custom_g, float
     colors[ImGuiCol_NavWindowingDimBg]      = ImVec4(0.00f, 0.00f, 0.00f, 0.20f);
     colors[ImGuiCol_ModalWindowDimBg]       = ImVec4(0.00f, 0.00f, 0.00f, 0.35f);
 
-    // Oxygen-style rounding and sizing
+    // Oxygen-style rounding and sizing — uniform vertical rhythm
     style.WindowPadding         = ImVec2(12, 10);
-    style.FramePadding          = ImVec2(8, 4);
-    style.ItemSpacing           = ImVec2(8, 6);
+    style.FramePadding          = ImVec2(8, 5);
+    style.ItemSpacing           = ImVec2(8, 8);
     style.ItemInnerSpacing      = ImVec2(6, 4);
     style.TouchExtraPadding     = ImVec2(0, 0);
     style.IndentSpacing         = 20.0f;
@@ -166,22 +177,25 @@ static void setup_oxygen_theme(int preset, float custom_r, float custom_g, float
     style.WindowBorderSize      = 0.0f;
     style.ChildBorderSize       = 0.0f;
     style.PopupBorderSize       = 1.0f;
-    style.FrameBorderSize       = 1.0f; // Gives inputs a "slight border"
+    style.FrameBorderSize       = 1.0f;
     style.TabBorderSize         = 0.0f;
 
-    style.WindowRounding        = 8.0f;
-    style.ChildRounding         = 6.0f;
-    style.FrameRounding         = 6.0f;
-    style.PopupRounding         = 6.0f;
-    style.ScrollbarRounding     = 8.0f;
-    style.GrabRounding          = 4.0f;
-    style.TabRounding           = 6.0f;
+    style.WindowRounding   = 4.0f;
+    style.ChildRounding    = 4.0f;
+    style.FrameRounding    = 4.0f;
+    style.PopupRounding    = 4.0f;
+    style.ScrollbarRounding= 4.0f;
+    style.GrabRounding     = 4.0f;
+    style.TabRounding      = 4.0f;
     style.AntiAliasedLines = true;
     style.AntiAliasedFill  = true;
 
     style.WindowTitleAlign      = ImVec2(0.5f, 0.5f);
     style.WindowMenuButtonPosition = ImGuiDir_None;
     style.ColorButtonPosition   = ImGuiDir_Right;
+
+    // Global scale bump (safe on re-call: everything above is assigned absolutely)
+    style.ScaleAllSizes(1.12f);
 }
 
 static const char* key_name(int code) {
@@ -314,6 +328,32 @@ static void mouse_button_callback(GLFWwindow*, int button, int action, int) {
 }
 
 static const float LABEL_W = 175.0f;
+static const float OXY_R = 4.0f;
+
+// ---------- color + animation helpers ----------
+
+static ImU32 lerp_u32(ImU32 a, ImU32 b, float t) {
+    if (t <= 0.0f) return a;
+    if (t >= 1.0f) return b;
+    int ar = (a >> IM_COL32_R_SHIFT) & 0xFF, ag = (a >> IM_COL32_G_SHIFT) & 0xFF,
+        ab = (a >> IM_COL32_B_SHIFT) & 0xFF, aa = (a >> IM_COL32_A_SHIFT) & 0xFF;
+    int br = (b >> IM_COL32_R_SHIFT) & 0xFF, bg = (b >> IM_COL32_G_SHIFT) & 0xFF,
+        bb = (b >> IM_COL32_B_SHIFT) & 0xFF, ba = (b >> IM_COL32_A_SHIFT) & 0xFF;
+    return IM_COL32(ar + (int)((br - ar) * t), ag + (int)((bg - ag) * t),
+                    ab + (int)((bb - ab) * t), aa + (int)((ba - aa) * t));
+}
+
+// Eased (ease-in-out) transition progress stored per widget id. ~200ms feel.
+static float widget_anim(ImGuiID id, bool target) {
+    ImGuiStorage* st = ImGui::GetStateStorage();
+    float t = st->GetFloat(id, 0.0f);
+    float goal = target ? 1.0f : 0.0f;
+    float k = 1.0f - expf(-12.0f * ImGui::GetIO().DeltaTime);
+    t += (goal - t) * k;
+    if (t < 0.001f) t = 0.0f; else if (t > 0.999f) t = 1.0f;
+    st->SetFloat(id, t);
+    return t * t * (3.0f - 2.0f * t);   // smoothstep
+}
 
 // Rounded rect + true vertical gradient (alpha included), full bleed.
 static void AddRoundedRectFilledGradV(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 col_upr, ImU32 col_bot, float rounding) {
@@ -323,7 +363,7 @@ static void AddRoundedRectFilledGradV(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 
         return;
     }
     int start_vtx = dl->VtxBuffer.Size;
-    dl->AddRectFilled(a, b, IM_COL32_WHITE, rounding);   // AA fringe verts have alpha 0
+    dl->AddRectFilled(a, b, IM_COL32_WHITE, rounding);
     int end_vtx = dl->VtxBuffer.Size;
     ImDrawVert* vtx = dl->VtxBuffer.Data + start_vtx;
     for (int i = 0; i < end_vtx - start_vtx; i++) {
@@ -338,16 +378,34 @@ static void AddRoundedRectFilledGradV(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 
         int g1 = (col_bot >> IM_COL32_G_SHIFT) & 0xFF;
         int b1 = (col_bot >> IM_COL32_B_SHIFT) & 0xFF;
         int a1 = (col_bot >> IM_COL32_A_SHIFT) & 0xFF;
-        int va = (vtx[i].col >> IM_COL32_A_SHIFT) & 0xFF;          // original AA alpha (255 core, 0 fringe)
-        int al = (a0 + (int)((a1 - a0) * t)) * va / 255;           // gradient alpha * fringe alpha
+        int va = (vtx[i].col >> IM_COL32_A_SHIFT) & 0xFF;
+        int al = (a0 + (int)((a1 - a0) * t)) * va / 255;
         vtx[i].col = IM_COL32(r0 + (int)((r1-r0)*t), g0 + (int)((g1-g0)*t),
                               b0 + (int)((b1-b0)*t), al);
     }
 }
 
-// Oxygen frame: body gradient full-bleed on a pixel-snapped rect,
-// gloss/shadow inset 1px, border stroked ON TOP of the body's outer ring.
-// -> single crisp border, no dark seam, no escaping corners.
+// Concentric gradient: light center, darker toward all sides.
+// edge_bias < 1 pushes the dark tone out to just the rim.
+static void AddRoundedRectGradCenter(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 center_col, ImU32 edge_col, float rounding, int bands = 10, float edge_bias = 0.45f) {
+    if (b.x <= a.x || b.y <= a.y) return;
+    float w = b.x - a.x, h = b.y - a.y;
+    float max_inset = (w < h ? w : h) * 0.5f;
+    int cr = (center_col >> IM_COL32_R_SHIFT) & 0xFF, cg = (center_col >> IM_COL32_G_SHIFT) & 0xFF,
+        cb = (center_col >> IM_COL32_B_SHIFT) & 0xFF, ca = (center_col >> IM_COL32_A_SHIFT) & 0xFF;
+    int er = (edge_col >> IM_COL32_R_SHIFT) & 0xFF, eg = (edge_col >> IM_COL32_G_SHIFT) & 0xFF,
+        eb = (edge_col >> IM_COL32_B_SHIFT) & 0xFF, ea = (edge_col >> IM_COL32_A_SHIFT) & 0xFF;
+    for (int s = 0; s < bands; s++) {
+        float f = (bands > 1) ? (float)s / (float)(bands - 1) : 1.0f;   // 0 = rim .. 1 = center
+        float inset = max_inset * f;
+        float t = powf(f, edge_bias);                                    // dark hugs the rim
+        ImU32 col = IM_COL32(er + (int)((cr - er) * t), eg + (int)((cg - eg) * t),
+                             eb + (int)((cb - eb) * t), ea + (int)((ca - ea) * t));
+        float r = rounding - inset; if (r < 1.0f) r = 1.0f;
+        dl->AddRectFilled(ImVec2(a.x + inset, a.y + inset), ImVec2(b.x - inset, b.y - inset), col, r);
+    }
+}
+
 static void OxFrame(ImDrawList* dl, ImVec2 mn, ImVec2 mx, float R,
                     ImU32 c_top, ImU32 c_bot, ImU32 border_col,
                     int gloss = 100, int shadow = 60) {
@@ -356,10 +414,8 @@ static void OxFrame(ImDrawList* dl, ImVec2 mn, ImVec2 mx, float R,
     if (b1.x - b0.x < 2.0f) b1.x = b0.x + 2.0f;
     if (b1.y - b0.y < 2.0f) b1.y = b0.y + 2.0f;
 
-    // 1) body: fills the ENTIRE snapped rect, right up to the border centerline
     AddRoundedRectFilledGradV(dl, b0, b1, c_top, c_bot, R);
 
-    // 2) gloss + inner shadow: 1px inside, so they never fight the outer edge
     ImVec2 f0(b0.x + 1.0f, b0.y + 1.0f), f1(b1.x - 1.0f, b1.y - 1.0f);
     float fr = R > 1.0f ? R - 1.0f : 0.0f;
     if (gloss > 0)
@@ -369,9 +425,6 @@ static void OxFrame(ImDrawList* dl, ImVec2 mn, ImVec2 mx, float R,
         AddRoundedRectFilledGradV(dl, ImVec2(f0.x, f0.y + (f1.y - f0.y) * 0.55f), f1,
                                   IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, shadow), fr);
 
-    // 3) border LAST, centered on the body's outer pixel ring [b0, b0+1]:
-    //    its AA blends over the body (not the background) and covers the
-    //    body's aliased edge -> exactly one clean line, corners included.
     dl->AddRect(ImVec2(b0.x + 0.5f, b0.y + 0.5f), ImVec2(b1.x - 0.5f, b1.y - 0.5f),
                 border_col, R > 0.5f ? R - 0.5f : 0.0f, 0, 1.0f);
 }
@@ -390,9 +443,78 @@ static ImVec4 OxDark(ImVec4 c, float k = 0.4f) {
     return ImVec4(c.x*k, c.y*k, c.z*k, 1.0f);
 }
 
-// Full-bleed Oxygen button
-static bool oxygen_button(const char* label, ImVec2 size_arg = ImVec2(0, 0), ImU32 c1_override = 0, ImU32 c2_override = 0) {
-    const float R = 7.0f;
+static void glass_gloss(ImDrawList* dl, ImVec2 mn, ImVec2 mx, float rr, float topY, float botY, int aTop) {
+    const int N = 8;
+    const float arcC = mn.y + rr;
+    auto narrow = [&](float y) {
+        if (y >= arcC) return 0.0f;
+        float d = arcC - y;
+        return rr - sqrtf(rr * rr - d * d);
+    };
+    for (int i = 0; i < N; i++) {
+        float ta = topY + (botY - topY) * i / N;
+        float tb = topY + (botY - topY) * (i + 1) / N;
+        float na = narrow(ta), nb = narrow(tb);
+        float inset = (na > nb ? na : nb) + 0.75f;
+        ImU32 ca = IM_COL32(255, 255, 255, (int)(aTop * (1.0f - i / (float)N)));
+        ImU32 cb = IM_COL32(255, 255, 255, (int)(aTop * (1.0f - (i + 1) / (float)N)));
+        dl->AddRectFilledMultiColor(ImVec2(mn.x + inset, ta), ImVec2(mx.x - inset, tb), ca, ca, cb, cb);
+    }
+}
+
+// Scrollbar: scheme-gray center-light thumb (dark only at rim); accent eases in on
+// hover and STAYS for the whole click-hold-move (sticky flag, raw rect tests).
+static void oxygen_scrollbar() {
+    ImGuiStyle& st = ImGui::GetStyle();
+    const float smax = ImGui::GetScrollMaxY();
+    if (smax <= 0.0f) return;
+    ImVec2 wp = ImGui::GetWindowPos();
+    ImVec2 ws = ImGui::GetWindowSize();
+    const float sbw = st.ScrollbarSize;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    dl->PushClipRect(wp, ImVec2(wp.x + ws.x, wp.y + ws.y), false);
+
+    ImVec2 t0(wp.x + ws.x - sbw, wp.y);
+    ImVec2 t1(wp.x + ws.x,       wp.y + ws.y);
+
+    // Track: static scheme gray, no hover effect
+    AddRoundedRectGradCenter(dl, t0, t1, OxCol(mulc(g_body_color, 1.15f)), OxCol(mulc(g_body_color, 0.80f)), st.ScrollbarRounding, 8);
+    dl->AddRect(t0, t1, OxCol(mulc(g_body_color, 2.10f), 140), st.ScrollbarRounding, 0, 1.0f);
+
+    const float sy = ImGui::GetScrollY();
+    const float track_h = t1.y - t0.y;
+    float thumb_h = track_h * (track_h / (track_h + smax));
+    if (thumb_h < st.GrabMinSize) thumb_h = st.GrabMinSize;
+    if (thumb_h > track_h) thumb_h = track_h;
+    float ty = t0.y + (sy / smax) * (track_h - thumb_h);
+    ImVec2 g0(t0.x + 2.0f, ty + 1.0f), g1(t1.x - 2.0f, ty + thumb_h - 1.0f);
+    float gr = st.ScrollbarRounding - 2.0f; if (gr < 1.0f) gr = 1.0f;
+
+    ImVec2 mp = ImGui::GetMousePos();
+    bool in_track = mp.x >= t0.x && mp.x <= t1.x && mp.y >= t0.y && mp.y <= t1.y;
+    bool in_thumb = mp.x >= g0.x - 1.0f && mp.x <= g1.x + 1.0f && mp.y >= g0.y - 1.0f && mp.y <= g1.y + 1.0f;
+
+    static bool s_thumb_drag = false;
+    if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))                    s_thumb_drag = false;
+    else if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && in_track) s_thumb_drag = true;
+    bool lit = in_thumb || s_thumb_drag;
+
+    float t = widget_anim(ImGui::GetID("##sb_thumb"), lit);
+
+    ImU32 center_c = lerp_u32(OxCol(mulc(g_body_color, 2.60f)), OxCol(g_accent_hover),  t);
+    ImU32 edge_c   = lerp_u32(OxCol(mulc(g_body_color, 2.20f)), OxCol(g_accent_active), t);
+    ImU32 rim_c    = lerp_u32(OxCol(mulc(g_body_color, 3.20f), 140), OxCol(OxLight(g_accent_color), 200), t);
+
+    AddRoundedRectGradCenter(dl, g0, g1, center_c, edge_c, gr, 10);
+    dl->AddRect(g0, g1, rim_c, gr, 0, 1.0f);
+
+    dl->PopClipRect();
+}
+
+// Buttons: scheme-gray gradient idle; hover animates ONLY the border; fill eases in when pressed/forced.
+static bool oxygen_button(const char* label, ImVec2 size_arg = ImVec2(0, 0), ImU32 c1_override = 0, ImU32 c2_override = 0, bool force_colored = false) {
+    const float R = OXY_R;
     ImVec2 ls = ImGui::CalcTextSize(label, nullptr, true);
     ImVec2 sz = size_arg;
     if (sz.x <= 0) sz.x = ls.x + ImGui::GetStyle().FramePadding.x * 2.0f;
@@ -405,11 +527,27 @@ static bool oxygen_button(const char* label, ImVec2 size_arg = ImVec2(0, 0), ImU
     bool act = ImGui::IsItemActive();
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    ImVec4 base = act ? g_accent_hover : (hov ? g_accent_color : g_accent_active);
-    ImU32 c1 = c1_override ? c1_override : OxCol(base);
-    ImU32 c2 = c2_override ? c2_override : OxCol(OxDark(base));
+    ImGuiID id = ImGui::GetID(label);
+    float t_h = widget_anim(id, hov);
+    float t_a = widget_anim(id + 1, act || force_colored);
 
-    OxFrame(dl, mn, mx, R, c1, c2, OxCol(OxLight(base), 180), hov ? 140 : 100, 60);
+    ImU32 c1, c2, bc;
+    int gloss;
+    if (c1_override && c2_override) {
+        c1 = c1_override; c2 = c2_override;
+        bc = OxCol(OxLight(g_accent_color), 180);
+        gloss = 120;
+    } else {
+        ImU32 g1 = OxCol(mulc(g_body_color, 2.20f));
+        ImU32 g2 = OxCol(mulc(g_body_color, 1.45f));
+        ImU32 a1 = OxCol(act ? g_accent_hover : g_accent_color);
+        ImU32 a2 = OxCol(OxDark(act ? g_accent_hover : g_accent_color));
+        c1 = lerp_u32(g1, a1, t_a);
+        c2 = lerp_u32(g2, a2, t_a);
+        bc = lerp_u32(OxCol(mulc(g_body_color, 3.60f), 180), OxCol(OxLight(g_accent_color), 220), t_h > t_a ? t_h : t_a);
+        gloss = 60 + (int)(60 * t_a);
+    }
+    OxFrame(dl, mn, mx, R, c1, c2, bc, gloss, 60);
 
     const char* tend = strstr(label, "##");
     dl->AddText(ImVec2(mn.x + (sz.x - ls.x) * 0.5f, mn.y + (sz.y - ls.y) * 0.5f),
@@ -439,122 +577,144 @@ static void keybind_row(const char* label, int& key_code) {
     if (oxygen_button(buf, ImVec2(140, 0))) g_binding_target = &key_code;
 }
 
-// Slider: pill track + pill thumb, both via OxFrame (border outside, fill inside)
+// Slider: gray track; thumb pill has 2px side padding and a subtle rim-dark gradient.
 static bool row_slider(const char* label, double* v, double lo, double hi, const char* fmt) {
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(label);
     ImGui::SameLine(LABEL_W);
     ImGui::SetNextItemWidth(-FLT_MIN);
     char id[96]; snprintf(id, sizeof(id), "##%s", label);
-
-    ImVec2 r0 = ImGui::GetCursorScreenPos();
-    float w = ImGui::GetContentRegionAvail().x;
-    float h = ImGui::GetFrameHeight();
-    ImVec2 r1(r0.x + w, r0.y + h);
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-
-    ImVec2 tr0(r0.x, r0.y + h * 0.35f);
-    ImVec2 tr1(r1.x, r1.y - h * 0.35f);
-    float tr_r = (tr1.y - tr0.y) * 0.5f;
-    ImVec4 tc = OxDark(g_accent_active, 0.3f);
-    OxFrame(dl, tr0, tr1, tr_r, OxCol(tc, 220), OxCol(OxDark(tc, 0.5f), 220), IM_COL32(255,255,255,40), 0, 0);
-
     bool changed = ImGui::SliderScalar(id, ImGuiDataType_Double, v, &lo, &hi, fmt);
 
-    bool hov = ImGui::IsItemHovered();
-    bool act = ImGui::IsItemActive();
+    ImVec2 r0 = ImGui::GetItemRectMin(), r1 = ImGui::GetItemRectMax();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const float FR = ImGui::GetStyle().FrameRounding;
+
+    glass_gloss(dl, r0, r1, FR, r0.y + 1.0f, r0.y + (r1.y - r0.y) * 0.55f, 36);
 
     float grab_w = ImGui::GetStyle().GrabMinSize;
-    float t = (float)((*v - lo) / (hi - lo));
-    if (t < 0) t = 0; if (t > 1) t = 1;
-    float gx = r0.x + (r1.x - r0.x - grab_w) * t;
-    ImVec2 g0(gx, r0.y), g1(gx + grab_w, r1.y);
-    float gr = (g1.x - g0.x) * 0.5f;
+    float t = (float)((*v - lo) / (hi - lo)); if (t < 0) t = 0; if (t > 1) t = 1;
+    const float pad = 2.0f;   // keep the thumb off the track's rounded ends
+    float gx = r0.x + pad + ((r1.x - r0.x) - grab_w - pad * 2.0f) * t;
+    ImVec2 g0(gx, r0.y + 3), g1(gx + grab_w, r1.y - 3);
+    bool hov = ImGui::IsItemHovered(); bool act = ImGui::IsItemActive();
 
-    ImVec4 base = act ? g_accent_hover : (hov ? g_accent_color : g_accent_active);
-    OxFrame(dl, g0, g1, gr, OxCol(base), OxCol(OxDark(base)), OxCol(OxLight(base), 180), hov ? 160 : 120, 50);
+    float ta = widget_anim(ImGui::GetID(id), hov || act);
+    ImU32 center_c = lerp_u32(OxCol(mulc(g_body_color, 4.60f)), OxCol(g_accent_hover),  ta);
+    ImU32 edge_c   = lerp_u32(OxCol(mulc(g_body_color, 3.40f)), OxCol(g_accent_active), ta);
+    ImU32 rim_c    = lerp_u32(OxCol(mulc(g_body_color, 4.80f), 160), OxCol(OxLight(g_accent_color), 200), ta);
 
+    float gr = (g1.x - g0.x) * 0.5f; if (gr > OXY_R) gr = OXY_R;
+    AddRoundedRectGradCenter(dl, g0, g1, center_c, edge_c, gr, 8);
+    dl->AddRect(g0, g1, rim_c, gr, 0, 1.0f);
     return changed;
 }
 
-// Combo: custom rounded frame + custom popup with ROUNDED glossy row highlight
+// Combo: frame rect computed BEFORE BeginCombo; hover = border only, open = gradient fill (eased).
 static bool combo_framed(const char* id, int* idx, const char* items) {
-    const char* ptrs[32]; int count = 0;
-    const char* p = items;
-    while (*p && count < 32) { ptrs[count++] = p; p += strlen(p) + 1; }
-    if (count == 0) return false;
-    if (*idx < 0 || *idx >= count) *idx = 0;
-
-    ImVec2 mn = ImGui::GetCursorScreenPos();
-    float w = ImGui::CalcItemWidth();
-    float h = ImGui::GetFrameHeight();
-    ImVec2 mx(mn.x + w, mn.y + h);
-    float R = ImGui::GetStyle().FrameRounding;
-    bool hov = ImGui::IsMouseHoveringRect(mn, mx);
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-
-    // visible border for the closed frame (the old 0.35-alpha Border was invisible)
-    ImU32 frame_border = OxCol(g_accent_hover, 150);
-
-    ImVec4 fc = ImGui::GetStyleColorVec4(hov ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg);
-    OxFrame(dl, mn, mx, R, OxCol(fc), OxCol(ImVec4(fc.x*0.55f, fc.y*0.55f, fc.z*0.55f, fc.w)),
-            frame_border, hov ? 30 : 18, 0);
+    int count = 0;
+    for (const char* p = items; *p; p += strlen(p) + 1) count++;
+    const char* preview = items;
+    for (int i = 0; i < *idx && *preview; i++) preview += strlen(preview) + 1;
 
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4, 4));   // tight popup margins
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,   ImVec2(4, 2));
-    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0,0,0,0));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0,0,0,0));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0,0,0,0));
-    ImGui::PushStyleColor(ImGuiCol_Border,        ImVec4(g_accent_hover.x, g_accent_hover.y,
-                                                         g_accent_hover.z, 0.60f)); // popup border visible
+    // Tight popup padding so the open list hugs its border (captured at popup Begin)
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6, 4));
+
+    const float FR = ImGui::GetStyle().FrameRounding;
+    const float arrow_sz = ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.x * 2.0f;
+
+    ImVec2 f0 = ImGui::GetCursorScreenPos();
+    const float fw = ImGui::CalcItemWidth();
+    const float fhgt = ImGui::GetFrameHeight();
+    ImVec2 f1(f0.x + fw, f0.y + fhgt);
+
+    ImGuiID wid = ImGui::GetID(id);
+    ImDrawList* dl = ImGui::GetWindowDrawList();   // parent draw list, captured pre-popup
 
     bool changed = false;
-    if (ImGui::BeginCombo(id, ptrs[*idx], ImGuiComboFlags_None)) {
+    bool open = ImGui::BeginCombo(id, preview, ImGuiComboFlags_NoArrowButton);
+    ImGui::PopStyleVar();   // WindowPadding already consumed by the popup's Begin
+
+    bool fhov = ImGui::IsMouseHoveringRect(f0, f1);
+    bool fact = fhov && ImGui::IsMouseDown(ImGuiMouseButton_Left);
+
+    float t_h = widget_anim(wid, fhov);
+    float t_o = widget_anim(wid + 1, open);
+
+    ImU32 c1 = lerp_u32(OxCol(mulc(g_body_color, 2.20f)), OxCol(g_accent_color), t_o);
+    ImU32 c2 = lerp_u32(OxCol(mulc(g_body_color, 1.45f)), OxCol(OxDark(g_accent_color)), t_o);
+    ImU32 bc = lerp_u32(OxCol(mulc(g_body_color, 3.60f), 200), OxCol(OxLight(g_accent_color), 220), t_h > t_o ? t_h : t_o);
+    OxFrame(dl, f0, f1, FR, c1, c2, bc, 60 + (int)(80 * t_o), 60);
+
+    ImVec2 ls = ImGui::CalcTextSize(preview, nullptr, true);
+    dl->AddText(ImVec2(f0.x + ImGui::GetStyle().FramePadding.x,
+                       f0.y + (f1.y - f0.y - ls.y) * 0.5f),
+                lerp_u32(OxCol(g_text_color, 205), IM_COL32(238, 246, 255, 255), t_o), preview, nullptr);
+
+    // Arrow: bigger down-arrow when closed (matches section headers), up-arrow when open
+    float ax = f1.x - arrow_sz * 0.5f, ay = (f0.y + f1.y) * 0.5f;
+    if (open) {
+        float as = 4.5f;
+        dl->AddTriangleFilled(ImVec2(ax - as, ay + as * 0.5f),
+                              ImVec2(ax + as, ay + as * 0.5f),
+                              ImVec2(ax, ay - as * 0.5f),
+                              IM_COL32(255, 255, 255, 220));
+    } else {
+        float as = 6.0f;
+        dl->AddTriangleFilled(ImVec2(ax - as, ay - as * 0.5f),
+                              ImVec2(ax + as, ay - as * 0.5f),
+                              ImVec2(ax, ay + as * 0.5f),
+                              IM_COL32(255, 255, 255, 220));
+    }
+
+    if (open) {
+        ImGui::PushStyleColor(ImGuiCol_Border, mulc(g_body_color, 4.20f, 0.75f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 4));
+
+        ImDrawList* pdl = ImGui::GetWindowDrawList();   // popup draw list
+        const char* p = items;
         for (int i = 0; i < count; i++) {
-            ImVec2 q0 = ImGui::GetCursorScreenPos();
-            float rw = ImGui::GetContentRegionAvail().x;
-            float rh = ImGui::GetTextLineHeight() + 6.0f;
-            ImVec2 q1(q0.x + rw, q0.y + rh);
+            ImVec2 p0 = ImGui::GetCursorScreenPos();
+            float w = ImGui::GetContentRegionAvail().x;
+            float h = ImGui::GetFrameHeight();
+            ImVec2 r1(p0.x + w, p0.y + h);
 
-            char iid[32]; snprintf(iid, sizeof(iid), "##item%d", i);
-            bool clicked = ImGui::InvisibleButton(iid, ImVec2(rw, rh));
-            bool ihov = ImGui::IsItemHovered();
-            bool sel = (i == *idx);
-            ImDrawList* pdl = ImGui::GetWindowDrawList();
+            char oid[32]; snprintf(oid, sizeof(oid), "##opt%d", i);
+            bool clicked = ImGui::InvisibleButton(oid, ImVec2(w, h));
+            bool hov = ImGui::IsItemHovered();
+            bool down = hov && ImGui::IsMouseDown(ImGuiMouseButton_Left);
 
-            if (ihov || sel) {
-                ImU32 t1 = OxCol(g_accent_color,  sel ? 150 : 90);
-                ImU32 t2 = OxCol(g_accent_active, sel ? 110 : 50);
-                AddRoundedRectFilledGradV(pdl, ImVec2(q0.x+1, q0.y+1), ImVec2(q1.x-1, q1.y-1), t1, t2, 4.0f);
-                if (ihov)
-                    AddRoundedRectFilledGradV(pdl, ImVec2(q0.x+2, q0.y+2), ImVec2(q1.x-2, q0.y + rh*0.5f),
-                                              IM_COL32(255,255,255,50), IM_COL32(255,255,255,0), 3.0f);
+            ImGuiID oid_id = ImGui::GetID(oid);
+            float o_h = widget_anim(oid_id, hov);
+            float o_s = widget_anim(oid_id + 1, i == *idx);
+
+            // selected: subtle accent tint + faint gloss (no heavy gradient)
+            if (o_s > 0.01f) {
+                pdl->AddRectFilled(p0, r1, OxCol(g_accent_color, (int)(70 * o_s)), OXY_R);
+                glass_gloss(pdl, p0, r1, OXY_R, p0.y + 1.0f, p0.y + (r1.y - p0.y) * 0.55f, (int)(26 * o_s));
             }
-            pdl->AddText(ImVec2(q0.x + 8, q0.y + (rh - ImGui::GetTextLineHeight()) * 0.5f),
-                         ImGui::GetColorU32(ImGuiCol_Text), ptrs[i]);
-            if (sel) {
-                ImVec2 c(q1.x - 14, q0.y + rh * 0.5f);
-                pdl->AddLine(ImVec2(c.x-4, c.y), ImVec2(c.x-1, c.y+3), IM_COL32(255,255,255,230), 2.0f);
-                pdl->AddLine(ImVec2(c.x-1, c.y+3), ImVec2(c.x+5, c.y-4), IM_COL32(255,255,255,230), 2.0f);
-            }
+            // pressed: small extra tint
+            if (down)
+                pdl->AddRectFilled(p0, r1, OxCol(g_accent_active, 60), OXY_R);
+            // hover = border only (selected keeps its border too)
+            float b_t = o_h > o_s ? o_h : o_s;
+            if (b_t > 0.01f)
+                pdl->AddRect(ImVec2(p0.x + 0.5f, p0.y + 0.5f), ImVec2(r1.x - 0.5f, r1.y - 0.5f),
+                             lerp_u32(IM_COL32(0,0,0,0), OxCol(OxLight(g_accent_color), 200), b_t), OXY_R, 0, 1.0f);
+
+            ImVec2 tls = ImGui::CalcTextSize(p, nullptr, true);
+            ImU32 tcol = (i == *idx) ? IM_COL32(240, 246, 255, 255) : ImGui::GetColorU32(ImGuiCol_Text);
+            pdl->AddText(ImVec2(p0.x + ImGui::GetStyle().FramePadding.x, p0.y + (h - tls.y) * 0.5f), tcol, p, nullptr);
+
             if (clicked) { *idx = i; changed = true; ImGui::CloseCurrentPopup(); }
-            ImGui::SetCursorScreenPos(ImVec2(q0.x, q1.y + 1));
+            p += strlen(p) + 1;
         }
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(1);
         ImGui::EndCombo();
     }
-    ImGui::PopStyleColor(4);
-    ImGui::PopStyleVar(3);
-
-    // cover ImGui's default arrow with the frame color (rounded on the right),
-    // then draw our own themed arrow
-    ImVec4 bg_col = ImGui::GetStyleColorVec4(hov ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg);
-    dl->AddRectFilled(ImVec2(mx.x - h + 1, mn.y + 1), ImVec2(mx.x - 2, mx.y - 1),
-                      ImGui::GetColorU32(bg_col), R - 1, ImDrawFlags_RoundCornersRight);
-    ImVec4 tc = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-    float ax = mx.x - 14.0f, ay = mn.y + h * 0.5f, as = 4.5f;
-    dl->AddTriangleFilled(ImVec2(ax-as, ay-as*0.5f), ImVec2(ax+as, ay-as*0.5f), ImVec2(ax, ay+as*0.7f),
-                          OxCol(tc, 230));
+    ImGui::PopStyleVar();
     return changed;
 }
 
@@ -574,46 +734,46 @@ static void mode_combo(const char* label, ActivationMode& mode) {
     }
 }
 
-// Custom Oxygen checkbox
+// Checkbox: gray idle; hover = accent border only; checked = accent fill + check fades in.
 static bool oxygen_checkbox(const char* label, bool* v) {
-    const ImGuiStyle& style = ImGui::GetStyle();
-    const char* label_end = strstr(label, "##");
-    if (!label_end) label_end = label + strlen(label);
-    ImVec2 label_size = ImGui::CalcTextSize(label, label_end);
+    const float sz = ImGui::GetFrameHeight();
+    const float R  = OXY_R;
+    const char* tend = strstr(label, "##");
+    ImVec2 ls = ImGui::CalcTextSize(label, nullptr, true, tend ? (float)(tend - label) : -1.0f);
+    ImVec2 mn = ImGui::GetCursorScreenPos();
+    ImVec2 total(sz + (ls.x > 0.0f ? ImGui::GetStyle().ItemInnerSpacing.x + ls.x : 0.0f), sz);
 
-    const float square_sz = ImGui::GetFrameHeight();
-    ImVec2 total_size(square_sz + (label_size.x > 0.0f ? style.ItemInnerSpacing.x + label_size.x : 0.0f), square_sz);
-
-    bool clicked = ImGui::InvisibleButton(label, total_size);
-    if (clicked) *v = !(*v);
-
-    bool hovered = ImGui::IsItemHovered();
-    bool active = ImGui::IsItemActive();
-
-    ImVec2 pos = ImGui::GetItemRectMin();
-    ImVec2 c_min = pos;
-    ImVec2 c_max(pos.x + square_sz, pos.y + square_sz);
-    const float R = 5.0f;
+    bool clicked = ImGui::InvisibleButton(label, total);
+    if (clicked) *v = !*v;
+    bool hov = ImGui::IsItemHovered();
+    bool act = ImGui::IsItemActive();
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    ImVec4 base = (active && hovered) ? g_accent_active : (hovered ? g_accent_hover : g_accent_active);
+    ImGuiID id = ImGui::GetID(label);
+    float t_h = widget_anim(id, hov);
+    float t_c = widget_anim(id + 1, *v);
 
-    if (*v) {
-        OxFrame(dl, c_min, c_max, R, OxCol(base), OxCol(OxDark(base)), OxCol(OxLight(base), 180), hovered ? 160 : 120, 0);
-        ImVec2 p1(c_min.x + square_sz * 0.25f, c_min.y + square_sz * 0.5f);
-        ImVec2 p2(c_min.x + square_sz * 0.45f, c_min.y + square_sz * 0.7f);
-        ImVec2 p3(c_max.x - square_sz * 0.2f, c_min.y + square_sz * 0.3f);
-        dl->AddLine(p1, p2, IM_COL32(255,255,255,255), 3.0f);
-        dl->AddLine(p2, p3, IM_COL32(255,255,255,255), 3.0f);
-    } else {
-        ImVec4 fc = OxDark(g_accent_active, 0.2f);
-        OxFrame(dl, c_min, c_max, R, OxCol(fc), OxCol(OxDark(fc, 0.5f)), OxCol(OxLight(base), 90), 26, 0);
+    ImVec2 bx1(mn.x + sz, mn.y + sz);
+    ImU32 fill = lerp_u32(OxCol(mulc(g_body_color, 1.90f), 235), OxCol(act ? g_accent_hover : g_accent_active), t_c);
+    ImU32 rimc = lerp_u32(OxCol(mulc(g_body_color, 3.60f), 200), OxCol(OxLight(g_accent_color), 220), t_h > t_c ? t_h : t_c);
+
+    dl->AddRectFilled(mn, bx1, fill, R);
+    glass_gloss(dl, mn, bx1, R, mn.y + 1.0f, mn.y + sz * 0.55f, 36 + (int)(44 * t_c));
+    dl->AddRect(mn, bx1, rimc, R, 0, 1.0f);
+
+    if (t_c > 0.01f) {
+        const float t = (sz * 0.14f < 2.0f) ? 2.0f : (sz * 0.14f);
+        ImVec2 pts[3] = {
+            ImVec2(mn.x + sz * 0.24f, mn.y + sz * 0.52f),
+            ImVec2(mn.x + sz * 0.42f, mn.y + sz * 0.70f),
+            ImVec2(mn.x + sz * 0.78f, mn.y + sz * 0.30f),
+        };
+        dl->AddPolyline(pts, 3, IM_COL32(245, 250, 255, (int)(255 * t_c)), 0, t);
     }
 
-    if (label_size.x > 0.0f) {
-        ImVec2 text_pos(c_max.x + style.ItemInnerSpacing.x, c_min.y + (square_sz - label_size.y) * 0.5f);
-        dl->AddText(text_pos, ImGui::GetColorU32(ImGuiCol_Text), label, label_end);
-    }
+    if (ls.x > 0.0f)
+        dl->AddText(ImVec2(bx1.x + ImGui::GetStyle().ItemInnerSpacing.x, mn.y + (sz - ls.y) * 0.5f),
+                    ImGui::GetColorU32(ImGuiCol_Text), label, tend ? tend : nullptr);
     return clicked;
 }
 
@@ -625,7 +785,7 @@ static bool row_check(const char* label, bool* v) {
     return oxygen_checkbox(id, v);
 }
 
-// Section header with hover/active feedback
+// Section header: gray like buttons; hover = border only; press eases accent fill.
 static bool oxygen_section(const char* label, bool default_open) {
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10, 6));
     char id[64];
@@ -648,11 +808,17 @@ static bool oxygen_section(const char* label, bool default_open) {
 
     ImVec2 mn = ImGui::GetItemRectMin();
     ImVec2 mx = ImGui::GetItemRectMax();
-    const float R = 7.0f;
+    const float R = OXY_R;
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    ImVec4 base = act ? g_accent_active : (hov ? g_accent_color : g_accent_active);
-    OxFrame(dl, mn, mx, R, OxCol(base), OxCol(OxDark(base)), OxCol(OxLight(base), 180), hov ? 180 : 120, 0);
+    ImGuiID wid = ImGui::GetID(id);
+    float t_h = widget_anim(wid, hov);
+    float t_a = widget_anim(wid + 1, act);
+
+    ImU32 c1 = lerp_u32(OxCol(mulc(g_body_color, 2.20f)), OxCol(g_accent_color), t_a);
+    ImU32 c2 = lerp_u32(OxCol(mulc(g_body_color, 1.45f)), OxCol(OxDark(g_accent_color)), t_a);
+    ImU32 bc = lerp_u32(OxCol(mulc(g_body_color, 3.60f), 180), OxCol(OxLight(g_accent_color), 220), t_h > t_a ? t_h : t_a);
+    OxFrame(dl, mn, mx, R, c1, c2, bc, 60 + (int)(80 * t_a), 0);
 
     float arrow_x = mx.x - 20.0f;
     float arrow_y = mn.y + h * 0.5f;
@@ -673,7 +839,6 @@ static bool oxygen_section(const char* label, bool default_open) {
     dl->AddText(text_pos, IM_COL32(255,255,255,255), label);
 
     ImGui::PopStyleVar();
-    ImGui::Dummy(ImVec2(0, 3));
     return is_open;
 }
 
@@ -683,17 +848,21 @@ static void status_chip(const char* label, bool on) {
     ImVec2 mn = ImGui::GetCursorScreenPos();
     ImVec2 sz(ls.x + pad.x * 2, ls.y + pad.y * 2);
     ImVec2 mx(mn.x + sz.x, mn.y + sz.y);
-    float r = sz.y * 0.5f;
+    const float r = OXY_R;
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    if (on) {
-        OxFrame(dl, mn, mx, r, OxCol(g_accent_color), OxCol(OxDark(g_accent_color)), OxCol(OxLight(g_accent_color), 200), 160, 0);
-        dl->AddText(ImVec2(mn.x + pad.x, mn.y + pad.y), IM_COL32(232, 255, 242, 255), label);
-    } else {
-        ImVec4 fc = OxDark(g_accent_active, 0.15f);
-        OxFrame(dl, mn, mx, r, OxCol(fc, 220), OxCol(OxDark(fc, 0.5f), 220), IM_COL32(100, 120, 140, 110), 0, 0);
-        dl->AddText(ImVec2(mn.x + pad.x, mn.y + pad.y), IM_COL32(180, 190, 200, 200), label);
-    }
+    const ImU32 fill_on  = IM_COL32(46, 148, 84, 235);
+    const ImU32 rim_on   = IM_COL32(150, 230, 180, 160);
+    const ImU32 text_on  = IM_COL32(235, 255, 242, 255);
+    const ImU32 fill_off = IM_COL32(255, 255, 255, 22);
+    const ImU32 rim_off  = IM_COL32(255, 255, 255, 45);
+    const ImU32 text_off = IM_COL32(200, 212, 228, 150);
+
+    dl->AddRectFilled(mn, mx, on ? fill_on : fill_off, r);
+    if (on)
+        glass_gloss(dl, mn, mx, r, mn.y + 1.0f, mn.y + sz.y * 0.55f, 70);
+    dl->AddRect(mn, mx, on ? rim_on : rim_off, r, 0, 1.0f);
+    dl->AddText(ImVec2(mn.x + pad.x, mn.y + pad.y), on ? text_on : text_off, label);
     ImGui::Dummy(sz);
 }
 
@@ -701,9 +870,15 @@ static int g_tab = 0;
 static void segmented_tabs() {
     static const char* names[] = { "Left", "Right", "General", "Macros", "Config", "Analytics" };
     const int count = 6;
-    const float R = 7.0f;
+    const float R  = OXY_R;
+    const float PR = R - 1.0f;
     const float pad_x = 14.0f;
     const float h = ImGui::GetFrameHeight();
+
+    const ImU32 track   = ImGui::GetColorU32(ImGuiCol_FrameBg);
+    const ImU32 rim     = ImGui::GetColorU32(ImGuiCol_Separator);
+    const ImU32 txtSel  = ImGui::GetColorU32(ImGuiCol_Text);
+    const ImU32 txt     = ImGui::GetColorU32(ImGuiCol_Text, 0.80f);
 
     ImVec2 ls[count]; float w[count], total = 0.0f;
     for (int i = 0; i < count; i++) {
@@ -716,8 +891,8 @@ static void segmented_tabs() {
     ImVec2 mx(mn.x + total, mn.y + h);
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    ImVec4 track_col = OxDark(g_accent_active, 0.15f);
-    OxFrame(dl, mn, mx, R, OxCol(track_col), OxCol(track_col), OxCol(g_accent_hover, 60), 0, 0);
+    dl->AddRectFilled(mn, mx, track, R);
+    dl->AddRect(mn, mx, rim, R, 0, 1.0f);
 
     float x = mn.x;
     for (int i = 0; i < count; i++) {
@@ -727,18 +902,23 @@ static void segmented_tabs() {
         bool clicked = ImGui::InvisibleButton(names[i], ImVec2(w[i], h));
         bool hov = ImGui::IsItemHovered();
 
+        ImGuiID wid = ImGui::GetID(names[i]);
+        float t_h = widget_anim(wid, hov);
+        float t_s = widget_anim(wid + 1, sel);
+
         ImVec2 i0(s0.x + 2, s0.y + 2), i1(s1.x - 2, s1.y - 2);
-        if (sel) {
-            OxFrame(dl, i0, i1, R - 2, OxCol(g_accent_color), OxCol(OxDark(g_accent_color)),
-                    OxCol(g_accent_hover, 180), 120, 0);
-        } else if (hov) {
-            dl->AddRectFilled(i0, i1, IM_COL32(255, 255, 255, 18), R - 2);
+        if (t_s > 0.01f) {
+            dl->AddRectFilled(i0, i1, lerp_u32(IM_COL32(0,0,0,0), OxCol(g_accent_active), t_s), PR);
+            glass_gloss(dl, i0, i1, PR, i0.y + 1.0f, i0.y + (i1.y - i0.y) * 0.58f, (int)(80 * t_s));
+            dl->AddRect(i0, i1, lerp_u32(IM_COL32(0,0,0,0), OxCol(OxLight(g_accent_color), 200), t_s), PR, 0, 1.0f);
+        } else if (t_h > 0.01f) {
+            dl->AddRectFilled(i0, i1, IM_COL32(g_accent_color.x*255, g_accent_color.y*255, g_accent_color.z*255, (int)(64 * t_h)), PR);
         }
         if (i > 0 && !sel && g_tab != i - 1)
-            dl->AddLine(ImVec2(s0.x, s0.y + 5), ImVec2(s0.x, s1.y - 5), IM_COL32(255, 255, 255, 26), 1.0f);
+            dl->AddLine(ImVec2(s0.x, s0.y + 5), ImVec2(s0.x, s1.y - 5), rim, 1.0f);
 
         dl->AddText(ImVec2(s0.x + (w[i] - ls[i].x) * 0.5f, s0.y + (h - ls[i].y) * 0.5f),
-                    sel ? IM_COL32(242, 249, 255, 255) : IM_COL32(202, 218, 238, 215), names[i]);
+                    sel ? txtSel : txt, names[i]);
         if (clicked) g_tab = i;
         x += w[i];
     }
@@ -746,9 +926,12 @@ static void segmented_tabs() {
     ImGui::Spacing();
 }
 
+// remembers which preset button was applied per side
+static int s_applied_preset[2] = { -1, -1 };
+
 static void draw_clicker_tab(ClickerProfile& profile, ActivationMode& mode,
                              Clicker& clicker, int& key,
-                             const ClickerPreset* presets) {
+                             const ClickerPreset* presets, int side) {
     if (clicker.is_enabled())
         ImGui::TextColored(ImVec4(0.55f, 0.90f, 0.65f, 1.0f),
                            "ACTIVE  -  %.1f avg CPS  -  %u clicks",
@@ -762,6 +945,7 @@ static void draw_clicker_tab(ClickerProfile& profile, ActivationMode& mode,
 
         ImGui::TextUnformatted("Preset");
         const float sp = ImGui::GetStyle().ItemSpacing.x;
+        const float gap = ImGui::GetStyle().ItemSpacing.y;
         const float row_x = ImGui::GetCursorPosX();
         const float content_w = ImGui::GetContentRegionAvail().x;
         const float btn_h = ImGui::GetFrameHeight();
@@ -772,21 +956,23 @@ static void draw_clicker_tab(ClickerProfile& profile, ActivationMode& mode,
             float bw = pls.x + ImGui::GetStyle().FramePadding.x * 2.0f;
             if (i > 0) {
                 if (x_used + sp + bw > content_w) {
-                    line_y += btn_h + 4.0f;
+                    line_y += btn_h + gap;
                     ImGui::SetCursorPos(ImVec2(row_x, line_y));
                     x_used = 0.0f;
                 } else {
                     ImGui::SameLine(); x_used += sp;
                 }
             }
-            if (oxygen_button(presets[i].name)) {
+            bool is_applied = (s_applied_preset[side] == i);
+            if (oxygen_button(presets[i].name, ImVec2(0, 0), 0, 0, is_applied)) {
                 int saved_button = profile.mouse_button;
                 profile = presets[i].profile;
                 profile.mouse_button = saved_button;
+                s_applied_preset[side] = i;
             }
             x_used += bw;
         }
-        ImGui::SetCursorPosY(line_y + btn_h + ImGui::GetStyle().ItemSpacing.y);
+        ImGui::SetCursorPosY(line_y + btn_h + gap);
 
         int idx = mode == ActivationMode::TOGGLE ? 0 : (mode == ActivationMode::HOLD ? 1 : 2);
         if (row_combo("Activation", &idx, "Toggle\0Hold\0Mouse\0"))
@@ -803,7 +989,7 @@ static void draw_clicker_tab(ClickerProfile& profile, ActivationMode& mode,
         if (row_combo("Distribution", &dist_idx, "Gaussian\0Poisson\0Uniform\0"))
             profile.distribution = (DistributionType)dist_idx;
 
-        ImGui::Dummy(ImVec2(0, 4)); ImGui::TextDisabled("HUMANIZATION");
+        ImGui::Spacing(); ImGui::TextDisabled("HUMANIZATION");
         row_slider("Spike Chance", &profile.spike_chance, 0.0, 0.2, "%.3f");
         if (profile.spike_chance > 0) {
             row_slider("Spike Min", &profile.spike_min, 0.0, 5.0, "%.1f");
@@ -815,7 +1001,7 @@ static void draw_clicker_tab(ClickerProfile& profile, ActivationMode& mode,
             row_slider("Stutter Max", &profile.stutter_max, 0.0, 10.0, "%.1f");
         }
 
-        ImGui::Dummy(ImVec2(0, 4)); ImGui::TextDisabled("HOLD TIMING");
+        ImGui::Spacing(); ImGui::TextDisabled("HOLD TIMING");
         row_slider("Hold Mean (ms)",   &profile.hold_ms_mean,   10.0, 100.0, "%.1f");
         row_slider("Hold StdDev (ms)", &profile.hold_ms_stddev,  0.0,  20.0, "%.1f");
         row_slider("Hold Min (ms)",    &profile.hold_ms_min,     5.0,  50.0, "%.1f");
@@ -830,14 +1016,14 @@ static void draw_clicker_tab(ClickerProfile& profile, ActivationMode& mode,
         row_slider("CPS Fallout",       &profile.cps_minmax_fallout,0.0, 3.0, "%.2f");
         row_slider("Start Delay (ms)",  &profile.start_delay_ms,    0.0, 500.0, "%.0f");
 
-        ImGui::Dummy(ImVec2(0, 4)); ImGui::TextDisabled("DOUBLE CLICK");
+        ImGui::Spacing(); ImGui::TextDisabled("DOUBLE CLICK");
         row_slider("Chance", &profile.double_click_chance, 0.0, 0.3, "%.3f");
         if (profile.double_click_chance > 0) {
             row_slider("Delay Min (ms)", &profile.double_click_delay_min,  5.0,  80.0, "%.0f");
             row_slider("Delay Max (ms)", &profile.double_click_delay_max, 10.0, 120.0, "%.0f");
         }
 
-        ImGui::Dummy(ImVec2(0, 4)); ImGui::TextDisabled("FATIGUE BREAKS");
+        ImGui::Spacing(); ImGui::TextDisabled("FATIGUE BREAKS");
         row_check("Enable Breaks", &profile.breaks_enabled);
         if (profile.breaks_enabled) {
             row_slider("Break Every Min (s)",    &profile.break_interval_min,  5.0, 120.0, "%.1f");
@@ -891,6 +1077,16 @@ static void setup_kde_cursor() {
 
 void gui_run(GuiState& state) {
     setup_kde_cursor();
+
+    // Follow the KDE color scheme for the window body + text (Oxygen/Breeze grays)
+    {
+        float r, g, b;
+        if (read_kde_color("Colors:Window", "BackgroundNormal", r, g, b))
+            g_body_color = ImVec4(r, g, b, 1.0f);
+        if (read_kde_color("Colors:Window", "ForegroundNormal", r, g, b))
+            g_text_color = ImVec4(r, g, b, 1.0f);
+    }
+
     if (!glfwInit()) {
         fprintf(stderr, "Failed to initialize GLFW\n");
         return;
@@ -899,7 +1095,9 @@ void gui_run(GuiState& state) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-    glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
+    // Real compositor decorations (KWin/Oxygen titlebar), like Prism Launcher relies on
+    // the system decoration instead of faking a client-side titlebar.
+    glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
 
     GLFWwindow* window = glfwCreateWindow(700, 600, "Ghast Clicker", nullptr, nullptr);
     if (!window) {
@@ -921,7 +1119,7 @@ void gui_run(GuiState& state) {
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.IniFilename = nullptr;
 
-    // Real font instead of the pixelated embedded one
+    // Real font, a bit larger for the global scale bump
     {
         const char* candidates[] = {
             "/usr/share/fonts/inter/Inter-Regular.otf",
@@ -936,7 +1134,7 @@ void gui_run(GuiState& state) {
         };
         ImFont* font = nullptr;
         for (const char* p : candidates) {
-            if (FILE* f = fopen(p, "rb")) { fclose(f); font = io.Fonts->AddFontFromFileTTF(p, 16.0f); break; }
+            if (FILE* f = fopen(p, "rb")) { fclose(f); font = io.Fonts->AddFontFromFileTTF(p, 18.0f); break; }
         }
         if (!font) io.Fonts->AddFontDefault();
     }
@@ -946,7 +1144,6 @@ void gui_run(GuiState& state) {
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 130");
 
-    // Config profile state
     static char profile_name_buf[64] = "";
     int selected_profile = -1;
     auto profiles = ConfigFile::list_profiles();
@@ -954,31 +1151,9 @@ void gui_run(GuiState& state) {
     float status_timer = 0;
 
     bool always_on_top = false;
-    bool dragging = false;
-    double drag_start_x = 0, drag_start_y = 0;
-    int win_start_x = 0, win_start_y = 0;
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
-
-        // Window dragging via title bar
-        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-            double mx, my;
-            glfwGetCursorPos(window, &mx, &my);
-            if (!dragging && my < 30.0 && !ImGui::IsAnyItemActive()) {
-                dragging = true;
-                drag_start_x = mx;
-                drag_start_y = my;
-                glfwGetWindowPos(window, &win_start_x, &win_start_y);
-            }
-            if (dragging) {
-                int dx = (int)(mx - drag_start_x);
-                int dy = (int)(my - drag_start_y);
-                glfwSetWindowPos(window, win_start_x + dx, win_start_y + dy);
-            }
-        } else {
-            dragging = false;
-        }
 
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
@@ -987,23 +1162,24 @@ void gui_run(GuiState& state) {
         int display_w, display_h;
         glfwGetFramebufferSize(window, &display_w, &display_h);
 
+        // Scheme-gray body with an oxygen gloss "drop" from the titlebar into it
+        {
+            ImU32 body_col = OxCol(g_body_color);
+            ImU32 drop_top = OxCol(mulc(g_body_color, 1.50f));
+            const float DROP_H = 120.0f;
+            ImDrawList* bgdl = ImGui::GetBackgroundDrawList();
+            bgdl->AddRectFilled(ImVec2(0, 0), ImVec2((float)display_w, (float)display_h), body_col);
+            bgdl->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2((float)display_w, DROP_H),
+                                          drop_top, drop_top, body_col, body_col);
+            bgdl->AddLine(ImVec2(0, 0), ImVec2((float)display_w, 0), OxCol(mulc(g_body_color, 2.20f), 70));
+        }
+
         ImGui::SetNextWindowPos(ImVec2(0, 0));
         ImGui::SetNextWindowSize(ImVec2((float)display_w, (float)display_h));
 
         ImGuiWindowFlags wf = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                               ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar |
                               ImGuiWindowFlags_NoBackground;
-
-        // Theme-aware dynamic gradient background
-        ImVec4 bg_top = ImVec4(g_accent_color.x * 0.25f, g_accent_color.y * 0.25f, g_accent_color.z * 0.25f, 1.0f);
-        ImVec4 bg_bot = ImVec4(g_accent_color.x * 0.08f, g_accent_color.y * 0.08f, g_accent_color.z * 0.08f, 1.0f);
-
-        ImU32 bg_top_col = IM_COL32((int)(bg_top.x*255), (int)(bg_top.y*255), (int)(bg_top.z*255), 255);
-        ImU32 bg_bot_col = IM_COL32((int)(bg_bot.x*255), (int)(bg_bot.y*255), (int)(bg_bot.z*255), 255);
-
-        ImGui::GetBackgroundDrawList()->AddRectFilledMultiColor(
-            ImVec2(0, 0), ImVec2((float)display_w, (float)display_h),
-            bg_top_col, bg_top_col, bg_bot_col, bg_bot_col);
 
         if (ImGui::Begin("Ghast Clicker", nullptr, wf)) {
             bool l_on = state.left.is_enabled() || state.left_armed;
@@ -1013,7 +1189,7 @@ void gui_run(GuiState& state) {
             status_chip(r_on ? "R: ON" : "R: off", r_on);
             ImGui::SameLine();
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 70.0f);
-            if (oxygen_button(always_on_top ? "pinned" : "pin", ImVec2(70, 0))) {
+            if (oxygen_button(always_on_top ? "pinned" : "pin", ImVec2(70, 0), 0, 0, always_on_top)) {
                 always_on_top = !always_on_top;
                 glfwSetWindowAttrib(window, GLFW_FLOATING, always_on_top ? GLFW_TRUE : GLFW_FALSE);
             }
@@ -1024,12 +1200,12 @@ void gui_run(GuiState& state) {
             switch (g_tab) {
                 case 0:
                     draw_clicker_tab(state.config.left, state.config.left_mode,
-                                     state.left, state.config.key_left, LEFT_PRESETS);
+                                     state.left, state.config.key_left, LEFT_PRESETS, 0);
                     break;
 
                 case 1:
                     draw_clicker_tab(state.config.right, state.config.right_mode,
-                                     state.right, state.config.key_right, RIGHT_PRESETS);
+                                     state.right, state.config.key_right, RIGHT_PRESETS, 1);
                     break;
 
                 case 2: {
@@ -1370,14 +1546,14 @@ void gui_run(GuiState& state) {
                     break;
                 }
             }
+            oxygen_scrollbar();
         }
         ImGui::End();
 
         ImGui::Render();
         glViewport(0, 0, display_w, display_h);
 
-        // Dynamic clear color matches theme bottom gradient (no blue edges)
-        glClearColor(bg_bot.x, bg_bot.y, bg_bot.z, 1.0f);
+        glClearColor(g_body_color.x, g_body_color.y, g_body_color.z, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
