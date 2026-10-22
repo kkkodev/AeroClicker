@@ -165,6 +165,7 @@ struct Config {
     bool allowed_slots[9] = {true, false, false, false, false, false, false, false, false};
 
     bool audio_enabled = true;
+    bool macros_enabled = true;
     Macro macros[MAX_MACROS] = {};
 
     Config() {

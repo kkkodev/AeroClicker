@@ -1,0 +1,218 @@
+#include "gui_theme.hpp"
+#include "imgui.h"
+#include <cmath>
+
+ImVec4 g_accent_color(0.24f, 0.49f, 0.78f, 1.0f);
+ImVec4 g_accent_hover(0.33f, 0.58f, 0.86f, 1.0f);
+ImVec4 g_accent_active(0.17f, 0.37f, 0.62f, 1.0f);
+ImVec4 g_body_color(0.125f, 0.128f, 0.135f, 1.0f);
+ImVec4 g_text_color(0.95f, 0.95f, 0.95f, 1.0f);
+
+ImVec4 mulc(ImVec4 c, float k, float a) {
+    return ImVec4(c.x * k > 1.0f ? 1.0f : c.x * k,
+                  c.y * k > 1.0f ? 1.0f : c.y * k,
+                  c.z * k > 1.0f ? 1.0f : c.z * k, a);
+}
+
+bool read_kde_color(const char* section, const char* key, float &r, float &g, float &b) {
+    const char* home = getenv("HOME");
+    if (!home) return false;
+    std::string path = std::string(home) + "/.config/kdeglobals";
+    FILE* f = fopen(path.c_str(), "r");
+    if (!f) return false;
+    char line[256];
+    bool in = false;
+    size_t slen = strlen(section);
+    while (fgets(line, sizeof(line), f)) {
+        if (line[0] == '[') {
+            char* end = strchr(line, ']');
+            in = end && (size_t)(end - line - 1) == slen && strncmp(line + 1, section, slen) == 0;
+            continue;
+        }
+        if (in) {
+            char* eq = strchr(line, '=');
+            if (eq && strstr(line, key)) {
+                int cr, cg, cb;
+                if (sscanf(eq + 1, "%d,%d,%d", &cr, &cg, &cb) == 3) {
+                    r = cr / 255.0f; g = cg / 255.0f; b = cb / 255.0f;
+                    fclose(f); return true;
+                }
+            }
+        }
+    }
+    fclose(f);
+    return false;
+}
+
+static bool read_kde_accent_color(float &r, float &g, float &b) {
+    return read_kde_color("Colors:Selection", "BackgroundNormal", r, g, b);
+}
+
+void setup_oxygen_theme(int preset, float custom_r, float custom_g, float custom_b) {
+    ImGuiStyle& style = ImGui::GetStyle();
+    if (preset == 0) {
+        g_accent_color = ImVec4(0.24f, 0.49f, 0.78f, 1.0f);
+    } else if (preset == 1) {
+        g_accent_color = ImVec4(0.80f, 0.20f, 0.20f, 1.0f);
+    } else if (preset == 2) {
+        g_accent_color = ImVec4(0.20f, 0.80f, 0.30f, 1.0f);
+    } else if (preset == 3) {
+        g_accent_color = ImVec4(0.60f, 0.30f, 0.90f, 1.0f);
+    } else if (preset == 4) {
+        g_accent_color = ImVec4(custom_r, custom_g, custom_b, 1.0f);
+    } else if (preset == 5) {
+        float kr, kg, kb;
+        if (read_kde_accent_color(kr, kg, kb)) {
+            g_accent_color = ImVec4(kr, kg, kb, 1.0f);
+        } else {
+            g_accent_color = ImVec4(0.24f, 0.49f, 0.78f, 1.0f);
+        }
+    }
+
+    g_accent_hover = ImVec4(
+        g_accent_color.x + (1.0f - g_accent_color.x) * 0.15f,
+                            g_accent_color.y + (1.0f - g_accent_color.y) * 0.15f,
+                            g_accent_color.z + (1.0f - g_accent_color.z) * 0.15f, 1.0f);
+    g_accent_active = ImVec4(
+        g_accent_color.x * 0.75f, g_accent_color.y * 0.75f, g_accent_color.z * 0.75f, 1.0f);
+
+    ImVec4* colors = style.Colors;
+    ImVec4 frame_bg   = mulc(g_body_color, 0.80f, 0.90f);
+    ImVec4 frame_hov  = mulc(g_body_color, 1.25f, 0.95f);
+    ImVec4 frame_act  = mulc(g_body_color, 1.45f, 1.00f);
+    ImVec4 win_bg     = g_body_color;
+    ImVec4 pop_bg     = mulc(g_body_color, 0.85f, 1.00f);
+    ImVec4 title_bg   = mulc(g_body_color, 0.75f, 1.00f);
+    ImVec4 text_dis   = ImVec4(g_text_color.x * 0.55f + g_body_color.x * 0.45f,
+                               g_text_color.y * 0.55f + g_body_color.y * 0.45f,
+                               g_text_color.z * 0.55f + g_body_color.z * 0.45f, 1.00f);
+
+    colors[ImGuiCol_Text]                   = g_text_color;
+    colors[ImGuiCol_TextDisabled]           = text_dis;
+    colors[ImGuiCol_WindowBg]               = win_bg;
+    colors[ImGuiCol_ChildBg]                = ImVec4(frame_bg.x, frame_bg.y, frame_bg.z, 0.0f);
+    colors[ImGuiCol_PopupBg]                = pop_bg;
+    colors[ImGuiCol_Border]                 = mulc(g_body_color, 3.60f, 0.55f);
+    colors[ImGuiCol_BorderShadow]           = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+    colors[ImGuiCol_FrameBg]                = frame_bg;
+    colors[ImGuiCol_FrameBgHovered]         = frame_hov;
+    colors[ImGuiCol_FrameBgActive]          = frame_act;
+    colors[ImGuiCol_TitleBg]                = title_bg;
+    colors[ImGuiCol_TitleBgActive]          = title_bg;
+    colors[ImGuiCol_TitleBgCollapsed]       = mulc(g_body_color, 0.60f, 1.00f);
+    colors[ImGuiCol_MenuBarBg]              = mulc(g_body_color, 0.80f, 0.90f);
+    colors[ImGuiCol_ScrollbarBg]            = ImVec4(0, 0, 0, 0);
+    colors[ImGuiCol_ScrollbarGrab]          = ImVec4(0, 0, 0, 0);
+    colors[ImGuiCol_ScrollbarGrabHovered]   = ImVec4(0, 0, 0, 0);
+    colors[ImGuiCol_ScrollbarGrabActive]    = ImVec4(0, 0, 0, 0);
+    colors[ImGuiCol_CheckMark]              = mulc(g_body_color, 6.50f, 1.00f);
+    colors[ImGuiCol_SliderGrab]             = ImVec4(0,0,0,0);
+    colors[ImGuiCol_SliderGrabActive]       = ImVec4(0,0,0,0);
+    colors[ImGuiCol_Button]                 = g_accent_active;
+    colors[ImGuiCol_ButtonHovered]          = g_accent_color;
+    colors[ImGuiCol_ButtonActive]           = g_accent_hover;
+    colors[ImGuiCol_Header]                 = mulc(g_body_color, 1.80f, 1.00f);
+    colors[ImGuiCol_HeaderHovered]          = mulc(g_body_color, 2.20f, 1.00f);
+    colors[ImGuiCol_HeaderActive]           = mulc(g_body_color, 2.60f, 1.00f);
+    colors[ImGuiCol_Separator]              = mulc(g_body_color, 2.80f, 0.60f);
+    colors[ImGuiCol_SeparatorHovered]       = mulc(g_body_color, 2.80f, 0.60f);
+    colors[ImGuiCol_SeparatorActive]        = mulc(g_body_color, 2.80f, 0.60f);
+    colors[ImGuiCol_ResizeGrip]             = mulc(g_body_color, 3.60f, 0.30f);
+    colors[ImGuiCol_ResizeGripHovered]      = g_accent_color;
+    colors[ImGuiCol_ResizeGripActive]       = g_accent_hover;
+    colors[ImGuiCol_Tab]                    = mulc(g_body_color, 1.10f, 0.90f);
+    colors[ImGuiCol_TabHovered]             = g_accent_color;
+    colors[ImGuiCol_TabActive]              = g_accent_active;
+    colors[ImGuiCol_TabUnfocused]           = mulc(g_body_color, 0.95f, 0.90f);
+    colors[ImGuiCol_TabUnfocusedActive]     = g_accent_active;
+    colors[ImGuiCol_PlotLines]              = g_accent_color;
+    colors[ImGuiCol_PlotLinesHovered]       = g_accent_hover;
+    colors[ImGuiCol_PlotHistogram]          = g_accent_color;
+    colors[ImGuiCol_PlotHistogramHovered]   = g_accent_hover;
+    colors[ImGuiCol_TextSelectedBg]         = ImVec4(g_accent_color.x, g_accent_color.y, g_accent_color.z, 0.35f);
+    colors[ImGuiCol_DragDropTarget]         = g_accent_hover;
+    colors[ImGuiCol_NavHighlight]           = g_accent_color;
+    colors[ImGuiCol_NavWindowingHighlight]  = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
+    colors[ImGuiCol_NavWindowingDimBg]      = ImVec4(0.00f, 0.00f, 0.00f, 0.20f);
+    colors[ImGuiCol_ModalWindowDimBg]       = ImVec4(0.00f, 0.00f, 0.00f, 0.35f);
+
+    style.WindowPadding         = ImVec2(12, 10);
+    style.FramePadding          = ImVec2(8, 5);
+    style.ItemSpacing           = ImVec2(8, 8);
+    style.ItemInnerSpacing      = ImVec2(6, 4);
+    style.TouchExtraPadding     = ImVec2(0, 0);
+    style.IndentSpacing         = 20.0f;
+    style.ScrollbarSize         = 14.0f;
+    style.GrabMinSize           = 12.0f;
+    style.WindowBorderSize      = 0.0f;
+    style.ChildBorderSize       = 0.0f;
+    style.PopupBorderSize       = 1.0f;
+    style.FrameBorderSize       = 1.0f;
+    style.TabBorderSize         = 0.0f;
+    style.WindowRounding   = 4.0f;
+    style.ChildRounding    = 4.0f;
+    style.FrameRounding    = 4.0f;
+    style.PopupRounding    = 4.0f;
+    style.ScrollbarRounding= 4.0f;
+    style.GrabRounding     = 4.0f;
+    style.TabRounding      = 4.0f;
+    style.AntiAliasedLines = true;
+    style.AntiAliasedFill  = true;
+    style.WindowTitleAlign      = ImVec2(0.5f, 0.5f);
+    style.WindowMenuButtonPosition = ImGuiDir_None;
+    style.ColorButtonPosition   = ImGuiDir_Right;
+    style.ScaleAllSizes(1.12f);
+}
+
+ImU32 OxCol(ImVec4 c, int a) {
+    return IM_COL32((int)(c.x*255), (int)(c.y*255), (int)(c.z*255), a);
+}
+ImVec4 OxLight(ImVec4 c) {
+    return ImVec4(c.x*1.3f > 1.0f ? 1.0f : c.x*1.3f,
+                  c.y*1.3f > 1.0f ? 1.0f : c.y*1.3f,
+                  c.z*1.3f > 1.0f ? 1.0f : c.z*1.3f, 1.0f);
+}
+ImVec4 OxDark(ImVec4 c, float k) {
+    return ImVec4(c.x*k, c.y*k, c.z*k, 1.0f);
+}
+
+void setup_kde_cursor() {
+    const char* home = getenv("HOME");
+    if (!home) return;
+    std::string path = std::string(home) + "/.config/kcminputrc";
+    FILE* f = fopen(path.c_str(), "r");
+    if (!f) return;
+    char line[256];
+    bool in_mouse = false;
+    char theme[128] = "";
+    char size[32] = "";
+    while (fgets(line, sizeof(line), f)) {
+        if (strncmp(line, "[Mouse]", 7) == 0) {
+            in_mouse = true;
+            continue;
+        }
+        if (line[0] == '[') {
+            in_mouse = false;
+            continue;
+        }
+        if (in_mouse) {
+            char* eq = strchr(line, '=');
+            if (eq) {
+                *eq = '\0';
+                char* key = line;
+                char* val = eq + 1;
+                while (*key == ' ' || *key == '\t') key++;
+                char* end = key + strlen(key) - 1;
+                while (end > key && (*end == ' ' || *end == '\t' || *end == '\n' || *end == '\r')) *end-- = '\0';
+                while (*val == ' ' || *val == '\t') val++;
+                end = val + strlen(val) - 1;
+                while (end > val && (*end == ' ' || *end == '\t' || *end == '\n' || *end == '\r')) *end-- = '\0';
+                if (strcmp(key, "cursorTheme") == 0) strncpy(theme, val, sizeof(theme)-1);
+                else if (strcmp(key, "cursorSize") == 0) strncpy(size, val, sizeof(size)-1);
+            }
+        }
+    }
+    fclose(f);
+    if (theme[0]) setenv("XCURSOR_THEME", theme, 1);
+    if (size[0]) setenv("XCURSOR_SIZE", size, 1);
+}

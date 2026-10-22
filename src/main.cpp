@@ -237,7 +237,7 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                         else Audio::beep_off();
                     }
                 }
-                else if (ev.value == 1) {
+                else if (ev.value == 1 && config.macros_enabled) {
                     for (int m = 0; m < MAX_MACROS; m++) {
                         if (config.macros[m].key_bind > 0 &&
                             ev.code == static_cast<unsigned>(config.macros[m].key_bind) &&
