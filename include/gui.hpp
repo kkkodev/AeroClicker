@@ -4,6 +4,8 @@
 #include "config_file.hpp"
 #include "macro.hpp"
 #include <chrono>
+#include <vector>
+#include <string>
 
 struct GuiState {
     Config& config;
@@ -27,7 +29,7 @@ struct GuiState {
     double peak_cps_right = 0.0;
 
     GuiState(Config& c, Clicker& l, Clicker& r, const UInputDevice& dev)
-        : config(c), left(l), right(r), macro_runner(dev) {}
+    : config(c), left(l), right(r), macro_runner(dev) {}
 };
 
 void gui_run(GuiState& state);
