@@ -21,6 +21,8 @@ find_package(OpenGL REQUIRED)
 add_executable(ghast-clicker
     src/main.cpp
     src/gui.cpp
+    src/gui_theme.cpp
+    src/gui_widgets.cpp
     ${IMGUI_SOURCES}
 )
 
