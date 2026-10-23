@@ -166,6 +166,7 @@ static void draw_macros_tab(GuiState& state) {
     auto& mac = state.config.macros[state.selected_macro];
     ImGui::SetNextItemWidth(panel_inner() * 0.5f);
     ImGui::InputText("##macname", mac.name, sizeof(mac.name));
+    field_gloss_last_item();  // Add slider-style sheen
     ImGui::SameLine();
     oxygen_checkbox("Loop", &mac.loop, false);
     keybind_row("Macro Key", mac.key_bind);
@@ -259,10 +260,9 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
     {
         ImVec2 lsz(panel_inner(), 100);
         ImVec2 lp0 = ImGui::GetCursorScreenPos();
-        ImDrawList* pdl = ImGui::GetWindowDrawList();
-        pdl->AddRectFilled(lp0, ImVec2(lp0.x + lsz.x, lp0.y + lsz.y), ImGui::GetColorU32(ImGuiCol_FrameBg), 4.0f);
-        pdl->AddRect(lp0, ImVec2(lp0.x + lsz.x, lp0.y + lsz.y), ImGui::GetColorU32(ImGuiCol_Border), 4.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4, 4));
+        ImVec2 lp1(lp0.x + lsz.x, lp0.y + lsz.y);
+        field_background(ImGui::GetWindowDrawList(), lp0, lp1, 4.0f, true);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(5, 5));
         if (ImGui::BeginChild("##profiles", lsz)) {
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 3));
             for (int i = 0; i < (int)profiles.size(); i++) {
@@ -276,7 +276,9 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
         ImGui::PopStyleVar();
     }
     ImGui::TextDisabled("Profile name");
-    ox_input_text("##profile_name", profile_name_buf, 64, "New profile name...", panel_inner() * 0.6f);
+    ImGui::SetNextItemWidth(panel_inner() * 0.6f);
+    ImGui::InputTextWithHint("##profile_name", "New profile name...", profile_name_buf, 64);
+    field_gloss_last_item();  // Add slider-style sheen
     if (oxygen_button("Save", ImVec2(80, 0))) {
         std::string name = profile_name_buf[0] ? profile_name_buf : "config";
         if (ConfigFile::save(state.config, name)) {
@@ -437,8 +439,7 @@ void gui_run(GuiState& state) {
     auto profiles = ConfigFile::list_profiles();
     char status_msg[128] = "";
     float status_timer = 0;
-    bool always_on_top = false;
-    int current_tab = 0;
+    int current_tab = 0;   // pin / always_on_top removed entirely
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
@@ -446,7 +447,6 @@ void gui_run(GuiState& state) {
         ImGui_ImplGlfw_NewFrame();
 
         // ---- fractional scaling (Wayland wp-fractional-scale):
-        // layout in logical window space; render into the physical framebuffer.
         int win_w = 1, win_h = 1, fb_w = 1, fb_h = 1;
         glfwGetWindowSize(window, &win_w, &win_h);
         glfwGetFramebufferSize(window, &fb_w, &fb_h);
@@ -455,16 +455,15 @@ void gui_run(GuiState& state) {
         if (fb_w < 1) fb_w = win_w;
         if (fb_h < 1) fb_h = win_h;
         const float ui_scale = (float)fb_w / (float)win_w;
-        io.DisplaySize = ImVec2((float)win_w, (float)win_h);          // override backend: one coordinate space
-        io.DisplayFramebufferScale = ImVec2(ui_scale, ui_scale);      // GL backend scales scissors to pixels
+        io.DisplaySize = ImVec2((float)win_w, (float)win_h);
+        io.DisplayFramebufferScale = ImVec2(ui_scale, ui_scale);
 
-        // re-bake the font atlas at physical resolution when the scale changes (crisp at 125/150/200%)
         if (s_font_scale != ui_scale) {
             s_font_scale = ui_scale;
             io.Fonts->Clear();
             ImFont* f = s_font_path[0] ? io.Fonts->AddFontFromFileTTF(s_font_path, 18.0f * ui_scale) : nullptr;
             if (!f) f = io.Fonts->AddFontDefault();
-            f->Scale = 1.0f / ui_scale;                 // hi-res raster, logical metrics stay 18px
+            f->Scale = 1.0f / ui_scale;
             ImFont* big = s_font_path[0] ? io.Fonts->AddFontFromFileTTF(s_font_path, 30.0f * ui_scale) : nullptr;
             if (big) big->Scale = 1.0f / ui_scale;
             set_big_font(big);
@@ -476,12 +475,12 @@ void gui_run(GuiState& state) {
 
         {
             ImU32 body_col = OxCol(g_body_color);
-            ImU32 drop_top = OxCol(ox_is_light() ? mulc(g_body_color, 1.06f) : mulc(g_body_color, 1.50f));
+            ImU32 drop_top = OxCol(mulc(g_body_color, 1.50f));
             const float DROP_H = 120.0f;
             ImDrawList* bgdl = ImGui::GetBackgroundDrawList();
             bgdl->AddRectFilled(ImVec2(0, 0), ImVec2((float)win_w, (float)win_h), body_col);
             bgdl->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2((float)win_w, DROP_H), drop_top, drop_top, body_col, body_col);
-            bgdl->AddLine(ImVec2(0, 0), ImVec2((float)win_w, 0), OxCol(ox_is_light() ? mulc(g_body_color, 0.80f) : mulc(g_body_color, 2.20f), 70));
+            bgdl->AddLine(ImVec2(0, 0), ImVec2((float)win_w, 0), OxCol(mulc(g_body_color, 2.20f), 70));
         }
 
         ImGui::SetNextWindowPos(ImVec2(0, 0));
@@ -502,20 +501,24 @@ void gui_run(GuiState& state) {
                     state.macro_runner.stop();
             }
 
-            // top bar: live indicators + pin
+            // top bar: tab row with L/R indicators inline, flush right (pin removed)
             bool l_on = state.left.is_enabled() || state.left_armed;
             bool r_on = state.right.is_enabled() || state.right_armed;
-            click_indicator("L", l_on);
-            ImGui::SameLine(0, 6);
-            click_indicator("R", r_on);
-            ImGui::SameLine();
-            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 70.0f);
-            if (oxygen_button(always_on_top ? "pinned" : "pin", ImVec2(70, 0), 0, 0, always_on_top)) {
-                always_on_top = !always_on_top;
-                glfwSetWindowAttrib(window, GLFW_FLOATING, always_on_top ? GLFW_TRUE : GLFW_FALSE);
-            }
-            ImGui::Spacing();
+            ImVec2 tab_mn = ImGui::GetCursorScreenPos();
+            float right = tab_mn.x + ImGui::GetContentRegionAvail().x;  // shrinks when scrollbar is reserved
             segmented_tabs(TAB_NAMES, TAB_COUNT, current_tab);
+            ImVec2 after_tabs = ImGui::GetCursorScreenPos();
+            {
+                ImVec2 szL = click_indicator_size("L");
+                ImVec2 szR = click_indicator_size("R");
+                float x = right - szR.x - 6.0f - szL.x;
+                float y = tab_mn.y + (ImGui::GetFrameHeight() - szL.y) * 0.5f;
+                ImGui::SetCursorScreenPos(ImVec2(x, y));
+                click_indicator("L", l_on);
+                ImGui::SameLine(0, 6);
+                click_indicator("R", r_on);
+            }
+            ImGui::SetCursorScreenPos(after_tabs);
             ImGui::Spacing();
 
             switch (current_tab) {
@@ -531,7 +534,7 @@ void gui_run(GuiState& state) {
         ImGui::End();
 
         ImGui::Render();
-        glViewport(0, 0, fb_w, fb_h);   // physical pixels — the ONLY place framebuffer size is used
+        glViewport(0, 0, fb_w, fb_h);
         glClearColor(g_body_color.x, g_body_color.y, g_body_color.z, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

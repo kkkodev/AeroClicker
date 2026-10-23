@@ -347,6 +347,33 @@ void setup_key_callbacks(GLFWwindow* window) {
     glfwSetMouseButtonCallback(window, mouse_button_callback);
 }
 
+static float fb_scale() {
+    float s = ImGui::GetIO().DisplayFramebufferScale.x;
+    return s > 0.0f ? s : 1.0f;
+}
+static float crisp_lo(float v) { float s = fb_scale(); return (floorf(v * s) + 0.5f) / s; }
+static float crisp_hi(float v) { float s = fb_scale(); return (ceilf(v * s) - 0.5f) / s; }
+static ImVec2 crisp_min(ImVec2 p) { return ImVec2(crisp_lo(p.x), crisp_lo(p.y)); }
+static ImVec2 crisp_max(ImVec2 p) { return ImVec2(crisp_hi(p.x), crisp_hi(p.y)); }
+
+void field_background(ImDrawList* dl, ImVec2 r0, ImVec2 r1, float rounding, bool border) {
+    if (r1.x <= r0.x || r1.y <= r0.y) return;
+    float s = fb_scale();
+    ImVec2 a(floorf(r0.x * s) / s, floorf(r0.y * s) / s);
+    ImVec2 b(ceilf(r1.x * s) / s, ceilf(r1.y * s) / s);
+    dl->AddRectFilled(a, b, OxCol(mulc(g_body_color, 0.80f), 230), rounding);
+    glass_gloss(dl, a, b, rounding, a.y + 1.0f, a.y + (b.y - a.y) * 0.55f, 36);
+    if (border)
+        dl->AddRect(crisp_min(a), crisp_max(b), OxCol(mulc(g_body_color, 3.60f), 140),
+                    rounding > 0.5f ? rounding - 0.5f : 0.0f, 0, 1.0f / s);
+}
+
+void field_gloss_last_item() {
+    ImVec2 r0 = ImGui::GetItemRectMin(), r1 = ImGui::GetItemRectMax();
+    glass_gloss(ImGui::GetWindowDrawList(), r0, r1, ImGui::GetStyle().FrameRounding,
+                r0.y + 1.0f, r0.y + (r1.y - r0.y) * 0.55f, 36);
+}
+
 // ---------- scrollbar ----------
 
 void oxygen_scrollbar() {
@@ -356,33 +383,42 @@ void oxygen_scrollbar() {
     ImVec2 wp = ImGui::GetWindowPos();
     ImVec2 ws = ImGui::GetWindowSize();
     const float sbw = st.ScrollbarSize;
+    float s = fb_scale();
     ImDrawList* dl = ImGui::GetWindowDrawList();
     dl->PushClipRect(wp, ImVec2(wp.x + ws.x, wp.y + ws.y), false);
-    ImVec2 t0(wp.x + ws.x - sbw, wp.y);
-    ImVec2 t1(wp.x + ws.x, wp.y + ws.y);
-    AddRoundedRectGradCenter(dl, t0, t1, OxCol(g_body_color), OxCol(mulc(g_body_color, ox_is_light() ? 0.88f : 0.80f)), st.ScrollbarRounding, 10);
-    ox_outline(dl, t0, t1, st.ScrollbarRounding, ox_rim_neutral(140));
+
+    // track: snapped to whole physical pixels so its 1px border never smears
+    ImVec2 t0(floorf((wp.x + ws.x - sbw) * s) / s, floorf(wp.y * s) / s);
+    ImVec2 t1(ceilf((wp.x + ws.x) * s) / s, ceilf((wp.y + ws.y) * s) / s);
+    AddRoundedRectGradCenter(dl, t0, t1, OxCol(g_body_color), OxCol(mulc(g_body_color, 0.80f)), st.ScrollbarRounding, 10);
+    dl->AddRect(crisp_min(t0), crisp_max(t1), OxCol(mulc(g_body_color, 0.70f), 140), st.ScrollbarRounding, 0, 1.0f);
+
     const float sy = ImGui::GetScrollY();
     const float track_h = t1.y - t0.y;
     float thumb_h = track_h * (track_h / (track_h + smax));
     if (thumb_h < st.GrabMinSize) thumb_h = st.GrabMinSize;
     if (thumb_h > track_h) thumb_h = track_h;
     float ty = t0.y + (sy / smax) * (track_h - thumb_h);
-    ImVec2 g0(t0.x + 1.5f, ty + 1.0f), g1(t1.x - 1.5f, ty + thumb_h - 1.0f);
-    float gr = st.ScrollbarRounding - 2.0f; if (gr < 1.0f) gr = 1.0f;
+
+    // thumb: exactly 1px narrower than the track on each side (never merges with it)
+    const float inset = 1.0f;
+    ImVec2 g0(t0.x + inset, ty + inset);
+    ImVec2 g1(t1.x - inset, ty + thumb_h - inset);
+    float gr = st.ScrollbarRounding - 1.0f; if (gr < 1.0f) gr = 1.0f;
+
     ImVec2 mp = ImGui::GetMousePos();
     bool in_track = mp.x >= t0.x && mp.x <= t1.x && mp.y >= t0.y && mp.y <= t1.y;
-    bool in_thumb = mp.x >= g0.x - 1.0f && mp.x <= g1.x + 1.0f && mp.y >= g0.y - 1.0f && mp.y <= g1.y + 1.0f;
+    bool in_thumb = mp.x >= g0.x && mp.x <= g1.x && mp.y >= g0.y && mp.y <= g1.y;
     static bool s_thumb_drag = false;
     if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) s_thumb_drag = false;
     else if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && in_track) s_thumb_drag = true;
     bool lit = in_thumb || s_thumb_drag;
     float t = widget_anim(ImGui::GetID("##sb_thumb"), lit);
-    ImU32 center_c = OxCol(mulc(g_body_color, ox_is_light() ? 1.15f : 1.85f));
-    ImU32 edge_c   = OxCol(mulc(g_body_color, ox_is_light() ? 0.95f : 1.45f));
-    ImU32 rim_c    = lerp_u32(ox_thumb_rim(), ox_accent_rim(), t);
+    ImU32 center_c = OxCol(mulc(g_body_color, 1.85f));
+    ImU32 edge_c   = OxCol(mulc(g_body_color, 1.45f));
+    ImU32 rim_c    = lerp_u32(OxCol(mulc(g_body_color, 4.30f), 200), OxCol(OxLight(g_accent_color), 220), t);
     AddRoundedRectGradCenter(dl, g0, g1, center_c, edge_c, gr, 10);
-    ox_outline(dl, g0, g1, gr, rim_c);
+    dl->AddRect(crisp_min(g0), crisp_max(g1), rim_c, gr, 0, 1.0f);
     dl->PopClipRect();
 }
 
@@ -419,6 +455,35 @@ bool oxygen_button(const char* label, ImVec2 size_arg, ImU32 c1_override, ImU32 
     const char* tend = strstr(label, "##");
     dl->AddText(ImVec2(mn.x + (sz.x - ls.x) * 0.5f, vcenter_top(mn.y, mx.y)),
                 ox_ink_on(c1), label, tend ? tend : nullptr);
+    return clicked;
+}
+
+bool oxygen_field_button(const char* label, ImVec2 size_arg, bool armed) {
+    const float R = OXY_R;
+    float s = fb_scale();
+    const char* tend = strstr(label, "##");
+    ImVec2 ls = ImGui::CalcTextSize(label, nullptr, true, tend ? (float)(tend - label) : -1.0f);
+    ImVec2 sz = size_arg;
+    if (sz.x <= 0) sz.x = ls.x + ImGui::GetStyle().FramePadding.x * 2.0f;
+    if (sz.y <= 0) sz.y = ImGui::GetFrameHeight();
+    ImVec2 mn = ImGui::GetCursorScreenPos();
+    ImVec2 mx(mn.x + sz.x, mn.y + sz.y);
+    bool clicked = ImGui::InvisibleButton(label, sz);
+    bool hov = ImGui::IsItemHovered();
+    float t_h = widget_anim(ImGui::GetID(label), hov || armed);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    field_background(dl, mn, mx, R, true);
+    if (t_h > 0.01f)
+        dl->AddRect(crisp_min(mn), crisp_max(mx),
+                    lerp_u32(IM_COL32(0, 0, 0, 0), OxCol(OxLight(g_accent_color), 220), t_h),
+                    R > 0.5f ? R - 0.5f : 0.0f, 0, 1.0f / s);
+
+        ImVec2 a(floorf(mn.x * s) / s, floorf(mn.y * s) / s);
+    ImVec2 b(ceilf(mx.x * s) / s, ceilf(mx.y * s) / s);
+    dl->AddText(ImVec2(a.x + ((b.x - a.x) - ls.x) * 0.5f, vcenter_top(a.y, b.y)),
+                armed ? OxCol(OxLight(g_accent_color)) : ImGui::GetColorU32(ImGuiCol_Text),
+                label, tend ? tend : nullptr);
     return clicked;
 }
 
@@ -497,11 +562,13 @@ bool row_slider(const char* label, double* v, double lo, double hi, const char* 
     char id[96]; snprintf(id, sizeof(id), "##%s", label);
     bool changed = slider_widget(id, v, lo, hi, fmt);
     ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
+    ImGui::SetNextItemWidth(VALUE_W);
     char vid[112]; snprintf(vid, sizeof(vid), "##%s_val", label);
-    if (ox_input_double(vid, v, 0.0, 0.0, fmt, VALUE_W)) {
+    if (ImGui::InputDouble(vid, v, 0.0, 0.0, fmt)) {
         if (*v < lo) *v = lo; else if (*v > hi) *v = hi;
         changed = true;
     }
+    field_gloss_last_item();
     return changed;
 }
 
@@ -511,25 +578,25 @@ bool stacked_slider(const char* label, double* v, double lo, double hi, const ch
     char id[96]; snprintf(id, sizeof(id), "##%s", label);
     bool changed = slider_widget(id, v, lo, hi, fmt);
     ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
+    ImGui::SetNextItemWidth(VALUE_W);
     char vid[112]; snprintf(vid, sizeof(vid), "##%s_val", label);
-    if (ox_input_double(vid, v, 0.0, 0.0, fmt, VALUE_W)) {
+    if (ImGui::InputDouble(vid, v, 0.0, 0.0, fmt)) {
         if (*v < lo) *v = lo; else if (*v > hi) *v = hi;
         changed = true;
     }
+    field_gloss_last_item();
     return changed;
 }
 
 // ---------- combos ----------
-
 
 bool combo_framed(const char* id, int* idx, const char* items) {
     int count = 0;
     for (const char* p = items; *p; p += strlen(p) + 1) count++;
     const char* preview = items;
     for (int i = 0; i < *idx && *preview; i++) preview += strlen(preview) + 1;
-
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4, 4));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
     const float FR = ImGui::GetStyle().FrameRounding;
     const float arrow_sz = ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.x * 2.0f;
     ImVec2 f0 = ImGui::GetCursorScreenPos();
@@ -544,31 +611,55 @@ bool combo_framed(const char* id, int* idx, const char* items) {
     bool fhov = ImGui::IsMouseHoveringRect(f0, f1);
     float t_h = widget_anim(wid, fhov);
     float t_o = widget_anim(wid + 1, open);
-    ImU32 c1 = lerp_u32(ox_fill_top(), OxCol(g_accent_color), t_o);
-    ImU32 c2 = lerp_u32(ox_fill_bot(), OxCol(OxDark(g_accent_color)), t_o);
-    ImU32 bc = lerp_u32(ox_rim_neutral(200), ox_accent_rim(), t_h > t_o ? t_h : t_o);
-    OxFrame(dl, f0, f1, FR, c1, c2, bc, 60 + (int)(80 * t_o), ox_is_light() ? 26 : 60);
-    ImU32 fg = open ? ox_ink_fill(g_accent_color, 0.12f) : ox_ink_on(ox_fill_top());
-    dl->AddText(ImVec2(f0.x + ImGui::GetStyle().FramePadding.x, vcenter_top(f0.y, f1.y)), fg, preview, nullptr);
+    ImU32 c1 = lerp_u32(OxCol(mulc(g_body_color, 2.20f)), OxCol(g_accent_color), t_o);
+    ImU32 c2 = lerp_u32(OxCol(mulc(g_body_color, 1.45f)), OxCol(OxDark(g_accent_color)), t_o);
+    ImU32 bc = lerp_u32(OxCol(mulc(g_body_color, 3.60f), 200), OxCol(OxLight(g_accent_color), 220), t_h > t_o ? t_h : t_o);
+    OxFrame(dl, f0, f1, FR, c1, c2, bc, 60 + (int)(80 * t_o), 60);
+    dl->AddText(ImVec2(f0.x + ImGui::GetStyle().FramePadding.x, vcenter_top(f0.y, f1.y)),
+                lerp_u32(OxCol(g_text_color, 205), IM_COL32(238, 246, 255, 255), t_o), preview, nullptr);
     float ax = f1.x - arrow_sz * 0.5f, ay = (f0.y + f1.y) * 0.5f;
-    float as = 6.0f;
-    if (open)
-        dl->AddTriangleFilled(ImVec2(ax - as, ay + as * 0.5f), ImVec2(ax + as, ay + as * 0.5f), ImVec2(ax, ay - as * 0.5f), fg);
-    else
-        dl->AddTriangleFilled(ImVec2(ax - as, ay - as * 0.5f), ImVec2(ax + as, ay - as * 0.5f), ImVec2(ax, ay + as * 0.5f), fg);
     if (open) {
+        float as = 6.0f;
+        dl->AddTriangleFilled(ImVec2(ax - as, ay + as * 0.5f), ImVec2(ax + as, ay + as * 0.5f), ImVec2(ax, ay - as * 0.5f), IM_COL32(255, 255, 255, 220));
+    } else {
+        float as = 6.0f;
+        dl->AddTriangleFilled(ImVec2(ax - as, ay - as * 0.5f), ImVec2(ax + as, ay - as * 0.5f), ImVec2(ax, ay + as * 0.5f), IM_COL32(255, 255, 255, 220));
+    }
+    if (open) {
+        const float PPAD = 5.0f;
+        float s = fb_scale();
+        ImGui::PushStyleColor(ImGuiCol_Border, mulc(g_body_color, 4.20f, 0.75f));
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 4));
         ImDrawList* pdl = ImGui::GetWindowDrawList();
-        ImVec4 tint = lerp4(ImGui::GetStyle().Colors[ImGuiCol_PopupBg], g_accent_color, 0.35f);
-        ImU32 tcol_sel = ox_ink_fill(tint, 0.0f);
+        ImVec2 ppos = ImGui::GetWindowPos();
+        ImVec2 psize = ImGui::GetWindowSize();
+
+        float max_tw = 0.0f;
+        for (const char* p = items; *p; p += strlen(p) + 1) {
+            float tw = ImGui::CalcTextSize(p, nullptr, true).x;
+            if (tw > max_tw) max_tw = tw;
+        }
+        // items inset by PPAD each side AND popup stays exactly frame-width
+        float item_w = fw - PPAD * 2.0f;
+        float need = max_tw + ImGui::GetStyle().FramePadding.x * 2.0f;
+        if (need > item_w) item_w = need;
+
+        // fill inset 1px so it never peeks outside ImGui's own popup border
+        field_background(pdl, ImVec2(ppos.x + 1.0f, ppos.y + 1.0f),
+                         ImVec2(ppos.x + psize.x - 1.0f, ppos.y + psize.y - 1.0f),
+                         ImGui::GetStyle().PopupRounding, false);
+
+        float row_y = ppos.y + PPAD;
+        float last_bottom = row_y;
         const char* p = items;
         for (int i = 0; i < count; i++) {
-            ImVec2 p0 = ImGui::GetCursorScreenPos();
-            float w = ImGui::GetContentRegionAvail().x;
+            ImGui::SetCursorScreenPos(ImVec2(ppos.x + PPAD, row_y));
+            ImVec2 p0(ppos.x + PPAD, row_y);
             float h = ImGui::GetFrameHeight();
-            ImVec2 r1(p0.x + w, p0.y + h);
+            ImVec2 r1(p0.x + item_w, p0.y + h);
+            last_bottom = r1.y;
             char oid[32]; snprintf(oid, sizeof(oid), "##opt%d", i);
-            bool clicked = ImGui::InvisibleButton(oid, ImVec2(w, h));
+            bool clicked = ImGui::InvisibleButton(oid, ImVec2(item_w, h));
             bool hov = ImGui::IsItemHovered();
             bool down = hov && ImGui::IsMouseDown(ImGuiMouseButton_Left);
             ImGuiID oid_id = ImGui::GetID(oid);
@@ -581,15 +672,19 @@ bool combo_framed(const char* id, int* idx, const char* items) {
             if (down) pdl->AddRectFilled(p0, r1, OxCol(g_accent_active, 60), OXY_R);
             float b_t = o_h > o_s ? o_h : o_s;
             if (b_t > 0.01f)
-                ox_outline(pdl, p0, r1, OXY_R, lerp_u32(IM_COL32(0, 0, 0, 0), ox_accent_rim(), b_t));
-            ImU32 tcol = (i == *idx) ? tcol_sel : ImGui::GetColorU32(ImGuiCol_Text);
+                pdl->AddRect(crisp_min(p0), crisp_max(r1),
+                             lerp_u32(IM_COL32(0, 0, 0, 0), OxCol(OxLight(g_accent_color), 200), b_t),
+                             OXY_R, 0, 1.0f / s);
+                ImU32 tcol = (i == *idx) ? IM_COL32(240, 246, 255, 255) : ImGui::GetColorU32(ImGuiCol_Text);
             pdl->AddText(ImVec2(p0.x + ImGui::GetStyle().FramePadding.x, vcenter_top(p0.y, p0.y + h)), tcol, p, nullptr);
             if (clicked) { *idx = i; changed = true; ImGui::CloseCurrentPopup(); }
+            row_y = r1.y + 4.0f;
             p += strlen(p) + 1;
         }
-        // reclaim the trailing ItemSpacing so bottom inset == top/side insets (kills the floating bottom line)
-        ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetStyle().ItemSpacing.y);
+        ImGui::SetCursorScreenPos(ImVec2(ppos.x + PPAD, last_bottom + PPAD));
+        ImGui::Dummy(ImVec2(item_w + PPAD, 0.0f));
         ImGui::PopStyleVar();
+        ImGui::PopStyleColor(1);
         ImGui::EndCombo();
     }
     ImGui::PopStyleVar();
@@ -634,15 +729,17 @@ void keybind_row(const char* label, int& key_code) {
     ImGui::AlignTextToFramePadding();
     ImVec2 start = ImGui::GetCursorScreenPos();
     ImGui::TextUnformatted(label);
-    ImGui::SetCursorScreenPos(ImVec2(ctrl_x0(), start.y));
+    float lw = ImGui::CalcTextSize(label, nullptr, true).x;
+    // button sits right after the label text instead of at the fixed 118px column
+    ImGui::SetCursorScreenPos(ImVec2(start.x + lw + ImGui::GetStyle().ItemSpacing.x, start.y));
     char buf[64]; keybind_label_buf(buf, sizeof(buf), label, key_code);
-    if (oxygen_button(buf, ImVec2(140, 0))) g_binding_target = &key_code;
+    if (oxygen_field_button(buf, ImVec2(140, 0), g_binding_target == &key_code)) g_binding_target = &key_code;
 }
 
 void stacked_keybind(const char* label, int& key_code, float w) {
     ImGui::TextDisabled("%s", label);
     char buf[64]; keybind_label_buf(buf, sizeof(buf), label, key_code);
-    if (oxygen_button(buf, ImVec2(w, 0))) g_binding_target = &key_code;
+    if (oxygen_field_button(buf, ImVec2(w, 0), g_binding_target == &key_code)) g_binding_target = &key_code;
 }
 
 // ---------- flat panels (cards) ----------
@@ -712,6 +809,7 @@ void end_panel() {
 // ---------- list items (styled like combo dropdown options) ----------
 
 bool oxygen_list_item(const char* id, const char* label, bool selected) {
+    float s = fb_scale();
     ImVec2 p0 = ImGui::GetCursorScreenPos();
     float w = ImGui::GetContentRegionAvail().x;
     float h = ImGui::GetFrameHeight();
@@ -729,38 +827,48 @@ bool oxygen_list_item(const char* id, const char* label, bool selected) {
     if (hov && !selected) dl->AddRectFilled(p0, r1, OxCol(g_accent_color, (int)(38 * o_h)), OXY_R);
     float b_t = o_h > o_s ? o_h : o_s;
     if (b_t > 0.01f)
-        dl->AddRect(ImVec2(p0.x + 0.5f, p0.y + 0.5f), ImVec2(r1.x - 0.5f, r1.y - 0.5f),
-                    lerp_u32(IM_COL32(0, 0, 0, 0), OxCol(OxLight(g_accent_color), 200), b_t), OXY_R);
-    ImU32 tcol = selected ? IM_COL32(240, 246, 255, 255) : ImGui::GetColorU32(ImGuiCol_Text);
+        dl->AddRect(crisp_min(p0), crisp_max(r1),
+                    lerp_u32(IM_COL32(0, 0, 0, 0), OxCol(OxLight(g_accent_color), 200), b_t),
+                    OXY_R, 0, 1.0f / s);
+        ImU32 tcol = selected ? IM_COL32(240, 246, 255, 255) : ImGui::GetColorU32(ImGuiCol_Text);
     dl->AddText(ImVec2(p0.x + ImGui::GetStyle().FramePadding.x, vcenter_top(p0.y, r1.y)), tcol, label, nullptr);
     return clicked;
 }
 
 // ---------- status ----------
 
+ImVec2 click_indicator_size(const char* label) {
+    char display[32]; snprintf(display, sizeof(display), "%s: %s", label, "ON");
+    char alt[32];     snprintf(alt, sizeof(alt), "%s: %s", label, "off");
+    // widest of both states so the pill never resizes when toggling
+    char d2[32]; snprintf(d2, sizeof(d2), "%s: %s", label, "off");
+    char a2[32]; snprintf(a2, sizeof(a2), "%s: %s", label, "ON");
+    ImVec2 ls = ImGui::CalcTextSize(display);
+    ImVec2 ls_alt = ImGui::CalcTextSize(alt);
+    ImVec2 l2 = ImGui::CalcTextSize(d2);
+    ImVec2 a3 = ImGui::CalcTextSize(a2);
+    float tw = ls.x; if (ls_alt.x > tw) tw = ls_alt.x; if (l2.x > tw) tw = l2.x; if (a3.x > tw) tw = a3.x;
+    return ImVec2(tw + 24.0f, ls.y + 10.0f);
+}
+
 void click_indicator(const char* label, bool on) {
     char display[32];
     snprintf(display, sizeof(display), "%s: %s", label, on ? "ON" : "off");
-    char alt[32];
-    snprintf(alt, sizeof(alt), "%s: %s", label, on ? "off" : "ON");
+    ImVec2 sz = click_indicator_size(label);
     ImVec2 pad(12, 5);
-    ImVec2 ls     = ImGui::CalcTextSize(display);
-    ImVec2 ls_alt = ImGui::CalcTextSize(alt);
-    float tw = ls.x > ls_alt.x ? ls.x : ls_alt.x;
     ImVec2 mn = ImGui::GetCursorScreenPos();
-    ImVec2 sz(tw + pad.x * 2, ls.y + pad.y * 2);
     ImVec2 mx(mn.x + sz.x, mn.y + sz.y);
     const float r = OXY_R;
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImU32 fill_on  = IM_COL32(46, 148, 84, 235);
     const ImU32 rim_on   = IM_COL32(150, 230, 180, 160);
     const ImU32 text_on  = IM_COL32(235, 255, 242, 255);
-    const ImU32 fill_off = ox_is_light() ? OxCol(mulc(g_body_color, 0.94f, 255)) : OxCol(mulc(g_body_color, 1.30f, 22));
-    const ImU32 rim_off  = ox_rim_neutral(60);
-    const ImU32 text_off = OxCol(g_text_color, ox_is_light() ? 180 : 150);
+    const ImU32 fill_off = IM_COL32(255, 255, 255, 22);
+    const ImU32 rim_off  = IM_COL32(255, 255, 255, 45);
+    const ImU32 text_off = IM_COL32(200, 212, 228, 150);
     dl->AddRectFilled(mn, mx, on ? fill_on : fill_off, r);
-    if (on) glass_gloss(dl, mn, mx, r, mn.y + 1.0f, mn.y + sz.y * 0.55f, ox_is_light() ? 35 : 70);
-    ox_outline(dl, mn, mx, r, on ? rim_on : rim_off);
+    if (on) glass_gloss(dl, mn, mx, r, mn.y + 1.0f, mn.y + sz.y * 0.55f, 70);
+    dl->AddRect(crisp_min(mn), crisp_max(mx), on ? rim_on : rim_off, r, 0, 1.0f);
     dl->AddText(ImVec2(mn.x + pad.x, vcenter_top(mn.y, mx.y)), on ? text_on : text_off, display);
     ImGui::Dummy(sz);
 }
