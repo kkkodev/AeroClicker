@@ -19,6 +19,10 @@ bool oxygen_button(const char* label, ImVec2 size_arg = ImVec2(0, 0), ImU32 c1_o
 bool oxygen_checkbox(const char* label, bool* v, bool label_clickable = true);
 bool oxygen_list_item(const char* id, const char* label, bool selected);
 bool combo_framed(const char* id, int* idx, const char* items);
+void field_background(ImDrawList* dl, ImVec2 r0, ImVec2 r1, float rounding, bool border = true);
+void field_gloss_last_item();
+bool oxygen_field_button(const char* label, ImVec2 size_arg = ImVec2(0, 0), bool armed = false);
+ImVec2 click_indicator_size(const char* label);
 
 // table-style rows (label left, control right) — for wide panels
 bool row_slider(const char* label, double* v, double lo, double hi, const char* fmt);
