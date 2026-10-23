@@ -13,19 +13,29 @@ static int* g_binding_target = nullptr;
 static GLFWwindow* g_window = nullptr;
 static ImFont* g_font_big = nullptr;
 
-static const float LABEL_W   = 150.0f;
+// Panel layout constants
 static const float OXY_R     = 4.0f;
 static const float PANEL_R   = 6.0f;
-static const float PANEL_PAD = 12.0f;   // inner padding of cards
-static const float PANEL_GAP = 14.0f;   // outer margin between cards
-static const float VALUE_W   = 64.0f;   // reserved readout slot right of sliders
+static const float PANEL_PAD = 12.0f;
+static const float PANEL_GAP = 14.0f;
 
+// Alignment constants for row widgets
+static const float LABEL_COL_W = 118.0f;
+static const float COL_GAP     = 8.0f;
+static const float VALUE_W     = 52.0f;
+
+// State variables
 static float s_panel_inner = 0.0f;
 static float s_panel_x     = 0.0f;
 static float s_panel_w     = 0.0f;
 static ImGuiID s_panel_hid = 0;
 
 void set_big_font(ImFont* font) { g_font_big = font; }
+
+// Control column helpers for row layout
+static float ctrl_x0()       { return s_panel_x + PANEL_PAD + LABEL_COL_W + COL_GAP; }
+static float ctrl_w_full()   { return s_panel_inner - (LABEL_COL_W + COL_GAP); }
+static float ctrl_w_slider() { return ctrl_w_full() - VALUE_W - ImGui::GetStyle().ItemSpacing.x; }
 
 // ---------- low-level draw helpers ----------
 
@@ -116,7 +126,7 @@ static void OxFrame(ImDrawList* dl, ImVec2 mn, ImVec2 mx, float R,
     if (b1.x - b0.x < 2.0f) b1.x = b0.x + 2.0f;
     if (b1.y - b0.y < 2.0f) b1.y = b0.y + 2.0f;
     AddRoundedRectFilledGradV(dl, b0, b1, c_top, c_bot, R);
-    ImVec2 f0(b0.x + 1.0f, b0.y + 1.0f), f1(b1.x - 1.0f, b1.y - 1.0f);
+    ImVec2 f0(b0.x + 2.0f, b0.y + 2.0f), f1(b1.x - 2.0f, b1.y - 2.0f);
     float fr = R > 1.0f ? R - 1.0f : 0.0f;
     if (gloss > 0)
         AddRoundedRectFilledGradV(dl, f0, ImVec2(f1.x, f0.y + (f1.y - f0.y) * 0.45f),
@@ -253,7 +263,7 @@ void setup_key_callbacks(GLFWwindow* window) {
     glfwSetMouseButtonCallback(window, mouse_button_callback);
 }
 
-// ---------- scrollbar: fill stays gray, ONLY the border lights up ----------
+// ---------- scrollbar ----------
 
 void oxygen_scrollbar() {
     ImGuiStyle& st = ImGui::GetStyle();
@@ -266,8 +276,8 @@ void oxygen_scrollbar() {
     dl->PushClipRect(wp, ImVec2(wp.x + ws.x, wp.y + ws.y), false);
     ImVec2 t0(wp.x + ws.x - sbw, wp.y);
     ImVec2 t1(wp.x + ws.x, wp.y + ws.y);
-    AddRoundedRectGradCenter(dl, t0, t1, OxCol(mulc(g_body_color, 1.15f)), OxCol(mulc(g_body_color, 0.80f)), st.ScrollbarRounding, 8);
-    dl->AddRect(t0, t1, OxCol(mulc(g_body_color, 2.10f), 140), st.ScrollbarRounding, 0, 1.0f);
+    AddRoundedRectGradCenter(dl, t0, t1, OxCol(g_body_color), OxCol(mulc(g_body_color, 0.80f)), st.ScrollbarRounding, 10);
+    dl->AddRect(t0, t1, OxCol(mulc(g_body_color, 0.70f), 140), st.ScrollbarRounding, 0, 1.0f);
     const float sy = ImGui::GetScrollY();
     const float track_h = t1.y - t0.y;
     float thumb_h = track_h * (track_h / (track_h + smax));
@@ -284,13 +294,9 @@ void oxygen_scrollbar() {
     else if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && in_track) s_thumb_drag = true;
     bool lit = in_thumb || s_thumb_drag;
     float t = widget_anim(ImGui::GetID("##sb_thumb"), lit);
-
-    // constant scheme-gray fill ...
-    ImU32 center_c = OxCol(mulc(g_body_color, 2.60f));
-    ImU32 edge_c   = OxCol(mulc(g_body_color, 2.20f));
-    // ... only the rim eases to accent
-    ImU32 rim_c    = lerp_u32(OxCol(mulc(g_body_color, 3.20f), 140), OxCol(OxLight(g_accent_color), 220), t);
-
+    ImU32 center_c = OxCol(mulc(g_body_color, 1.85f));
+    ImU32 edge_c   = OxCol(mulc(g_body_color, 1.45f));
+    ImU32 rim_c    = lerp_u32(OxCol(mulc(g_body_color, 4.30f), 200), OxCol(OxLight(g_accent_color), 220), t);
     AddRoundedRectGradCenter(dl, g0, g1, center_c, edge_c, gr, 10);
     dl->AddRect(g0, g1, rim_c, gr, 0, 1.0f);
     dl->PopClipRect();
@@ -337,17 +343,20 @@ bool oxygen_button(const char* label, ImVec2 size_arg, ImU32 c1_override, ImU32 
 
 // ---------- checkbox ----------
 
-bool oxygen_checkbox(const char* label, bool* v) {
+bool oxygen_checkbox(const char* label, bool* v, bool label_clickable) {
     const float sz = ImGui::GetFrameHeight();
     const float R = OXY_R;
     const char* tend = strstr(label, "##");
     ImVec2 ls = ImGui::CalcTextSize(label, nullptr, true, tend ? (float)(tend - label) : -1.0f);
     ImVec2 mn = ImGui::GetCursorScreenPos();
     ImVec2 total(sz + (ls.x > 0.0f ? ImGui::GetStyle().ItemInnerSpacing.x + ls.x : 0.0f), sz);
-    bool clicked = ImGui::InvisibleButton(label, total);
+    bool clicked_item = ImGui::InvisibleButton(label, total);
+    // when the label is inert, only presses inside the box count
+    const bool in_box = ImGui::GetIO().MousePos.x <= mn.x + sz;
+    bool clicked = clicked_item && (label_clickable || in_box);
     if (clicked) *v = !*v;
-    bool hov = ImGui::IsItemHovered();
-    bool act = ImGui::IsItemActive();
+    bool hov = ImGui::IsItemHovered() && (label_clickable || in_box);
+    bool act = ImGui::IsItemActive() && (label_clickable || in_box);
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImGuiID id = ImGui::GetID(label);
     float t_h = widget_anim(id, hov);
@@ -359,7 +368,6 @@ bool oxygen_checkbox(const char* label, bool* v) {
     glass_gloss(dl, mn, bx1, R, mn.y + 1.0f, mn.y + sz * 0.55f, 36 + (int)(44 * t_c));
     dl->AddRect(mn, bx1, rimc, R, 0, 1.0f);
     if (t_c > 0.01f) {
-        // deliberately small, thin checkmark
         const float th = (sz * 0.09f < 1.4f) ? 1.4f : (sz * 0.09f);
         ImVec2 pts[3] = {
             ImVec2(mn.x + sz * 0.30f, mn.y + sz * 0.52f),
@@ -371,15 +379,13 @@ bool oxygen_checkbox(const char* label, bool* v) {
     if (ls.x > 0.0f)
         dl->AddText(ImVec2(bx1.x + ImGui::GetStyle().ItemInnerSpacing.x, vcenter_top(mn.y, mn.y + sz)),
                     ImGui::GetColorU32(ImGuiCol_Text), label, tend ? tend : nullptr);
-    return clicked;
+        return clicked;
 }
 
 // ---------- sliders ----------
 
-static bool slider_widget(const char* id, double* v, double lo, double hi, const char* fmt, float slider_w)
-{
-    ImGui::SetNextItemWidth(slider_w);
-    bool changed = ImGui::SliderScalar(id, ImGuiDataType_Double, v, &lo, &hi, "");  // no text inside the track
+static bool slider_widget(const char* id, double* v, double lo, double hi, const char* fmt) {
+    bool changed = ImGui::SliderScalar(id, ImGuiDataType_Double, v, &lo, &hi, "", ImGuiSliderFlags_NoInput);
     ImVec2 r0 = ImGui::GetItemRectMin(), r1 = ImGui::GetItemRectMax();
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const float FR = ImGui::GetStyle().FrameRounding;
@@ -391,38 +397,46 @@ static bool slider_widget(const char* id, double* v, double lo, double hi, const
     ImVec2 g0(gx, r0.y + 3), g1(gx + grab_w, r1.y - 3);
     bool hov = ImGui::IsItemHovered(); bool act = ImGui::IsItemActive();
     float ta = widget_anim(ImGui::GetID(id), hov || act);
-    // thumb: constant gray fill, ONLY the rim eases to accent (same language as scrollbar)
-    ImU32 center_c = OxCol(mulc(g_body_color, 3.00f));
-    ImU32 edge_c   = OxCol(mulc(g_body_color, 2.40f));
-    ImU32 rim_c    = lerp_u32(OxCol(mulc(g_body_color, 3.60f), 140), OxCol(OxLight(g_accent_color), 220), ta);
+    ImU32 center_c = lerp_u32(OxCol(mulc(g_body_color, 1.85f)), OxCol(g_accent_hover), ta);
+    ImU32 edge_c   = lerp_u32(OxCol(mulc(g_body_color, 1.45f)), OxCol(g_accent_active), ta);
+    ImU32 rim_c = lerp_u32(OxCol(mulc(g_body_color, 4.30f), 200), OxCol(OxLight(g_accent_color), 220), t);
     float gr = (g1.x - g0.x) * 0.5f; if (gr > OXY_R) gr = OXY_R;
     AddRoundedRectGradCenter(dl, g0, g1, center_c, edge_c, gr, 8);
     dl->AddRect(g0, g1, rim_c, gr, 0, 1.0f);
-
-    // value badge attached to the track's right end (never floats at the panel edge)
-    char buf[64]; snprintf(buf, sizeof(buf), fmt, *v);
-    ImVec2 ts = ImGui::CalcTextSize(buf, nullptr, true);
-    ImVec2 b0(r1.x + 8.0f, r0.y + 2.0f), b1(r1.x + 8.0f + ts.x + 14.0f, r1.y - 2.0f);
-    dl->AddRectFilled(b0, b1, OxCol(mulc(g_body_color, 0.85f), 235), 3.0f);
-    dl->AddRect(b0, b1, OxCol(mulc(g_body_color, 2.40f), 110), 3.0f);
-    dl->AddText(ImVec2(b0.x + 7.0f, vcenter_top(b0.y, b1.y)), OxCol(g_text_color, 210), buf, nullptr);
     return changed;
 }
 
 bool row_slider(const char* label, double* v, double lo, double hi, const char* fmt) {
     ImGui::AlignTextToFramePadding();
+    ImVec2 start = ImGui::GetCursorScreenPos();
     ImGui::TextUnformatted(label);
-    ImGui::SameLine(LABEL_W);
-    float w = ImGui::GetContentRegionAvail().x;
-    if (s_panel_inner > 0.0f) w = s_panel_inner - LABEL_W;
+    ImGui::SetCursorScreenPos(ImVec2(ctrl_x0(), start.y));
+    ImGui::SetNextItemWidth(ctrl_w_slider());
     char id[96]; snprintf(id, sizeof(id), "##%s", label);
-    return slider_widget(id, v, lo, hi, fmt, w - VALUE_W - ImGui::GetStyle().ItemInnerSpacing.x);
+    bool changed = slider_widget(id, v, lo, hi, fmt);
+    ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
+    ImGui::SetNextItemWidth(VALUE_W);
+    char vid[112]; snprintf(vid, sizeof(vid), "##%s_val", label);
+    if (ImGui::InputDouble(vid, v, 0.0, 0.0, fmt)) {
+        if (*v < lo) *v = lo; else if (*v > hi) *v = hi;
+        changed = true;
+    }
+    return changed;
 }
 
 bool stacked_slider(const char* label, double* v, double lo, double hi, const char* fmt, float w) {
     ImGui::TextDisabled("%s", label);
+    ImGui::SetNextItemWidth(w - VALUE_W - ImGui::GetStyle().ItemSpacing.x);
     char id[96]; snprintf(id, sizeof(id), "##%s", label);
-    return slider_widget(id, v, lo, hi, fmt, w - VALUE_W - ImGui::GetStyle().ItemInnerSpacing.x);
+    bool changed = slider_widget(id, v, lo, hi, fmt);
+    ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
+    ImGui::SetNextItemWidth(VALUE_W);
+    char vid[112]; snprintf(vid, sizeof(vid), "##%s_val", label);
+    if (ImGui::InputDouble(vid, v, 0.0, 0.0, fmt)) {
+        if (*v < lo) *v = lo; else if (*v > hi) *v = hi;
+        changed = true;
+    }
+    return changed;
 }
 
 // ---------- combos ----------
@@ -433,7 +447,7 @@ bool combo_framed(const char* id, int* idx, const char* items) {
     const char* preview = items;
     for (int i = 0; i < *idx && *preview; i++) preview += strlen(preview) + 1;
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4, 4));   // even margins around popup items
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4, 4));
     const float FR = ImGui::GetStyle().FrameRounding;
     const float arrow_sz = ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.x * 2.0f;
     ImVec2 f0 = ImGui::GetCursorScreenPos();
@@ -501,15 +515,6 @@ bool combo_framed(const char* id, int* idx, const char* items) {
     return changed;
 }
 
-bool row_combo(const char* label, int* idx, const char* items) {
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(label);
-    ImGui::SameLine(0.0f, 10.0f);          // tight: combo sits right after its label
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    char id[96]; snprintf(id, sizeof(id), "##%s", label);
-    return combo_framed(id, idx, items);
-}
-
 bool stacked_combo(const char* label, int* idx, const char* items, float w) {
     ImGui::TextDisabled("%s", label);
     ImGui::SetNextItemWidth(w);
@@ -517,10 +522,21 @@ bool stacked_combo(const char* label, int* idx, const char* items, float w) {
     return combo_framed(id, idx, items);
 }
 
+bool row_combo(const char* label, int* idx, const char* items) {
+    ImGui::AlignTextToFramePadding();
+    ImVec2 start = ImGui::GetCursorScreenPos();
+    ImGui::TextUnformatted(label);
+    ImGui::SetCursorScreenPos(ImVec2(ctrl_x0(), start.y));   // same start point as sliders
+    ImGui::SetNextItemWidth(ctrl_w_full());                  // same right edge as slider+value
+    char id[96]; snprintf(id, sizeof(id), "##%s", label);
+    return combo_framed(id, idx, items);
+}
+
 bool row_check(const char* label, bool* v) {
     ImGui::AlignTextToFramePadding();
+    ImVec2 start = ImGui::GetCursorScreenPos();
     ImGui::TextUnformatted(label);
-    ImGui::SameLine(0.0f, 10.0f);          // tight: checkbox sits right after its label
+    ImGui::SetCursorScreenPos(ImVec2(ctrl_x0(), start.y));
     char id[96]; snprintf(id, sizeof(id), "##%s", label);
     return oxygen_checkbox(id, v);
 }
@@ -535,8 +551,9 @@ static void keybind_label_buf(char* buf, size_t n, const char* label, int& key_c
 
 void keybind_row(const char* label, int& key_code) {
     ImGui::AlignTextToFramePadding();
+    ImVec2 start = ImGui::GetCursorScreenPos();
     ImGui::TextUnformatted(label);
-    ImGui::SameLine(LABEL_W);
+    ImGui::SetCursorScreenPos(ImVec2(ctrl_x0(), start.y));
     char buf[64]; keybind_label_buf(buf, sizeof(buf), label, key_code);
     if (oxygen_button(buf, ImVec2(140, 0))) g_binding_target = &key_code;
 }
@@ -643,10 +660,14 @@ bool oxygen_list_item(const char* id, const char* label, bool selected) {
 void click_indicator(const char* label, bool on) {
     char display[32];
     snprintf(display, sizeof(display), "%s: %s", label, on ? "ON" : "off");
+    char alt[32];
+    snprintf(alt, sizeof(alt), "%s: %s", label, on ? "off" : "ON");
     ImVec2 pad(12, 5);
-    ImVec2 ls = ImGui::CalcTextSize(display);
+    ImVec2 ls     = ImGui::CalcTextSize(display);
+    ImVec2 ls_alt = ImGui::CalcTextSize(alt);
+    float tw = ls.x > ls_alt.x ? ls.x : ls_alt.x;
     ImVec2 mn = ImGui::GetCursorScreenPos();
-    ImVec2 sz(ls.x + pad.x * 2, ls.y + pad.y * 2);
+    ImVec2 sz(tw + pad.x * 2, ls.y + pad.y * 2);
     ImVec2 mx(mn.x + sz.x, mn.y + sz.y);
     const float r = OXY_R;
     ImDrawList* dl = ImGui::GetWindowDrawList();

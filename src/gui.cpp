@@ -15,6 +15,8 @@ static const char* TAB_NAMES[] = { "Home", "Left", "Right", "Macros", "Settings"
 static const int TAB_COUNT = 6;
 
 static int s_applied_preset[2] = { -1, -1 };
+static char s_font_path[256]   = "";
+static float s_font_scale      = 0.0f;
 
 static void preset_flow(const ClickerPreset* presets, ClickerProfile& profile, int side, float inner_w) {
     const float sp = ImGui::GetStyle().ItemSpacing.x;
@@ -60,11 +62,11 @@ static void draw_clicker_card(const char* title, ClickerProfile& profile, Activa
     stacked_keybind("Toggle key", key, inner);
     int idx = mode_to_idx(mode);
     if (stacked_combo("Activation", &idx, "Toggle\0Hold\0Mouse\0", inner)) mode = idx_to_mode(idx);
-    stacked_slider("Speed (CPS)", &profile.cps_mean, 1.0, 25.0, "%.1f", inner);
+    stacked_slider("Speed (CPS)", &profile.cps_mean, CPS_MEAN_LO, CPS_MEAN_HI, "%.1f", inner);
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
     preset_flow(presets, profile, side, inner);
     end_panel();
-}
+                              }
 
 static void draw_home_tab(GuiState& state) {
     ImGui::Spacing();
@@ -97,10 +99,10 @@ static void draw_home_tab(GuiState& state) {
 static void draw_side_tab(ClickerProfile& p) {
     ImGui::Spacing();
     begin_panel("Rate");
-    row_slider("Speed (CPS)", &p.cps_mean, 1.0, 25.0, "%.1f");
+    row_slider("Speed (CPS)", &p.cps_mean, CPS_MEAN_LO, CPS_MEAN_HI, "%.1f");
     row_slider("CPS Variation", &p.cps_stddev, 0.0, 5.0, "%.2f");
-    row_slider("Min CPS", &p.cps_min, 1.0, 20.0, "%.1f");
-    row_slider("Max CPS", &p.cps_max, 5.0, 30.0, "%.1f");
+    row_slider("Min CPS", &p.cps_min, CPS_MEAN_LO, CPS_MIN_HI, "%.1f");
+    row_slider("Max CPS", &p.cps_max, 5.0, CPS_MAX_HI, "%.1f");
     int d = (int)p.distribution;
     if (row_combo("Distribution", &d, "Gaussian\0Poisson\0Uniform\0")) p.distribution = (DistributionType)d;
     row_slider("Start Delay (ms)", &p.start_delay_ms, 0.0, 500.0, "%.0f");
@@ -149,8 +151,7 @@ static void draw_side_tab(ClickerProfile& p) {
 static void draw_macros_tab(GuiState& state) {
     ImGui::Spacing();
     begin_panel("Global");
-    oxygen_checkbox("Enable macros", &state.config.macros_enabled);
-    ImGui::SameLine();
+    oxygen_checkbox("Enable macros", &state.config.macros_enabled, false);
     ImGui::TextDisabled("Master switch for all macro keybinds and playback");
     end_panel();
 
@@ -166,7 +167,7 @@ static void draw_macros_tab(GuiState& state) {
     ImGui::SetNextItemWidth(panel_inner() * 0.5f);
     ImGui::InputText("##macname", mac.name, sizeof(mac.name));
     ImGui::SameLine();
-    oxygen_checkbox("Loop", &mac.loop);
+    oxygen_checkbox("Loop", &mac.loop, false);
     keybind_row("Macro Key", mac.key_bind);
     end_panel();
 
@@ -396,6 +397,8 @@ void gui_run(GuiState& state) {
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
     glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
     GLFWwindow* window = glfwCreateWindow(760, 640, "Ghast Clicker", nullptr, nullptr);
+    if (GLFWcursor* cur = glfwCreateStandardCursor(GLFW_ARROW_CURSOR))
+        glfwSetCursor(window, cur);
     if (!window) { fprintf(stderr, "Failed to create GLFW window\n"); glfwTerminate(); return; }
     glfwSetWindowSizeLimits(window, 560, 420, GLFW_DONT_CARE, GLFW_DONT_CARE);
     glfwMakeContextCurrent(window);
@@ -415,18 +418,16 @@ void gui_run(GuiState& state) {
             "/usr/share/fonts/truetype/roboto/Roboto-Regular.ttf",
             "/usr/share/fonts/noto/NotoSans-Regular.ttf",
             "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
-            "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf",
+            "/usr/share/fonts/ubuntu/Ubuntu-R.ttf",
             "/usr/share/fonts/cantarell/Cantarell-VF.otf",
             "/usr/share/fonts/dejavu/DejaVuSans.ttf",
         };
         ImFont* font = nullptr;
-        const char* chosen = nullptr;
         for (const char* p : candidates) {
-            if (FILE* f = fopen(p, "rb")) { fclose(f); chosen = p; font = io.Fonts->AddFontFromFileTTF(p, 18.0f); break; }
+            if (FILE* f = fopen(p, "rb")) { fclose(f); snprintf(s_font_path, sizeof(s_font_path), "%s", p); font = io.Fonts->AddFontFromFileTTF(p, 18.0f); break; }
         }
         if (!font) io.Fonts->AddFontDefault();
-        // real large size in the atlas -> crisp big CPS readout (no texture upscaling)
-        set_big_font(chosen ? io.Fonts->AddFontFromFileTTF(chosen, 30.0f) : nullptr);
+        set_big_font(s_font_path[0] ? io.Fonts->AddFontFromFileTTF(s_font_path, 30.0f) : nullptr);
     }
     setup_oxygen_theme(state.config.accent_preset, state.config.accent_r, state.config.accent_g, state.config.accent_b);
     ImGui_ImplGlfw_InitForOpenGL(window, true);
@@ -444,25 +445,51 @@ void gui_run(GuiState& state) {
         glfwPollEvents();
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
+
+        // ---- fractional scaling (Wayland wp-fractional-scale):
+        // layout in logical window space; render into the physical framebuffer.
+        int win_w = 1, win_h = 1, fb_w = 1, fb_h = 1;
+        glfwGetWindowSize(window, &win_w, &win_h);
+        glfwGetFramebufferSize(window, &fb_w, &fb_h);
+        if (win_w < 1) win_w = 1;
+        if (win_h < 1) win_h = 1;
+        if (fb_w < 1) fb_w = win_w;
+        if (fb_h < 1) fb_h = win_h;
+        const float ui_scale = (float)fb_w / (float)win_w;
+        io.DisplaySize = ImVec2((float)win_w, (float)win_h);          // override backend: one coordinate space
+        io.DisplayFramebufferScale = ImVec2(ui_scale, ui_scale);      // GL backend scales scissors to pixels
+
+        // re-bake the font atlas at physical resolution when the scale changes (crisp at 125/150/200%)
+        if (s_font_scale != ui_scale) {
+            s_font_scale = ui_scale;
+            io.Fonts->Clear();
+            ImFont* f = s_font_path[0] ? io.Fonts->AddFontFromFileTTF(s_font_path, 18.0f * ui_scale) : nullptr;
+            if (!f) f = io.Fonts->AddFontDefault();
+            f->Scale = 1.0f / ui_scale;                 // hi-res raster, logical metrics stay 18px
+            ImFont* big = s_font_path[0] ? io.Fonts->AddFontFromFileTTF(s_font_path, 30.0f * ui_scale) : nullptr;
+            if (big) big->Scale = 1.0f / ui_scale;
+            set_big_font(big);
+            ImGui_ImplOpenGL3_DestroyFontsTexture();
+            ImGui_ImplOpenGL3_CreateFontsTexture();
+        }
+
         ImGui::NewFrame();
 
-        int display_w, display_h;
-        glfwGetFramebufferSize(window, &display_w, &display_h);
         {
             ImU32 body_col = OxCol(g_body_color);
             ImU32 drop_top = OxCol(mulc(g_body_color, 1.50f));
             const float DROP_H = 120.0f;
             ImDrawList* bgdl = ImGui::GetBackgroundDrawList();
-            bgdl->AddRectFilled(ImVec2(0, 0), ImVec2((float)display_w, (float)display_h), body_col);
-            bgdl->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2((float)display_w, DROP_H), drop_top, drop_top, body_col, body_col);
-            bgdl->AddLine(ImVec2(0, 0), ImVec2((float)display_w, 0), OxCol(mulc(g_body_color, 2.20f), 70));
+            bgdl->AddRectFilled(ImVec2(0, 0), ImVec2((float)win_w, (float)win_h), body_col);
+            bgdl->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2((float)win_w, DROP_H), drop_top, drop_top, body_col, body_col);
+            bgdl->AddLine(ImVec2(0, 0), ImVec2((float)win_w, 0), OxCol(mulc(g_body_color, 2.20f), 70));
         }
 
         ImGui::SetNextWindowPos(ImVec2(0, 0));
-        ImGui::SetNextWindowSize(ImVec2((float)display_w, (float)display_h));
+        ImGui::SetNextWindowSize(ImVec2((float)win_w, (float)win_h));
         ImGuiWindowFlags wf = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-                              ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar |
-                              ImGuiWindowFlags_NoBackground;
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar |
+        ImGuiWindowFlags_NoBackground;
 
         if (ImGui::Begin("Ghast Clicker", nullptr, wf)) {
             // global session accounting (runs every frame, independent of tab)
@@ -505,7 +532,7 @@ void gui_run(GuiState& state) {
         ImGui::End();
 
         ImGui::Render();
-        glViewport(0, 0, display_w, display_h);
+        glViewport(0, 0, fb_w, fb_h);   // physical pixels — the ONLY place framebuffer size is used
         glClearColor(g_body_color.x, g_body_color.y, g_body_color.z, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

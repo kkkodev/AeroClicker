@@ -11,7 +11,7 @@ void set_big_font(ImFont* font);   // crisp large readout font (loaded at ~30px)
 // --- core widgets ---
 void oxygen_scrollbar();
 bool oxygen_button(const char* label, ImVec2 size_arg = ImVec2(0, 0), ImU32 c1_override = 0, ImU32 c2_override = 0, bool force_colored = false);
-bool oxygen_checkbox(const char* label, bool* v);
+bool oxygen_checkbox(const char* label, bool* v, bool label_clickable = true);
 bool oxygen_list_item(const char* id, const char* label, bool selected);
 bool combo_framed(const char* id, int* idx, const char* items);
 
