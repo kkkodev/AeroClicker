@@ -48,6 +48,11 @@ struct ClickerProfile {
     DistributionType distribution = DistributionType::GAUSSIAN;
 };
 
+constexpr double CPS_MEAN_LO = 1.0;
+constexpr double CPS_MEAN_HI = 40.0;
+constexpr double CPS_MIN_HI  = 40.0;
+constexpr double CPS_MAX_HI  = 50.0;
+
 struct ClickerPreset {
     const char* name;
     ClickerProfile profile;

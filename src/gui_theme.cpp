@@ -1,6 +1,7 @@
 #include "gui_theme.hpp"
 #include "imgui.h"
 #include <cmath>
+#include <strings.h>
 
 ImVec4 g_accent_color(0.24f, 0.49f, 0.78f, 1.0f);
 ImVec4 g_accent_hover(0.33f, 0.58f, 0.86f, 1.0f);
@@ -142,7 +143,7 @@ void setup_oxygen_theme(int preset, float custom_r, float custom_g, float custom
     style.ItemInnerSpacing      = ImVec2(6, 4);
     style.TouchExtraPadding     = ImVec2(0, 0);
     style.IndentSpacing         = 20.0f;
-    style.ScrollbarSize         = 14.0f;
+    style.ScrollbarSize         = 13.0f;
     style.GrabMinSize           = 12.0f;
     style.WindowBorderSize      = 0.0f;
     style.ChildBorderSize       = 0.0f;
@@ -176,43 +177,48 @@ ImVec4 OxDark(ImVec4 c, float k) {
     return ImVec4(c.x*k, c.y*k, c.z*k, 1.0f);
 }
 
-void setup_kde_cursor() {
-    const char* home = getenv("HOME");
-    if (!home) return;
-    std::string path = std::string(home) + "/.config/kcminputrc";
-    FILE* f = fopen(path.c_str(), "r");
-    if (!f) return;
+static bool parse_kde_mouse_section(const char* path, char* theme, size_t tn, char* size, size_t sn) {
+    FILE* f = fopen(path, "r");
+    if (!f) return false;
     char line[256];
-    bool in_mouse = false;
-    char theme[128] = "";
-    char size[32] = "";
+    bool in_mouse = false, found = false;
     while (fgets(line, sizeof(line), f)) {
-        if (strncmp(line, "[Mouse]", 7) == 0) {
-            in_mouse = true;
-            continue;
-        }
-        if (line[0] == '[') {
-            in_mouse = false;
-            continue;
-        }
-        if (in_mouse) {
-            char* eq = strchr(line, '=');
-            if (eq) {
-                *eq = '\0';
-                char* key = line;
-                char* val = eq + 1;
-                while (*key == ' ' || *key == '\t') key++;
-                char* end = key + strlen(key) - 1;
-                while (end > key && (*end == ' ' || *end == '\t' || *end == '\n' || *end == '\r')) *end-- = '\0';
-                while (*val == ' ' || *val == '\t') val++;
-                end = val + strlen(val) - 1;
-                while (end > val && (*end == ' ' || *end == '\t' || *end == '\n' || *end == '\r')) *end-- = '\0';
-                if (strcmp(key, "cursorTheme") == 0) strncpy(theme, val, sizeof(theme)-1);
-                else if (strcmp(key, "cursorSize") == 0) strncpy(size, val, sizeof(size)-1);
-            }
-        }
+        if (line[0] == '[') { in_mouse = (strncmp(line, "[Mouse]", 7) == 0); continue; }
+        if (!in_mouse) continue;
+        char* eq = strchr(line, '=');
+        if (!eq) continue;
+        *eq = '\0';
+        char* key = line; char* val = eq + 1;
+        while (*key == ' ' || *key == '\t') key++;
+        char* e = key + strlen(key); while (e > key && (e[-1]==' '||e[-1]=='\t'||e[-1]=='\n'||e[-1]=='\r')) *--e = '\0';
+        while (*val == ' ' || *val == '\t') val++;
+        e = val + strlen(val); while (e > val && (e[-1]==' '||e[-1]=='\t'||e[-1]=='\n'||e[-1]=='\r')) *--e = '\0';
+        if (!strcasecmp(key, "cursorTheme") && !theme[0]) { strncpy(theme, val, tn - 1); theme[tn - 1] = 0; found = true; }
+        else if (!strcasecmp(key, "cursorSize") && !size[0]) { strncpy(size, val, sn - 1); size[sn - 1] = 0; found = true; }
     }
     fclose(f);
-    if (theme[0]) setenv("XCURSOR_THEME", theme, 1);
-    if (size[0]) setenv("XCURSOR_SIZE", size, 1);
+    return found;
+}
+
+void setup_kde_cursor() {
+    char theme[128] = "";
+    char size[32]   = "";
+    const char* home = getenv("HOME");
+    if (home) {
+        std::string p = std::string(home) + "/.config/kcminputrc";
+        parse_kde_mouse_section(p.c_str(), theme, sizeof(theme), size, sizeof(size));
+        if (!theme[0]) {   // some Plasma versions keep it in kdeglobals instead
+            std::string g = std::string(home) + "/.config/kdeglobals";
+            parse_kde_mouse_section(g.c_str(), theme, sizeof(theme), size, sizeof(size));
+        }
+    }
+    if (!theme[0]) { const char* t = getenv("XCURSOR_THEME"); if (t && t[0]) { strncpy(theme, t, sizeof(theme) - 1); theme[sizeof(theme) - 1] = 0; } }
+    if (!theme[0]) strncpy(theme, "breeze_cursors", sizeof(theme) - 1);   // KDE stock theme
+    if (!size[0])  { const char* s = getenv("XCURSOR_SIZE");  if (s && s[0]) { strncpy(size, s, sizeof(size) - 1); size[sizeof(size) - 1] = 0; } }
+    if (!size[0])  strncpy(size, "24", sizeof(size) - 1);
+    setenv("XCURSOR_THEME", theme, 1);
+    setenv("XCURSOR_SIZE",  size,  1);
+    std::string xpath = "/usr/share/icons:/usr/local/share/icons";
+    if (home) xpath += std::string(":") + home + "/.icons:" + home + "/.local/share/icons";
+    setenv("XCURSOR_PATH", xpath.c_str(), 1);   // wayland-cursor must be able to *find* the theme dir
 }
