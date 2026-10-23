@@ -15,6 +15,16 @@ ImVec4 mulc(ImVec4 c, float k, float a) {
                   c.z * k > 1.0f ? 1.0f : c.z * k, a);
 }
 
+static ImVec4 mix4(ImVec4 a, ImVec4 b, float t) {
+    return ImVec4(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t,
+                  a.z + (b.z - a.z) * t, a.w + (b.w - a.w) * t);
+}
+
+bool  g_light_theme = false;
+float ox_luma(ImVec4 c){ return 0.2126f*c.x + 0.7152f*c.y + 0.0722f*c.z; }
+bool  ox_is_light(){ return g_light_theme; }
+ImU32 ox_thumb_rim(){ return OxCol(mulc(g_body_color, g_light_theme ? 0.45f : 3.10f), 220); }
+
 bool read_kde_color(const char* section, const char* key, float &r, float &g, float &b) {
     const char* home = getenv("HOME");
     if (!home) return false;
@@ -50,7 +60,9 @@ static bool read_kde_accent_color(float &r, float &g, float &b) {
 }
 
 void setup_oxygen_theme(int preset, float custom_r, float custom_g, float custom_b) {
+    g_light_theme = ox_luma(g_body_color) > 0.45f;
     ImGuiStyle& style = ImGui::GetStyle();
+    style = ImGuiStyle();   // reset: repeated calls (color picker drag) must not stack ScaleAllSizes
     if (preset == 0) {
         g_accent_color = ImVec4(0.24f, 0.49f, 0.78f, 1.0f);
     } else if (preset == 1) {
@@ -77,13 +89,16 @@ void setup_oxygen_theme(int preset, float custom_r, float custom_g, float custom
     g_accent_active = ImVec4(
         g_accent_color.x * 0.75f, g_accent_color.y * 0.75f, g_accent_color.z * 0.75f, 1.0f);
 
+    const bool L = g_light_theme;
     ImVec4* colors = style.Colors;
-    ImVec4 frame_bg   = mulc(g_body_color, 0.80f, 0.90f);
-    ImVec4 frame_hov  = mulc(g_body_color, 1.25f, 0.95f);
-    ImVec4 frame_act  = mulc(g_body_color, 1.45f, 1.00f);
+    ImVec4 frame_bg   = L ? mulc(g_body_color, 1.18f, 0.95f) : mulc(g_body_color, 0.80f, 0.90f);
+    ImVec4 frame_hov  = L ? mulc(g_body_color, 1.06f, 0.98f) : mulc(g_body_color, 1.25f, 0.95f);
+    ImVec4 frame_act  = L ? mulc(g_body_color, 1.00f, 1.00f) : mulc(g_body_color, 1.45f, 1.00f);
     ImVec4 win_bg     = g_body_color;
-    ImVec4 pop_bg     = mulc(g_body_color, 0.85f, 1.00f);
-    ImVec4 title_bg   = mulc(g_body_color, 0.75f, 1.00f);
+    ImVec4 pop_bg     = L ? mulc(g_body_color, 1.10f, 1.00f) : mulc(g_body_color, 0.85f, 1.00f);
+    ImVec4 title_bg   = L ? mulc(g_body_color, 0.95f, 1.00f) : mulc(g_body_color, 0.75f, 1.00f);
+    ImVec4 rim        = mix4(g_body_color, g_text_color, L ? 0.45f : 0.40f); rim.w = 0.80f;
+    ImVec4 sep        = mix4(g_body_color, g_text_color, L ? 0.35f : 0.30f); sep.w = 0.60f;
     ImVec4 text_dis   = ImVec4(g_text_color.x * 0.55f + g_body_color.x * 0.45f,
                                g_text_color.y * 0.55f + g_body_color.y * 0.45f,
                                g_text_color.z * 0.55f + g_body_color.z * 0.45f, 1.00f);
@@ -93,38 +108,38 @@ void setup_oxygen_theme(int preset, float custom_r, float custom_g, float custom
     colors[ImGuiCol_WindowBg]               = win_bg;
     colors[ImGuiCol_ChildBg]                = ImVec4(frame_bg.x, frame_bg.y, frame_bg.z, 0.0f);
     colors[ImGuiCol_PopupBg]                = pop_bg;
-    colors[ImGuiCol_Border]                 = mulc(g_body_color, 3.60f, 0.55f);
+    colors[ImGuiCol_Border]                 = rim;
     colors[ImGuiCol_BorderShadow]           = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
     colors[ImGuiCol_FrameBg]                = frame_bg;
     colors[ImGuiCol_FrameBgHovered]         = frame_hov;
     colors[ImGuiCol_FrameBgActive]          = frame_act;
     colors[ImGuiCol_TitleBg]                = title_bg;
     colors[ImGuiCol_TitleBgActive]          = title_bg;
-    colors[ImGuiCol_TitleBgCollapsed]       = mulc(g_body_color, 0.60f, 1.00f);
-    colors[ImGuiCol_MenuBarBg]              = mulc(g_body_color, 0.80f, 0.90f);
+    colors[ImGuiCol_TitleBgCollapsed]       = L ? mulc(g_body_color, 0.90f, 1.00f) : mulc(g_body_color, 0.60f, 1.00f);
+    colors[ImGuiCol_MenuBarBg]              = frame_bg;
     colors[ImGuiCol_ScrollbarBg]            = ImVec4(0, 0, 0, 0);
     colors[ImGuiCol_ScrollbarGrab]          = ImVec4(0, 0, 0, 0);
     colors[ImGuiCol_ScrollbarGrabHovered]   = ImVec4(0, 0, 0, 0);
     colors[ImGuiCol_ScrollbarGrabActive]    = ImVec4(0, 0, 0, 0);
-    colors[ImGuiCol_CheckMark]              = mulc(g_body_color, 6.50f, 1.00f);
-    colors[ImGuiCol_SliderGrab]             = ImVec4(0,0,0,0);
-    colors[ImGuiCol_SliderGrabActive]       = ImVec4(0,0,0,0);
+    colors[ImGuiCol_CheckMark]              = L ? mulc(g_body_color, 0.25f, 1.0f) : mulc(g_body_color, 6.50f, 1.00f);
+    colors[ImGuiCol_SliderGrab]             = ImVec4(0, 0, 0, 0);
+    colors[ImGuiCol_SliderGrabActive]       = ImVec4(0, 0, 0, 0);
     colors[ImGuiCol_Button]                 = g_accent_active;
     colors[ImGuiCol_ButtonHovered]          = g_accent_color;
     colors[ImGuiCol_ButtonActive]           = g_accent_hover;
-    colors[ImGuiCol_Header]                 = mulc(g_body_color, 1.80f, 1.00f);
-    colors[ImGuiCol_HeaderHovered]          = mulc(g_body_color, 2.20f, 1.00f);
-    colors[ImGuiCol_HeaderActive]           = mulc(g_body_color, 2.60f, 1.00f);
-    colors[ImGuiCol_Separator]              = mulc(g_body_color, 2.80f, 0.60f);
-    colors[ImGuiCol_SeparatorHovered]       = mulc(g_body_color, 2.80f, 0.60f);
-    colors[ImGuiCol_SeparatorActive]        = mulc(g_body_color, 2.80f, 0.60f);
-    colors[ImGuiCol_ResizeGrip]             = mulc(g_body_color, 3.60f, 0.30f);
+    colors[ImGuiCol_Header]                 = L ? mulc(g_body_color, 0.90f, 1.00f) : mulc(g_body_color, 1.80f, 1.00f);
+    colors[ImGuiCol_HeaderHovered]          = L ? mulc(g_body_color, 0.82f, 1.00f) : mulc(g_body_color, 2.20f, 1.00f);
+    colors[ImGuiCol_HeaderActive]           = L ? mulc(g_body_color, 0.75f, 1.00f) : mulc(g_body_color, 2.60f, 1.00f);
+    colors[ImGuiCol_Separator]              = sep;
+    colors[ImGuiCol_SeparatorHovered]       = sep;
+    colors[ImGuiCol_SeparatorActive]        = sep;
+    colors[ImGuiCol_ResizeGrip]             = ImVec4(sep.x, sep.y, sep.z, 0.30f);
     colors[ImGuiCol_ResizeGripHovered]      = g_accent_color;
     colors[ImGuiCol_ResizeGripActive]       = g_accent_hover;
-    colors[ImGuiCol_Tab]                    = mulc(g_body_color, 1.10f, 0.90f);
+    colors[ImGuiCol_Tab]                    = L ? mulc(g_body_color, 0.95f, 0.90f) : mulc(g_body_color, 1.10f, 0.90f);
     colors[ImGuiCol_TabHovered]             = g_accent_color;
     colors[ImGuiCol_TabActive]              = g_accent_active;
-    colors[ImGuiCol_TabUnfocused]           = mulc(g_body_color, 0.95f, 0.90f);
+    colors[ImGuiCol_TabUnfocused]           = L ? mulc(g_body_color, 0.90f, 0.90f) : mulc(g_body_color, 0.95f, 0.90f);
     colors[ImGuiCol_TabUnfocusedActive]     = g_accent_active;
     colors[ImGuiCol_PlotLines]              = g_accent_color;
     colors[ImGuiCol_PlotLinesHovered]       = g_accent_hover;
@@ -143,22 +158,22 @@ void setup_oxygen_theme(int preset, float custom_r, float custom_g, float custom
     style.ItemInnerSpacing      = ImVec2(6, 4);
     style.TouchExtraPadding     = ImVec2(0, 0);
     style.IndentSpacing         = 20.0f;
-    style.ScrollbarSize         = 13.0f;
+    style.ScrollbarSize         = 11.0f;
     style.GrabMinSize           = 12.0f;
     style.WindowBorderSize      = 0.0f;
     style.ChildBorderSize       = 0.0f;
     style.PopupBorderSize       = 1.0f;
     style.FrameBorderSize       = 1.0f;
     style.TabBorderSize         = 0.0f;
-    style.WindowRounding   = 4.0f;
-    style.ChildRounding    = 4.0f;
-    style.FrameRounding    = 4.0f;
-    style.PopupRounding    = 4.0f;
-    style.ScrollbarRounding= 4.0f;
-    style.GrabRounding     = 4.0f;
-    style.TabRounding      = 4.0f;
-    style.AntiAliasedLines = true;
-    style.AntiAliasedFill  = true;
+    style.WindowRounding        = 4.0f;
+    style.ChildRounding         = 4.0f;
+    style.FrameRounding         = 4.0f;
+    style.PopupRounding         = 4.0f;
+    style.ScrollbarRounding     = 4.0f;
+    style.GrabRounding          = 4.0f;
+    style.TabRounding           = 4.0f;
+    style.AntiAliasedLines      = true;
+    style.AntiAliasedFill       = true;
     style.WindowTitleAlign      = ImVec2(0.5f, 0.5f);
     style.WindowMenuButtonPosition = ImGuiDir_None;
     style.ColorButtonPosition   = ImGuiDir_Right;

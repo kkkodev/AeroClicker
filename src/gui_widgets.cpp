@@ -55,6 +55,36 @@ static ImVec4 lerp4(const ImVec4& a, const ImVec4& b, float t) {
                   a.z + (b.z - a.z) * t, a.w + (b.w - a.w) * t);
 }
 
+// ---------- oxygen theme-aware helpers ----------
+
+static const float OX_INK_HI = 0.70f;
+static const float OX_INK_LO = 0.25f;
+
+static float ox_scale(){ ImVec2 s = ImGui::GetIO().DisplayFramebufferScale; return s.x > 0.0f ? s.x : 1.0f; }
+static ImU32 ox_fill_top(){ return OxCol(ox_is_light() ? mulc(g_body_color,1.25f) : mulc(g_body_color,2.20f)); }
+static ImU32 ox_fill_bot(){ return OxCol(ox_is_light() ? mulc(g_body_color,0.92f) : mulc(g_body_color,1.45f)); }
+static ImU32 ox_rim_neutral(int a){
+    return OxCol(lerp4(g_body_color, g_text_color, ox_is_light() ? 0.45f : 0.40f), a);
+}
+static ImU32 ox_accent_rim(){ return ox_is_light() ? OxCol(OxDark(g_accent_color,0.65f),220)
+                                                   : OxCol(OxLight(g_accent_color),220); }
+static ImU32 ox_ink_luma(float l){
+    if (ox_is_light()) return l < OX_INK_LO ? IM_COL32(240,246,255,255) : IM_COL32(20,24,20,255);
+    return l > OX_INK_HI ? IM_COL32(20,24,20,255) : IM_COL32(240,246,255,255);
+}
+static ImU32 ox_ink_fill(ImVec4 c, float extra_luma){ return ox_ink_luma(ox_luma(c) + extra_luma); }
+static ImU32 ox_ink_on(ImU32 fill){
+    int r=(fill>>IM_COL32_R_SHIFT)&255, g=(fill>>IM_COL32_G_SHIFT)&255, b=(fill>>IM_COL32_B_SHIFT)&255;
+    return ox_ink_luma((0.2126f*r+0.7152f*g+0.0722f*b)/255.0f);
+}
+static void ox_outline(ImDrawList* dl, ImVec2 mn, ImVec2 mx, float R, ImU32 col){
+    float s = ox_scale();
+    if (s <= 1.01f){ dl->AddRect(mn, mx, col, R, 0, 1.0f); return; }
+    ImVec2 a(floorf(mn.x*s)/s + 0.5f/s, floorf(mn.y*s)/s + 0.5f/s);
+    ImVec2 b(floorf(mx.x*s)/s - 0.5f/s, floorf(mx.y*s)/s - 0.5f/s);
+    dl->AddRect(a, b, col, R > 0.5f ? R - 0.5f : 0.0f, 0, 1.0f/s);
+}
+
 // True optical vertical centering. ImGui stores Descent NEGATIVE, and RenderText
 // places the baseline at pos.y + Ascent, so the ink box height is Ascent + |Descent|.
 // Centering that box (not CalcTextSize's em box) gives pixel-true alignment.
@@ -126,7 +156,7 @@ static void OxFrame(ImDrawList* dl, ImVec2 mn, ImVec2 mx, float R,
     if (b1.x - b0.x < 2.0f) b1.x = b0.x + 2.0f;
     if (b1.y - b0.y < 2.0f) b1.y = b0.y + 2.0f;
     AddRoundedRectFilledGradV(dl, b0, b1, c_top, c_bot, R);
-    ImVec2 f0(b0.x + 2.0f, b0.y + 2.0f), f1(b1.x - 2.0f, b1.y - 2.0f);
+    ImVec2 f0(b0.x + 3.0f, b0.y + 3.0f), f1(b1.x - 3.0f, b1.y - 3.0f);
     float fr = R > 1.0f ? R - 1.0f : 0.0f;
     if (gloss > 0)
         AddRoundedRectFilledGradV(dl, f0, ImVec2(f1.x, f0.y + (f1.y - f0.y) * 0.45f),
@@ -134,8 +164,7 @@ static void OxFrame(ImDrawList* dl, ImVec2 mn, ImVec2 mx, float R,
     if (shadow > 0)
         AddRoundedRectFilledGradV(dl, ImVec2(f0.x, f0.y + (f1.y - f0.y) * 0.55f), f1,
                                   IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, shadow), fr);
-    dl->AddRect(ImVec2(b0.x + 0.5f, b0.y + 0.5f), ImVec2(b1.x - 0.5f, b1.y - 0.5f),
-                border_col, R > 0.5f ? R - 0.5f : 0.0f, 0, 1.0f);
+    ox_outline(dl, b0, b1, R, border_col);
 }
 
 static void glass_gloss(ImDrawList* dl, ImVec2 mn, ImVec2 mx, float rr, float topY, float botY, int aTop) {
@@ -276,15 +305,15 @@ void oxygen_scrollbar() {
     dl->PushClipRect(wp, ImVec2(wp.x + ws.x, wp.y + ws.y), false);
     ImVec2 t0(wp.x + ws.x - sbw, wp.y);
     ImVec2 t1(wp.x + ws.x, wp.y + ws.y);
-    AddRoundedRectGradCenter(dl, t0, t1, OxCol(g_body_color), OxCol(mulc(g_body_color, 0.80f)), st.ScrollbarRounding, 10);
-    dl->AddRect(t0, t1, OxCol(mulc(g_body_color, 0.70f), 140), st.ScrollbarRounding, 0, 1.0f);
+    AddRoundedRectGradCenter(dl, t0, t1, OxCol(g_body_color), OxCol(mulc(g_body_color, ox_is_light() ? 0.88f : 0.80f)), st.ScrollbarRounding, 10);
+    ox_outline(dl, t0, t1, st.ScrollbarRounding, ox_rim_neutral(140));
     const float sy = ImGui::GetScrollY();
     const float track_h = t1.y - t0.y;
     float thumb_h = track_h * (track_h / (track_h + smax));
     if (thumb_h < st.GrabMinSize) thumb_h = st.GrabMinSize;
     if (thumb_h > track_h) thumb_h = track_h;
     float ty = t0.y + (sy / smax) * (track_h - thumb_h);
-    ImVec2 g0(t0.x + 2.0f, ty + 1.0f), g1(t1.x - 2.0f, ty + thumb_h - 1.0f);
+    ImVec2 g0(t0.x + 1.5f, ty + 1.0f), g1(t1.x - 1.5f, ty + thumb_h - 1.0f);
     float gr = st.ScrollbarRounding - 2.0f; if (gr < 1.0f) gr = 1.0f;
     ImVec2 mp = ImGui::GetMousePos();
     bool in_track = mp.x >= t0.x && mp.x <= t1.x && mp.y >= t0.y && mp.y <= t1.y;
@@ -294,11 +323,11 @@ void oxygen_scrollbar() {
     else if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && in_track) s_thumb_drag = true;
     bool lit = in_thumb || s_thumb_drag;
     float t = widget_anim(ImGui::GetID("##sb_thumb"), lit);
-    ImU32 center_c = OxCol(mulc(g_body_color, 1.85f));
-    ImU32 edge_c   = OxCol(mulc(g_body_color, 1.45f));
-    ImU32 rim_c    = lerp_u32(OxCol(mulc(g_body_color, 4.30f), 200), OxCol(OxLight(g_accent_color), 220), t);
+    ImU32 center_c = OxCol(mulc(g_body_color, ox_is_light() ? 1.15f : 1.85f));
+    ImU32 edge_c   = OxCol(mulc(g_body_color, ox_is_light() ? 0.95f : 1.45f));
+    ImU32 rim_c    = lerp_u32(ox_thumb_rim(), ox_accent_rim(), t);
     AddRoundedRectGradCenter(dl, g0, g1, center_c, edge_c, gr, 10);
-    dl->AddRect(g0, g1, rim_c, gr, 0, 1.0f);
+    ox_outline(dl, g0, g1, gr, rim_c);
     dl->PopClipRect();
 }
 
@@ -322,22 +351,19 @@ bool oxygen_button(const char* label, ImVec2 size_arg, ImU32 c1_override, ImU32 
     ImU32 c1, c2, bc; int gloss;
     if (c1_override && c2_override) {
         c1 = c1_override; c2 = c2_override;
-        bc = OxCol(OxLight(g_accent_color), 180);
-        gloss = 120;
+        bc = ox_accent_rim();
+        gloss = ox_is_light() ? 60 : 120;
     } else {
-        ImU32 g1 = OxCol(mulc(g_body_color, 2.20f));
-        ImU32 g2 = OxCol(mulc(g_body_color, 1.45f));
-        ImU32 a1 = OxCol(act ? g_accent_hover : g_accent_color);
-        ImU32 a2 = OxCol(OxDark(act ? g_accent_hover : g_accent_color));
-        c1 = lerp_u32(g1, a1, t_a);
-        c2 = lerp_u32(g2, a2, t_a);
-        bc = lerp_u32(OxCol(mulc(g_body_color, 3.60f), 180), OxCol(OxLight(g_accent_color), 220), t_h > t_a ? t_h : t_a);
-        gloss = 60 + (int)(60 * t_a);
+        c1 = lerp_u32(ox_fill_top(), OxCol(g_accent_color), t_a);
+        c2 = lerp_u32(ox_fill_bot(), OxCol(OxDark(g_accent_color)), t_a);
+        bc = lerp_u32(ox_rim_neutral(180), ox_accent_rim(), t_h > t_a ? t_h : t_a);
+        gloss = ox_is_light() ? 20 : (60 + (int)(60 * t_a));
     }
-    OxFrame(dl, mn, mx, R, c1, c2, bc, gloss, 60);
+    int shadow = ox_is_light() ? 26 : 60;
+    OxFrame(dl, mn, mx, R, c1, c2, bc, gloss, shadow);
     const char* tend = strstr(label, "##");
     dl->AddText(ImVec2(mn.x + (sz.x - ls.x) * 0.5f, vcenter_top(mn.y, mx.y)),
-                IM_COL32(238, 246, 255, 255), label, tend ? tend : nullptr);
+                ox_ink_on(c1), label, tend ? tend : nullptr);
     return clicked;
 }
 
@@ -351,7 +377,6 @@ bool oxygen_checkbox(const char* label, bool* v, bool label_clickable) {
     ImVec2 mn = ImGui::GetCursorScreenPos();
     ImVec2 total(sz + (ls.x > 0.0f ? ImGui::GetStyle().ItemInnerSpacing.x + ls.x : 0.0f), sz);
     bool clicked_item = ImGui::InvisibleButton(label, total);
-    // when the label is inert, only presses inside the box count
     const bool in_box = ImGui::GetIO().MousePos.x <= mn.x + sz;
     bool clicked = clicked_item && (label_clickable || in_box);
     if (clicked) *v = !*v;
@@ -362,11 +387,11 @@ bool oxygen_checkbox(const char* label, bool* v, bool label_clickable) {
     float t_h = widget_anim(id, hov);
     float t_c = widget_anim(id + 1, *v);
     ImVec2 bx1(mn.x + sz, mn.y + sz);
-    ImU32 fill = lerp_u32(OxCol(mulc(g_body_color, 1.90f), 235), OxCol(act ? g_accent_hover : g_accent_active), t_c);
-    ImU32 rimc = lerp_u32(OxCol(mulc(g_body_color, 3.60f), 200), OxCol(OxLight(g_accent_color), 220), t_h > t_c ? t_h : t_c);
+    ImU32 fill = lerp_u32(OxCol(ox_is_light() ? mulc(g_body_color, 1.25f, 235) : mulc(g_body_color, 1.90f, 235)), OxCol(act ? g_accent_hover : g_accent_active), t_c);
+    ImU32 rimc = lerp_u32(ox_rim_neutral(200), ox_accent_rim(), t_h > t_c ? t_h : t_c);
     dl->AddRectFilled(mn, bx1, fill, R);
-    glass_gloss(dl, mn, bx1, R, mn.y + 1.0f, mn.y + sz * 0.55f, 36 + (int)(44 * t_c));
-    dl->AddRect(mn, bx1, rimc, R, 0, 1.0f);
+    glass_gloss(dl, mn, bx1, R, mn.y + 1.0f, mn.y + sz * 0.55f, ox_is_light() ? 18 : (36 + (int)(44 * t_c)));
+    ox_outline(dl, mn, bx1, R, rimc);
     if (t_c > 0.01f) {
         const float th = (sz * 0.09f < 1.4f) ? 1.4f : (sz * 0.09f);
         ImVec2 pts[3] = {
@@ -374,7 +399,7 @@ bool oxygen_checkbox(const char* label, bool* v, bool label_clickable) {
             ImVec2(mn.x + sz * 0.45f, mn.y + sz * 0.66f),
             ImVec2(mn.x + sz * 0.70f, mn.y + sz * 0.36f),
         };
-        dl->AddPolyline(pts, 3, IM_COL32(245, 250, 255, (int)(255 * t_c)), 0, th);
+        dl->AddPolyline(pts, 3, ox_ink_on(fill), 0, th);
     }
     if (ls.x > 0.0f)
         dl->AddText(ImVec2(bx1.x + ImGui::GetStyle().ItemInnerSpacing.x, vcenter_top(mn.y, mn.y + sz)),
@@ -389,7 +414,7 @@ static bool slider_widget(const char* id, double* v, double lo, double hi, const
     ImVec2 r0 = ImGui::GetItemRectMin(), r1 = ImGui::GetItemRectMax();
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const float FR = ImGui::GetStyle().FrameRounding;
-    glass_gloss(dl, r0, r1, FR, r0.y + 1.0f, r0.y + (r1.y - r0.y) * 0.55f, 36);
+    glass_gloss(dl, r0, r1, FR, r0.y + 1.0f, r0.y + (r1.y - r0.y) * 0.55f, ox_is_light() ? 18 : 36);
     float grab_w = ImGui::GetStyle().GrabMinSize;
     float t = (float)((*v - lo) / (hi - lo)); if (t < 0) t = 0; if (t > 1) t = 1;
     const float pad = 2.0f;
@@ -397,12 +422,12 @@ static bool slider_widget(const char* id, double* v, double lo, double hi, const
     ImVec2 g0(gx, r0.y + 3), g1(gx + grab_w, r1.y - 3);
     bool hov = ImGui::IsItemHovered(); bool act = ImGui::IsItemActive();
     float ta = widget_anim(ImGui::GetID(id), hov || act);
-    ImU32 center_c = lerp_u32(OxCol(mulc(g_body_color, 1.85f)), OxCol(g_accent_hover), ta);
-    ImU32 edge_c   = lerp_u32(OxCol(mulc(g_body_color, 1.45f)), OxCol(g_accent_active), ta);
-    ImU32 rim_c = lerp_u32(OxCol(mulc(g_body_color, 4.30f), 200), OxCol(OxLight(g_accent_color), 220), t);
+    ImU32 center_c = lerp_u32(OxCol(ox_is_light() ? mulc(g_body_color, 1.10f) : mulc(g_body_color, 1.85f)), OxCol(g_accent_hover), ta);
+    ImU32 edge_c   = lerp_u32(OxCol(ox_is_light() ? mulc(g_body_color, 0.95f) : mulc(g_body_color, 1.45f)), OxCol(g_accent_active), ta);
+    ImU32 rim_c    = lerp_u32(ox_thumb_rim(), ox_accent_rim(), ta);
     float gr = (g1.x - g0.x) * 0.5f; if (gr > OXY_R) gr = OXY_R;
     AddRoundedRectGradCenter(dl, g0, g1, center_c, edge_c, gr, 8);
-    dl->AddRect(g0, g1, rim_c, gr, 0, 1.0f);
+    ox_outline(dl, g0, g1, gr, rim_c);
     return changed;
 }
 
@@ -447,7 +472,8 @@ bool combo_framed(const char* id, int* idx, const char* items) {
     const char* preview = items;
     for (int i = 0; i < *idx && *preview; i++) preview += strlen(preview) + 1;
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4, 4));
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4, 6));
     const float FR = ImGui::GetStyle().FrameRounding;
     const float arrow_sz = ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.x * 2.0f;
     ImVec2 f0 = ImGui::GetCursorScreenPos();
@@ -458,28 +484,27 @@ bool combo_framed(const char* id, int* idx, const char* items) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
     bool changed = false;
     bool open = ImGui::BeginCombo(id, preview, ImGuiComboFlags_NoArrowButton);
-    ImGui::PopStyleVar();
+    ImGui::PopStyleVar(1);   // WindowPadding only; PopupBorderSize must stay 0 until EndCombo
     bool fhov = ImGui::IsMouseHoveringRect(f0, f1);
     float t_h = widget_anim(wid, fhov);
     float t_o = widget_anim(wid + 1, open);
-    ImU32 c1 = lerp_u32(OxCol(mulc(g_body_color, 2.20f)), OxCol(g_accent_color), t_o);
-    ImU32 c2 = lerp_u32(OxCol(mulc(g_body_color, 1.45f)), OxCol(OxDark(g_accent_color)), t_o);
-    ImU32 bc = lerp_u32(OxCol(mulc(g_body_color, 3.60f), 200), OxCol(OxLight(g_accent_color), 220), t_h > t_o ? t_h : t_o);
-    OxFrame(dl, f0, f1, FR, c1, c2, bc, 60 + (int)(80 * t_o), 60);
-    dl->AddText(ImVec2(f0.x + ImGui::GetStyle().FramePadding.x, vcenter_top(f0.y, f1.y)),
-                lerp_u32(OxCol(g_text_color, 205), IM_COL32(238, 246, 255, 255), t_o), preview, nullptr);
+    ImU32 c1 = lerp_u32(ox_fill_top(), OxCol(g_accent_color), t_o);
+    ImU32 c2 = lerp_u32(ox_fill_bot(), OxCol(OxDark(g_accent_color)), t_o);
+    ImU32 bc = lerp_u32(ox_rim_neutral(200), ox_accent_rim(), t_h > t_o ? t_h : t_o);
+    OxFrame(dl, f0, f1, FR, c1, c2, bc, 60 + (int)(80 * t_o), ox_is_light() ? 26 : 60);
+    ImU32 fg = open ? ox_ink_fill(g_accent_color, 0.12f) : ox_ink_on(ox_fill_top());
+    dl->AddText(ImVec2(f0.x + ImGui::GetStyle().FramePadding.x, vcenter_top(f0.y, f1.y)), fg, preview, nullptr);
     float ax = f1.x - arrow_sz * 0.5f, ay = (f0.y + f1.y) * 0.5f;
+    float as = 6.0f;
+    if (open)
+        dl->AddTriangleFilled(ImVec2(ax - as, ay + as * 0.5f), ImVec2(ax + as, ay + as * 0.5f), ImVec2(ax, ay - as * 0.5f), fg);
+    else
+        dl->AddTriangleFilled(ImVec2(ax - as, ay - as * 0.5f), ImVec2(ax + as, ay - as * 0.5f), ImVec2(ax, ay + as * 0.5f), fg);
     if (open) {
-        float as = 6.0f;   // same size as the closed arrow
-        dl->AddTriangleFilled(ImVec2(ax - as, ay + as * 0.5f), ImVec2(ax + as, ay + as * 0.5f), ImVec2(ax, ay - as * 0.5f), IM_COL32(255, 255, 255, 220));
-    } else {
-        float as = 6.0f;
-        dl->AddTriangleFilled(ImVec2(ax - as, ay - as * 0.5f), ImVec2(ax + as, ay - as * 0.5f), ImVec2(ax, ay + as * 0.5f), IM_COL32(255, 255, 255, 220));
-    }
-    if (open) {
-        ImGui::PushStyleColor(ImGuiCol_Border, mulc(g_body_color, 4.20f, 0.75f));
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 4));
         ImDrawList* pdl = ImGui::GetWindowDrawList();
+        ImVec4 tint = lerp4(ImGui::GetStyle().Colors[ImGuiCol_PopupBg], g_accent_color, 0.35f);
+        ImU32 tcol_sel = ox_ink_fill(tint, 0.0f);
         const char* p = items;
         for (int i = 0; i < count; i++) {
             ImVec2 p0 = ImGui::GetCursorScreenPos();
@@ -500,18 +525,20 @@ bool combo_framed(const char* id, int* idx, const char* items) {
             if (down) pdl->AddRectFilled(p0, r1, OxCol(g_accent_active, 60), OXY_R);
             float b_t = o_h > o_s ? o_h : o_s;
             if (b_t > 0.01f)
-                pdl->AddRect(ImVec2(p0.x + 0.5f, p0.y + 0.5f), ImVec2(r1.x - 0.5f, r1.y - 0.5f),
-                             lerp_u32(IM_COL32(0, 0, 0, 0), OxCol(OxLight(g_accent_color), 200), b_t), OXY_R);
-            ImU32 tcol = (i == *idx) ? IM_COL32(240, 246, 255, 255) : ImGui::GetColorU32(ImGuiCol_Text);
+                ox_outline(pdl, p0, r1, OXY_R, lerp_u32(IM_COL32(0, 0, 0, 0), ox_accent_rim(), b_t));
+            ImU32 tcol = (i == *idx) ? tcol_sel : ImGui::GetColorU32(ImGuiCol_Text);
             pdl->AddText(ImVec2(p0.x + ImGui::GetStyle().FramePadding.x, vcenter_top(p0.y, p0.y + h)), tcol, p, nullptr);
             if (clicked) { *idx = i; changed = true; ImGui::CloseCurrentPopup(); }
             p += strlen(p) + 1;
         }
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor(1);
+        ImGui::PopStyleVar(1);   // ItemSpacing
+        ImVec2 wp = ImGui::GetWindowPos(), wsz = ImGui::GetWindowSize();
+        float pr = ImGui::GetStyle().PopupRounding;
+        ox_outline(pdl, wp, ImVec2(wp.x + wsz.x, wp.y + wsz.y), pr, ImGui::GetColorU32(ImGuiCol_Border));
         ImGui::EndCombo();
+        ImGui::PopStyleVar(1);   // PopupBorderSize
     }
-    ImGui::PopStyleVar();
+    ImGui::PopStyleVar(1);       // FrameBorderSize
     return changed;
 }
 
@@ -581,8 +608,8 @@ void begin_panel(const char* label, float width, int status) {
     ImVec2 p1(start.x + panel_w, start.y + h);
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    dl->AddRectFilled(start, p1, OxCol(mulc(g_body_color, 1.16f), 235), PANEL_R);
-    dl->AddRect(start, p1, OxCol(mulc(g_body_color, 2.40f), 110), PANEL_R, 0, 1.0f);
+    dl->AddRectFilled(start, p1, OxCol(ox_is_light() ? mulc(g_body_color, 1.10f, 235) : mulc(g_body_color, 1.16f, 235)), PANEL_R);
+    ox_outline(dl, start, p1, PANEL_R, ox_rim_neutral(110));
 
     ImGui::SetCursorScreenPos(ImVec2(start.x + PANEL_PAD, start.y + 12.0f));
     s_panel_inner = panel_w - PANEL_PAD * 2.0f;
@@ -600,7 +627,7 @@ void begin_panel(const char* label, float width, int status) {
         float r = 5.0f;
         ImVec2 c(start.x + panel_w - PANEL_PAD - r, (hmn.y + hmx.y) * 0.5f);
         if (status) {
-            dl->AddCircleFilled(c, r + 3.5f, IM_COL32(46, 148, 84, 40));   // soft outer glow
+            dl->AddCircleFilled(c, r + 3.5f, IM_COL32(46, 148, 84, 40));
             dl->AddCircleFilled(c, r + 1.5f, IM_COL32(70, 190, 110, 70));
             dl->AddCircleFilled(c, r,        IM_COL32(52, 168, 96, 255));
             dl->AddCircle(c, r, IM_COL32(150, 230, 180, 200), 0, 1.0f);
@@ -674,12 +701,12 @@ void click_indicator(const char* label, bool on) {
     const ImU32 fill_on  = IM_COL32(46, 148, 84, 235);
     const ImU32 rim_on   = IM_COL32(150, 230, 180, 160);
     const ImU32 text_on  = IM_COL32(235, 255, 242, 255);
-    const ImU32 fill_off = IM_COL32(255, 255, 255, 22);
-    const ImU32 rim_off  = IM_COL32(255, 255, 255, 45);
-    const ImU32 text_off = IM_COL32(200, 212, 228, 150);
+    const ImU32 fill_off = ox_is_light() ? OxCol(mulc(g_body_color, 0.94f, 255)) : OxCol(mulc(g_body_color, 1.30f, 22));
+    const ImU32 rim_off  = ox_rim_neutral(60);
+    const ImU32 text_off = OxCol(g_text_color, ox_is_light() ? 180 : 150);
     dl->AddRectFilled(mn, mx, on ? fill_on : fill_off, r);
-    if (on) glass_gloss(dl, mn, mx, r, mn.y + 1.0f, mn.y + sz.y * 0.55f, 70);
-    dl->AddRect(mn, mx, on ? rim_on : rim_off, r, 0, 1.0f);
+    if (on) glass_gloss(dl, mn, mx, r, mn.y + 1.0f, mn.y + sz.y * 0.55f, ox_is_light() ? 35 : 70);
+    ox_outline(dl, mn, mx, r, on ? rim_on : rim_off);
     dl->AddText(ImVec2(mn.x + pad.x, vcenter_top(mn.y, mx.y)), on ? text_on : text_off, display);
     ImGui::Dummy(sz);
 }
@@ -708,9 +735,9 @@ void segmented_tabs(const char* const* names, int count, int& current_tab) {
     const float pad_x = 14.0f;
     const float h = ImGui::GetFrameHeight();
     const ImU32 track = ImGui::GetColorU32(ImGuiCol_FrameBg);
-    const ImU32 rim = ImGui::GetColorU32(ImGuiCol_Separator);
-    const ImU32 txtSel = ImGui::GetColorU32(ImGuiCol_Text);
+    const ImU32 rim = ox_rim_neutral(150);
     const ImU32 txt = ImGui::GetColorU32(ImGuiCol_Text, 0.80f);
+    const ImU32 txtSel = ox_ink_fill(g_accent_active, 0.12f);
     ImVec2 ls[8]; float w[8], total = 0.0f;
     for (int i = 0; i < count && i < 8; i++) {
         ls[i] = ImGui::CalcTextSize(names[i]);
@@ -721,7 +748,7 @@ void segmented_tabs(const char* const* names, int count, int& current_tab) {
     ImVec2 mx(mn.x + total, mn.y + h);
     ImDrawList* dl = ImGui::GetWindowDrawList();
     dl->AddRectFilled(mn, mx, track, R);
-    dl->AddRect(mn, mx, rim, R, 0, 1.0f);
+    ox_outline(dl, mn, mx, R, rim);
     float x = mn.x;
     for (int i = 0; i < count; i++) {
         ImGui::SetCursorScreenPos(ImVec2(x, mn.y));
@@ -736,9 +763,9 @@ void segmented_tabs(const char* const* names, int count, int& current_tab) {
         if (t_s > 0.01f) {
             dl->AddRectFilled(i0, i1, lerp_u32(IM_COL32(0, 0, 0, 0), OxCol(g_accent_active), t_s), PR);
             glass_gloss(dl, i0, i1, PR, i0.y + 1.0f, i0.y + (i1.y - i0.y) * 0.58f, (int)(80 * t_s));
-            dl->AddRect(i0, i1, lerp_u32(IM_COL32(0, 0, 0, 0), OxCol(OxLight(g_accent_color), 200), t_s), PR, 0, 1.0f);
+            ox_outline(dl, i0, i1, PR, lerp_u32(IM_COL32(0, 0, 0, 0), ox_accent_rim(), t_s));
         } else if (t_h > 0.01f) {
-            dl->AddRectFilled(i0, i1, IM_COL32(g_accent_color.x * 255, g_accent_color.y * 255, g_accent_color.z * 255, (int)(64 * t_h)), PR);
+            dl->AddRectFilled(i0, i1, IM_COL32((int)(g_accent_color.x * 255), (int)(g_accent_color.y * 255), (int)(g_accent_color.z * 255), (int)(64 * t_h)), PR);
         }
         if (i > 0 && !sel && current_tab != i - 1)
             dl->AddLine(ImVec2(s0.x, s0.y + 5), ImVec2(s0.x, s1.y - 5), rim, 1.0f);

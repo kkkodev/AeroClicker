@@ -11,6 +11,11 @@ extern ImVec4 g_accent_active;
 extern ImVec4 g_body_color;
 extern ImVec4 g_text_color;
 
+extern bool g_light_theme;
+float ox_luma(ImVec4 c);
+bool  ox_is_light();
+ImU32 ox_thumb_rim();
+
 void setup_oxygen_theme(int preset, float custom_r, float custom_g, float custom_b);
 ImVec4 mulc(ImVec4 c, float k, float a = 1.0f);
 ImU32 OxCol(ImVec4 c, int a = 255);

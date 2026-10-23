@@ -477,12 +477,12 @@ void gui_run(GuiState& state) {
 
         {
             ImU32 body_col = OxCol(g_body_color);
-            ImU32 drop_top = OxCol(mulc(g_body_color, 1.50f));
+            ImU32 drop_top = OxCol(ox_is_light() ? mulc(g_body_color, 1.06f) : mulc(g_body_color, 1.50f));
             const float DROP_H = 120.0f;
             ImDrawList* bgdl = ImGui::GetBackgroundDrawList();
             bgdl->AddRectFilled(ImVec2(0, 0), ImVec2((float)win_w, (float)win_h), body_col);
             bgdl->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2((float)win_w, DROP_H), drop_top, drop_top, body_col, body_col);
-            bgdl->AddLine(ImVec2(0, 0), ImVec2((float)win_w, 0), OxCol(mulc(g_body_color, 2.20f), 70));
+            bgdl->AddLine(ImVec2(0, 0), ImVec2((float)win_w, 0), OxCol(ox_is_light() ? mulc(g_body_color, 0.80f) : mulc(g_body_color, 2.20f), 70));
         }
 
         ImGui::SetNextWindowPos(ImVec2(0, 0));
