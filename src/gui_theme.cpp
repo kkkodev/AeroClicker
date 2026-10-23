@@ -97,7 +97,9 @@ void setup_oxygen_theme(int preset, float custom_r, float custom_g, float custom
     ImVec4 win_bg     = g_body_color;
     ImVec4 pop_bg     = L ? mulc(g_body_color, 1.10f, 1.00f) : mulc(g_body_color, 0.85f, 1.00f);
     ImVec4 title_bg   = L ? mulc(g_body_color, 0.95f, 1.00f) : mulc(g_body_color, 0.75f, 1.00f);
-    ImVec4 rim        = mix4(g_body_color, g_text_color, L ? 0.45f : 0.40f); rim.w = 0.80f;
+
+    // Uniform neutral rim color matching ox_rim_neutral(160)
+    ImVec4 rim        = mix4(g_body_color, g_text_color, L ? 0.45f : 0.40f); rim.w = 160 / 255.0f;
     ImVec4 sep        = mix4(g_body_color, g_text_color, L ? 0.35f : 0.30f); sep.w = 0.60f;
     ImVec4 text_dis   = ImVec4(g_text_color.x * 0.55f + g_body_color.x * 0.45f,
                                g_text_color.y * 0.55f + g_body_color.y * 0.45f,
@@ -158,7 +160,7 @@ void setup_oxygen_theme(int preset, float custom_r, float custom_g, float custom
     style.ItemInnerSpacing      = ImVec2(6, 4);
     style.TouchExtraPadding     = ImVec2(0, 0);
     style.IndentSpacing         = 20.0f;
-    style.ScrollbarSize         = 11.0f;
+    style.ScrollbarSize         = 13.0f;
     style.GrabMinSize           = 12.0f;
     style.WindowBorderSize      = 0.0f;
     style.ChildBorderSize       = 0.0f;

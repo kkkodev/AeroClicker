@@ -8,6 +8,11 @@ void setup_key_callbacks(GLFWwindow* window);
 const char* key_name(int code);
 void set_big_font(ImFont* font);   // crisp large readout font (loaded at ~30px)
 
+bool ox_input_text(const char* id, char* buf, int buf_n, const char* hint, float w);
+bool ox_input_double(const char* id, double* v, double step, double step_fast, const char* fmt, float w);
+void ox_plot_lines(const char* id, const float* values, int count, int offset,
+                   const char* overlay, float y0, float y1, ImVec2 size);
+
 // --- core widgets ---
 void oxygen_scrollbar();
 bool oxygen_button(const char* label, ImVec2 size_arg = ImVec2(0, 0), ImU32 c1_override = 0, ImU32 c2_override = 0, bool force_colored = false);

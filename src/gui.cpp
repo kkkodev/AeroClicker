@@ -276,8 +276,7 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
         ImGui::PopStyleVar();
     }
     ImGui::TextDisabled("Profile name");
-    ImGui::SetNextItemWidth(panel_inner() * 0.6f);
-    ImGui::InputTextWithHint("##profile_name", "New profile name...", profile_name_buf, 64);
+    ox_input_text("##profile_name", profile_name_buf, 64, "New profile name...", panel_inner() * 0.6f);
     if (oxygen_button("Save", ImVec2(80, 0))) {
         std::string name = profile_name_buf[0] ? profile_name_buf : "config";
         if (ConfigFile::save(state.config, name)) {
@@ -333,10 +332,10 @@ static void draw_analytics_tab(GuiState& state, char* status_msg, float& status_
     begin_panel("Live");
     ImGui::TextDisabled("Left CPS");
     { const auto& t = state.left.tracker(); char ov[32]; snprintf(ov, sizeof(ov), "%.1f CPS", t.avg_cps());
-      ImGui::PlotLines("##lcps", t.graph_data(), t.graph_size(), t.graph_offset(), ov, 0.0f, 35.0f, ImVec2(panel_inner(), 60)); }
+      ox_plot_lines("##lcps", t.graph_data(), t.graph_size(), t.graph_offset(), ov, 0.0f, 35.0f, ImVec2(panel_inner(), 60)); }
     ImGui::TextDisabled("Right CPS");
     { const auto& t = state.right.tracker(); char ov[32]; snprintf(ov, sizeof(ov), "%.1f CPS", t.avg_cps());
-      ImGui::PlotLines("##rcps", t.graph_data(), t.graph_size(), t.graph_offset(), ov, 0.0f, 35.0f, ImVec2(panel_inner(), 60)); }
+      ox_plot_lines("##rcps", t.graph_data(), t.graph_size(), t.graph_offset(), ov, 0.0f, 35.0f, ImVec2(panel_inner(), 60)); }
     end_panel();
 
     begin_panel("Session");
