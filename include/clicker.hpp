@@ -12,6 +12,9 @@ class Clicker {
     const UInputDevice& device_;
     std::atomic<bool> enabled_{false};
     std::atomic<bool> running_{true};
+    // Set while the mouse is over AeroClicker's own window: synthesized clicks must not hit
+    // the interface (e.g. toggling the L/R pills with the cursor still on top of them).
+    std::atomic<bool> paused_{false};
     std::thread thread_;
     double current_trend_ = 0.0;
 
@@ -26,6 +29,7 @@ public:
 
     ~Clicker() {
         running_ = false;
+        paused_ = false;
         enabled_ = true;
         if (thread_.joinable()) thread_.join();
     }
@@ -35,6 +39,8 @@ public:
 
     void set_enabled(bool v) { enabled_ = v; }
     bool is_enabled() const { return enabled_; }
+    void set_paused(bool v) { paused_ = v; }
+    bool is_paused() const { return paused_; }
     void toggle() { enabled_ = !enabled_.load(); }
     uint32_t click_count() const { return click_count_.load(); }
     ClickerProfile& profile() { return profile_; }
@@ -62,6 +68,10 @@ private:
             }
 
             while (enabled_ && running_) {
+                if (paused_) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                    continue;
+                }
                 if (profile_.breaks_enabled && std::chrono::steady_clock::now() >= next_break) {
                     double dur = Variance::range(profile_.break_duration_min, profile_.break_duration_max);
                     int64_t dur_ms = static_cast<int64_t>(dur * 1000);

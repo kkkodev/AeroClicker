@@ -12,7 +12,7 @@ class MacroRunner {
     std::thread thread_;
     std::atomic<int> current_step_{-1};
     std::atomic<int> loop_count_{0};
-    int* active_slot_ = nullptr;
+    std::atomic<int>* active_slot_ = nullptr;
 
 public:
     MacroRunner(const UInputDevice& device) : device_(device) {}
@@ -26,7 +26,7 @@ public:
     int current_step() const { return current_step_; }
     int loop_count() const { return loop_count_; }
 
-    void start(const Macro& macro, int* active_slot = nullptr) {
+    void start(const Macro& macro, std::atomic<int>* active_slot = nullptr) {
         stop();
         active_slot_ = active_slot;
         running_ = true;
@@ -41,7 +41,7 @@ public:
         current_step_ = -1;
     }
 
-    void toggle(const Macro& macro, int* active_slot = nullptr) {
+    void toggle(const Macro& macro, std::atomic<int>* active_slot = nullptr) {
         if (running_) stop();
         else start(macro, active_slot);
     }

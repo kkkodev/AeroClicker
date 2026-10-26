@@ -1,6 +1,7 @@
 #include "gui.hpp"
 #include "gui_theme.hpp"
 #include "gui_widgets.hpp"
+#include "audio.hpp"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -18,7 +19,36 @@ static int s_applied_preset[2] = { -1, -1 };
 static char s_font_path[256]   = "";
 static float s_font_scale      = 0.0f;
 
-static void preset_flow(const ClickerPreset* presets, ClickerProfile& profile, int side, float inner_w) {
+// Status/progress text was a pale mint that only reads on the dark theme.
+static ImVec4 ok_text_color() {
+    return ox_is_light() ? ImVec4(0.09f, 0.42f, 0.19f, 1.0f) : ImVec4(0.55f, 0.90f, 0.65f, 1.0f);
+}
+
+static bool same_profile(const ClickerProfile& a, const ClickerProfile& b) {
+    // Presets are not stored by index (the config only stores values), so "active" means the
+    // current profile still equals the preset. Editing any humanization value clears it.
+    auto eq = [](double x, double y) { const double d = x - y; return d < 5e-4 && d > -5e-4; };
+    return eq(a.cps_mean, b.cps_mean) && eq(a.cps_stddev, b.cps_stddev) &&
+           eq(a.cps_min, b.cps_min) && eq(a.cps_max, b.cps_max) &&
+           eq(a.cps_minmax_fallout, b.cps_minmax_fallout) &&
+           eq(a.spike_chance, b.spike_chance) && eq(a.spike_min, b.spike_min) && eq(a.spike_max, b.spike_max) &&
+           eq(a.stutter_chance, b.stutter_chance) && eq(a.stutter_min, b.stutter_min) && eq(a.stutter_max, b.stutter_max) &&
+           eq(a.hold_ms_mean, b.hold_ms_mean) && eq(a.hold_ms_stddev, b.hold_ms_stddev) &&
+           eq(a.hold_ms_min, b.hold_ms_min) && eq(a.hold_ms_max, b.hold_ms_max) &&
+           eq(a.hold_ms_heavy_chance, b.hold_ms_heavy_chance) &&
+           eq(a.hold_ms_heavy_min, b.hold_ms_heavy_min) && eq(a.hold_ms_heavy_max, b.hold_ms_heavy_max) &&
+           eq(a.rhythm_volatility, b.rhythm_volatility) && eq(a.rhythm_tension, b.rhythm_tension) &&
+           eq(a.start_delay_ms, b.start_delay_ms) &&
+           eq(a.double_click_chance, b.double_click_chance) &&
+           eq(a.double_click_delay_min, b.double_click_delay_min) &&
+           eq(a.double_click_delay_max, b.double_click_delay_max) &&
+           a.breaks_enabled == b.breaks_enabled &&
+           eq(a.break_interval_min, b.break_interval_min) && eq(a.break_interval_max, b.break_interval_max) &&
+           eq(a.break_duration_min, b.break_duration_min) && eq(a.break_duration_max, b.break_duration_max) &&
+           a.distribution == b.distribution;
+}
+
+static void preset_flow(const ClickerPreset* presets, ClickerProfile& profile, float inner_w) {
     const float sp = ImGui::GetStyle().ItemSpacing.x;
     const float gap = ImGui::GetStyle().ItemSpacing.y;
     const float row_x = ImGui::GetCursorPosX();
@@ -35,12 +65,11 @@ static void preset_flow(const ClickerPreset* presets, ClickerProfile& profile, i
                 x_used = 0.0f;
             } else { ImGui::SameLine(); x_used += sp; }
         }
-        bool applied = (s_applied_preset[side] == i);
+        bool applied = same_profile(profile, presets[i].profile);
         if (oxygen_button(presets[i].name, ImVec2(0, 0), 0, 0, applied)) {
             int saved = profile.mouse_button;
             profile = presets[i].profile;
             profile.mouse_button = saved;
-            s_applied_preset[side] = i;
         }
         x_used += bw;
     }
@@ -52,8 +81,32 @@ static ActivationMode idx_to_mode(int i) { return i == 0 ? ActivationMode::TOGGL
 
 // ---------------- Home ----------------
 
+// The L/R pills in the top bar are live switches: clicking one toggles that clicker just like
+// its bound key would. Mouse mode only arms/disarms, because it clicks while the real button
+// is held and has no independent on/off state.
+static void toggle_clicker_pill(GuiState& state, bool left_side) {
+    Clicker& clicker = left_side ? state.left : state.right;
+    const ActivationMode mode = left_side ? state.config.left_mode : state.config.right_mode;
+    bool& armed = left_side ? state.left_armed : state.right_armed;
+    // The pill shows the master on/off state. In MOUSE mode that is the armed flag (the
+    // clicker only runs while the physical button is held), so beep on arming rather than
+    // on the transient enabled flag.
+    const bool was = (mode == ActivationMode::MOUSE) ? armed : clicker.is_enabled();
+    if (mode == ActivationMode::MOUSE) {
+        armed = !armed;
+        if (!armed) clicker.set_enabled(false);
+    } else {
+        clicker.toggle();
+    }
+    const bool now = (mode == ActivationMode::MOUSE) ? armed : clicker.is_enabled();
+    if (state.config.audio_enabled && now != was) {
+        if (now) Audio::beep_on();
+        else Audio::beep_off();
+    }
+}
+
 static void draw_clicker_card(const char* title, ClickerProfile& profile, ActivationMode& mode,
-                              Clicker& clicker, int& key, const ClickerPreset* presets, int side,
+                              Clicker& clicker, int& key, const ClickerPreset* presets,
                               float card_w, bool on) {
     begin_panel(title, card_w, on ? 1 : 0);
     float inner = panel_inner();
@@ -64,7 +117,7 @@ static void draw_clicker_card(const char* title, ClickerProfile& profile, Activa
     if (stacked_combo("Activation", &idx, "Toggle\0Hold\0Mouse\0", inner)) mode = idx_to_mode(idx);
     stacked_slider("Speed (CPS)", &profile.cps_mean, CPS_MEAN_LO, CPS_MEAN_HI, "%.1f", inner);
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
-    preset_flow(presets, profile, side, inner);
+    preset_flow(presets, profile, inner);
     end_panel();
                               }
 
@@ -76,11 +129,11 @@ static void draw_home_tab(GuiState& state) {
     bool l_on = state.left.is_enabled() || state.left_armed;
     bool r_on = state.right.is_enabled() || state.right_armed;
     draw_clicker_card("Left clicker", state.config.left, state.config.left_mode,
-                      state.left, state.config.key_left, LEFT_PRESETS, 0, card_w, l_on);
+                      state.left, state.config.key_left, LEFT_PRESETS, card_w, l_on);
     float y_left = ImGui::GetCursorScreenPos().y;
     ImGui::SetCursorScreenPos(ImVec2(c0.x + card_w + gap, c0.y));
     draw_clicker_card("Right clicker", state.config.right, state.config.right_mode,
-                      state.right, state.config.key_right, RIGHT_PRESETS, 1, card_w, r_on);
+                      state.right, state.config.key_right, RIGHT_PRESETS, card_w, r_on);
     float y_right = ImGui::GetCursorScreenPos().y;
 
     // fresh full-width row below BOTH cards, tip centered
@@ -164,8 +217,7 @@ static void draw_macros_tab(GuiState& state) {
             state.selected_macro = m;
     }
     auto& mac = state.config.macros[state.selected_macro];
-    ImGui::SetNextItemWidth(panel_inner() * 0.5f);
-    ImGui::InputText("##macname", mac.name, sizeof(mac.name));
+    ox_input_text("##macname", mac.name, sizeof(mac.name), "Macro name...", panel_inner() * 0.5f);
     field_gloss_last_item();  // Add slider-style sheen
     ImGui::SameLine();
     oxygen_checkbox("Loop", &mac.loop, false);
@@ -185,14 +237,14 @@ static void draw_macros_tab(GuiState& state) {
         ImGui::SameLine();
         switch (step.action) {
             case MacroAction::LEFT_CLICK: case MacroAction::RIGHT_CLICK:
-                ImGui::SetNextItemWidth(60); ImGui::InputInt("##cnt", &step.count, 0); if (step.count < 1) step.count = 1;
-                ImGui::SameLine(); ImGui::SetNextItemWidth(80); ImGui::InputDouble("ms##intv", &step.delay_ms, 0, 0, "%.0f"); if (step.delay_ms < 1) step.delay_ms = 1;
+                ox_input_int("##cnt", &step.count, 0, 0, 60); if (step.count < 1) step.count = 1;
+                ImGui::SameLine(); ox_input_double("ms##intv", &step.delay_ms, 0, 0, "%.0f", 80); if (step.delay_ms < 1) step.delay_ms = 1;
                 break;
             case MacroAction::DELAY:
-                ImGui::SetNextItemWidth(100); ImGui::InputDouble("ms##del", &step.delay_ms, 0, 0, "%.0f"); if (step.delay_ms < 1) step.delay_ms = 1;
+                ox_input_double("ms##del", &step.delay_ms, 0, 0, "%.0f", 100); if (step.delay_ms < 1) step.delay_ms = 1;
                 break;
             case MacroAction::SWITCH_SLOT:
-                ImGui::SetNextItemWidth(60); ImGui::InputInt("Slot##sw", &step.slot, 0); if (step.slot < 1) step.slot = 1; if (step.slot > 9) step.slot = 9;
+                ox_input_int("Slot##sw", &step.slot, 0, 0, 60); if (step.slot < 1) step.slot = 1; if (step.slot > 9) step.slot = 9;
                 break;
         }
         ImGui::SameLine();
@@ -211,7 +263,7 @@ static void draw_macros_tab(GuiState& state) {
     begin_panel("Playback");
     ImGui::BeginDisabled(!state.config.macros_enabled);
     if (state.macro_runner.is_running()) {
-        ImGui::TextColored(ImVec4(0.55f, 0.90f, 0.65f, 1.0f), "Running (step %d/%d, loop %d)",
+        ImGui::TextColored(ok_text_color(), "Running (step %d/%d, loop %d)",
                            state.macro_runner.current_step() + 1, mac.step_count, state.macro_runner.loop_count());
         if (oxygen_button("Stop", ImVec2(100, 0))) state.macro_runner.stop();
     } else {
@@ -234,7 +286,8 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
     keybind_row("Inventory Key", state.config.key_inventory);
     ImGui::EndDisabled();
     ImGui::SameLine();
-    oxygen_checkbox("Enabled##inv", &state.config.inventory_key_enabled);
+    oxygen_checkbox(state.config.inventory_key_enabled ? "Enabled##inv" : "Disabled##inv",
+                    &state.config.inventory_key_enabled);
     ImGui::TextDisabled("Pauses clicking while the inventory is open");
     end_panel();
 
@@ -242,12 +295,26 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
     row_check("Enable Slot Filter", &state.config.slot_filter_enabled);
     ImGui::TextDisabled("Only click while holding one of the selected slots");
     if (state.config.slot_filter_enabled) {
+        const int active_slot = state.active_slot.load();
         for (int i = 0; i < 9; i++) {
             if (i > 0) ImGui::SameLine();
             char slabel[4]; snprintf(slabel, sizeof(slabel), "%d", i + 1);
+            // Mark which slot the filter currently sees, so it is obvious whether the app is
+            // tracking the player's hotbar.
+            if (i == active_slot) {
+                const float sz = ImGui::GetFrameHeight();
+                const ImVec2 p = ImGui::GetCursorScreenPos();
+                const float tw = ImGui::CalcTextSize(slabel).x;
+                const float w = sz + (tw > 0.0f ? ImGui::GetStyle().ItemInnerSpacing.x + tw : 0.0f);
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+                const ImVec2 a(p.x - 3.0f, p.y - 2.0f);
+                const ImVec2 b(p.x + w + 3.0f, p.y + sz + 2.0f);
+                dl->AddRectFilled(a, b, OxCol(g_accent_color, 32), 4.0f);
+                dl->AddRect(a, b, OxCol(g_accent_color, 190), 4.0f, 0, 1.0f);
+            }
             oxygen_checkbox(slabel, &state.config.allowed_slots[i]);
         }
-        ImGui::Text("Active slot: %d", state.active_slot + 1);
+        ImGui::Text("Active slot: %d", active_slot + 1);
     }
     end_panel();
 
@@ -264,10 +331,11 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
         field_background(ImGui::GetWindowDrawList(), lp0, lp1, 4.0f, true);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(5, 5));
         if (ImGui::BeginChild("##profiles", lsz)) {
-            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 3));
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 4));
             for (int i = 0; i < (int)profiles.size(); i++) {
                 char iid[32]; snprintf(iid, sizeof(iid), "p%d", i);
-                if (oxygen_list_item(iid, profiles[i].c_str(), selected_profile == i)) selected_profile = i;
+                bool more = (i + 1 < (int)profiles.size());
+                if (oxygen_list_item(iid, profiles[i].c_str(), selected_profile == i, more)) selected_profile = i;
             }
             ImGui::PopStyleVar();
             oxygen_scrollbar();
@@ -276,8 +344,7 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
         ImGui::PopStyleVar();
     }
     ImGui::TextDisabled("Profile name");
-    ImGui::SetNextItemWidth(panel_inner() * 0.6f);
-    ImGui::InputTextWithHint("##profile_name", "New profile name...", profile_name_buf, 64);
+    ox_input_text("##profile_name", profile_name_buf, 64, "New profile name...", panel_inner() * 0.6f);
     field_gloss_last_item();  // Add slider-style sheen
     if (oxygen_button("Save", ImVec2(80, 0))) {
         std::string name = profile_name_buf[0] ? profile_name_buf : "config";
@@ -303,14 +370,14 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
         state.config = Config();
         snprintf(status_msg, 128, "Reset to defaults"); status_timer = 3.0f;
     }
-    if (status_timer > 0) { ImGui::TextColored(ImVec4(0.55f, 0.90f, 0.65f, 1.0f), "%s", status_msg); status_timer -= ImGui::GetIO().DeltaTime; }
+    if (status_timer > 0) { ImGui::TextColored(ok_text_color(), "%s", status_msg); status_timer -= ImGui::GetIO().DeltaTime; }
     end_panel();
 
     begin_panel("Appearance");
     bool theme_changed = false;
     if (row_combo("Accent Preset", &state.config.accent_preset, "Oxygen Blue\0Red\0Green\0Purple\0Custom\0Follow KDE\0")) theme_changed = true;
     if (state.config.accent_preset == 4) {
-        if (ImGui::ColorEdit3("Custom Color", &state.config.accent_r)) theme_changed = true;
+        if (row_color3("Custom Color", &state.config.accent_r)) theme_changed = true;
     }
     if (theme_changed) setup_oxygen_theme(state.config.accent_preset, state.config.accent_r, state.config.accent_g, state.config.accent_b);
     end_panel();
@@ -379,7 +446,7 @@ static void draw_analytics_tab(GuiState& state, char* status_msg, float& status_
         state.left.tracker().clear_history(); state.right.tracker().clear_history();
         snprintf(status_msg, 128, "Analytics data cleared"); status_timer = 3.0f;
     }
-    if (status_timer > 0) ImGui::TextColored(ImVec4(0.55f, 0.90f, 0.65f, 1.0f), "%s", status_msg);
+    if (status_timer > 0) ImGui::TextColored(ok_text_color(), "%s", status_msg);
     end_panel();
 }
 
@@ -397,7 +464,7 @@ void gui_run(GuiState& state) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
     glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
-    GLFWwindow* window = glfwCreateWindow(760, 640, "Ghast Clicker", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(760, 640, "AeroClicker", nullptr, nullptr);
     if (GLFWcursor* cur = glfwCreateStandardCursor(GLFW_ARROW_CURSOR))
         glfwSetCursor(window, cur);
     if (!window) { fprintf(stderr, "Failed to create GLFW window\n"); glfwTerminate(); return; }
@@ -475,12 +542,16 @@ void gui_run(GuiState& state) {
 
         {
             ImU32 body_col = OxCol(g_body_color);
-            ImU32 drop_top = OxCol(mulc(g_body_color, 1.50f));
+            // On a light theme 1.5x clamps to white, turning the top 120px into a white haze
+            // that the (brighter) panels then blend into. Just lift it a touch.
+            ImU32 drop_top = OxCol(ox_is_light() ? ox_tint(g_body_color, 0.10f) : mulc(g_body_color, 1.50f));
             const float DROP_H = 120.0f;
             ImDrawList* bgdl = ImGui::GetBackgroundDrawList();
             bgdl->AddRectFilled(ImVec2(0, 0), ImVec2((float)win_w, (float)win_h), body_col);
             bgdl->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2((float)win_w, DROP_H), drop_top, drop_top, body_col, body_col);
-            bgdl->AddLine(ImVec2(0, 0), ImVec2((float)win_w, 0), OxCol(mulc(g_body_color, 2.20f), 70));
+            bgdl->AddLineH(0.0f, (float)win_w, 0.0f,
+                           ox_is_light() ? OxCol(ox_tint(g_body_color, -0.30f), 70)
+                                         : OxCol(mulc(g_body_color, 2.20f), 70));
         }
 
         ImGui::SetNextWindowPos(ImVec2(0, 0));
@@ -489,7 +560,14 @@ void gui_run(GuiState& state) {
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar |
         ImGuiWindowFlags_NoBackground;
 
-        if (ImGui::Begin("Ghast Clicker", nullptr, wf)) {
+        if (ImGui::Begin("AeroClicker", nullptr, wf)) {
+            // Only block synthesized clicks while the cursor is on the L/R pills. Pausing for
+            // the whole window made the clicker read 0 CPS as soon as the pointer was over
+            // the app, which is where most people leave it while tuning values.
+            const bool over_pill = ui_pointer_over_pills();
+            state.left.set_paused(over_pill);
+            state.right.set_paused(over_pill);
+
             // global session accounting (runs every frame, independent of tab)
             {
                 const auto& lt = state.left.tracker();
@@ -514,9 +592,9 @@ void gui_run(GuiState& state) {
                 float x = right - szR.x - 6.0f - szL.x;
                 float y = tab_mn.y + (ImGui::GetFrameHeight() - szL.y) * 0.5f;
                 ImGui::SetCursorScreenPos(ImVec2(x, y));
-                click_indicator("L", l_on);
+                if (click_indicator("L", l_on)) toggle_clicker_pill(state, true);
                 ImGui::SameLine(0, 6);
-                click_indicator("R", r_on);
+                if (click_indicator("R", r_on)) toggle_clicker_pill(state, false);
             }
             ImGui::SetCursorScreenPos(after_tabs);
             ImGui::Spacing();

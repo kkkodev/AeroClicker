@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=AeroClicker
+Comment=A humanized auto-clicker for Linux (Wayland and X11)
+Exec=aeroclicker
+Icon=input-mouse
+Terminal=false
+Categories=Utility;
+Keywords=clicker;auto-clicker;mouse;autoclicker;

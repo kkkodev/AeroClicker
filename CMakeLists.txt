@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(ghast-clicker LANGUAGES CXX)
+project(AeroClicker LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -19,7 +19,7 @@ set(IMGUI_SOURCES
 find_package(glfw3 REQUIRED)
 find_package(OpenGL REQUIRED)
 
-add_executable(ghast-clicker
+add_executable(aeroclicker
     src/main.cpp
     src/gui.cpp
     src/gui_theme.cpp
@@ -27,16 +27,16 @@ add_executable(ghast-clicker
     ${IMGUI_SOURCES}
 )
 
-target_include_directories(ghast-clicker PRIVATE
+target_include_directories(aeroclicker PRIVATE
     include
     ${IMGUI_DIR}
     ${IMGUI_BACKEND_DIR}
 )
 
-target_link_libraries(ghast-clicker PRIVATE
+target_link_libraries(aeroclicker PRIVATE
     pthread
     glfw
     OpenGL::GL
 )
 
-install(TARGETS ghast-clicker DESTINATION bin)
+install(TARGETS aeroclicker DESTINATION bin)

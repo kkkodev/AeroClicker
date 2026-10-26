@@ -20,6 +20,14 @@ static ImVec4 mix4(ImVec4 a, ImVec4 b, float t) {
                   a.z + (b.z - a.z) * t, a.w + (b.w - a.w) * t);
 }
 
+ImVec4 ox_tint(ImVec4 c, float t) {
+    if (t >= 0.0f)
+        return ImVec4(c.x + (1.0f - c.x) * t, c.y + (1.0f - c.y) * t,
+                      c.z + (1.0f - c.z) * t, c.w);
+    float d = 1.0f + t;
+    return ImVec4(c.x * d, c.y * d, c.z * d, c.w);
+}
+
 bool  g_light_theme = false;
 float ox_luma(ImVec4 c){ return 0.2126f*c.x + 0.7152f*c.y + 0.0722f*c.z; }
 bool  ox_is_light(){ return g_light_theme; }
@@ -124,6 +132,9 @@ void setup_oxygen_theme(int preset, float custom_r, float custom_g, float custom
     colors[ImGuiCol_ScrollbarGrabHovered]   = ImVec4(0, 0, 0, 0);
     colors[ImGuiCol_ScrollbarGrabActive]    = ImVec4(0, 0, 0, 0);
     colors[ImGuiCol_CheckMark]              = L ? mulc(g_body_color, 0.25f, 1.0f) : mulc(g_body_color, 6.50f, 1.00f);
+    // InputText caret: 1.93 defaults it to ImGuiCol_Text (white). On the light theme that is
+    // a white blinking bar inside a white field.
+    colors[ImGuiCol_InputTextCursor]        = L ? g_text_color : ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
     colors[ImGuiCol_SliderGrab]             = ImVec4(0, 0, 0, 0);
     colors[ImGuiCol_SliderGrabActive]       = ImVec4(0, 0, 0, 0);
     colors[ImGuiCol_Button]                 = g_accent_active;

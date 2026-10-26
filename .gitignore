@@ -2,10 +2,6 @@
 build/
 out/
 
-# Reference sources
-GhostTap-1.7.10/
-GhostTap_source/
-
 # IDE
 .vscode/
 .idea/

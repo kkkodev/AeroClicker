@@ -3,6 +3,7 @@
 #include "clicker_config.hpp"
 #include "config_file.hpp"
 #include "macro.hpp"
+#include <atomic>
 #include <chrono>
 #include <vector>
 #include <string>
@@ -16,7 +17,9 @@ struct GuiState {
     bool left_armed = false;
     bool right_armed = false;
     bool in_menu = false;
-    int active_slot = 0;
+    // Written by the input thread, read by the UI thread: keep it atomic so the label can
+    // never keep showing a stale value.
+    std::atomic<int> active_slot{0};
 
     bool show_advanced = false;
     bool show_debug = false;

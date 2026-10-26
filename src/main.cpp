@@ -23,6 +23,13 @@ static std::atomic<bool> g_running{true};
 
 static void on_signal(int) { g_running = false; }
 
+// The on/off state the user sees on the L/R pills: in MOUSE mode the pill reflects the
+// armed flag (the clicker itself is only enabled while the mouse button is held), otherwise
+// it reflects the clicker's enabled flag.
+static bool clicker_master_on(const Clicker& c, bool armed, ActivationMode mode) {
+    return mode == ActivationMode::MOUSE ? armed : c.is_enabled();
+}
+
 static bool is_physical_device(int fd) {
     char phys[256] = "";
     if (ioctl(fd, EVIOCGPHYS(sizeof(phys)), phys) < 0 || phys[0] == '\0')
@@ -30,7 +37,7 @@ static bool is_physical_device(int fd) {
 
     char name[256] = "";
     ioctl(fd, EVIOCGNAME(sizeof(name)), name);
-    if (strcasestr(name, "Ghast Clicker")) return false;
+    if (strcasestr(name, "AeroClicker")) return false;
     if (strcasestr(name, "Virtual")) return false;
 
     return true;
@@ -167,9 +174,16 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
             while (read(kb_fd, &ev, sizeof(ev)) == sizeof(ev)) {
                 if (ev.type != EV_KEY) continue;
 
-                if (ev.value == 1 && ev.code >= KEY_1 && ev.code <= KEY_9) {
-                    gui_state.active_slot = ev.code - KEY_1;
-                    if (config.slot_filter_enabled && !config.allowed_slots[gui_state.active_slot]) {
+                // Hotbar slots: top-row digits and numpad digits both work, so the filter
+                // tracks whatever the player actually uses.
+                int slot = -1;
+                if (ev.code >= KEY_1 && ev.code <= KEY_9)
+                    slot = (int)ev.code - KEY_1;
+                else if (ev.code >= KEY_KP1 && ev.code <= KEY_KP9)
+                    slot = (int)ev.code - KEY_KP1;
+                if (ev.value == 1 && slot >= 0) {
+                    gui_state.active_slot = slot;
+                    if (config.slot_filter_enabled && !config.allowed_slots[slot]) {
                         left_clicker.set_enabled(false);
                         right_clicker.set_enabled(false);
                     }
@@ -193,10 +207,10 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                 if (gui_state.in_menu) continue;
 
                 bool slot_blocked = config.slot_filter_enabled &&
-                                    !config.allowed_slots[gui_state.active_slot];
+                                    !config.allowed_slots[gui_state.active_slot.load()];
 
                 if (ev.code == static_cast<unsigned>(config.key_left)) {
-                    bool was = left_clicker.is_enabled();
+                    bool was = clicker_master_on(left_clicker, gui_state.left_armed, config.left_mode);
                     if (config.left_mode == ActivationMode::TOGGLE) {
                         if (ev.value == 1) {
                             if (slot_blocked) left_clicker.set_enabled(false);
@@ -211,13 +225,15 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                             else if (mouse_left_held) left_clicker.set_enabled(true);
                         }
                     }
-                    if (config.audio_enabled && left_clicker.is_enabled() != was) {
-                        if (left_clicker.is_enabled()) Audio::beep_on();
+                    bool now = clicker_master_on(left_clicker, gui_state.left_armed, config.left_mode);
+
+                    if (config.audio_enabled && now != was) {
+                        if (now) Audio::beep_on();
                         else Audio::beep_off();
                     }
                 }
                 else if (ev.code == static_cast<unsigned>(config.key_right)) {
-                    bool was = right_clicker.is_enabled();
+                    bool was = clicker_master_on(right_clicker, gui_state.right_armed, config.right_mode);
                     if (config.right_mode == ActivationMode::TOGGLE) {
                         if (ev.value == 1) {
                             if (slot_blocked) right_clicker.set_enabled(false);
@@ -232,8 +248,10 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                             else if (mouse_right_held) right_clicker.set_enabled(true);
                         }
                     }
-                    if (config.audio_enabled && right_clicker.is_enabled() != was) {
-                        if (right_clicker.is_enabled()) Audio::beep_on();
+                    bool now = clicker_master_on(right_clicker, gui_state.right_armed, config.right_mode);
+
+                    if (config.audio_enabled && now != was) {
+                        if (now) Audio::beep_on();
                         else Audio::beep_off();
                     }
                 }
@@ -254,12 +272,12 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
             while (read(mouse_fd, &ev, sizeof(ev)) == sizeof(ev)) {
                 if (ev.type == EV_KEY) {
                     bool slot_blocked = config.slot_filter_enabled &&
-                                        !config.allowed_slots[gui_state.active_slot];
+                                        !config.allowed_slots[gui_state.active_slot.load()];
                     bool is_bound_toggle = false;
 
                     if (!gui_state.in_menu) {
                         if (ev.code == static_cast<unsigned>(config.key_left)) {
-                            bool was = left_clicker.is_enabled();
+                            bool was = clicker_master_on(left_clicker, gui_state.left_armed, config.left_mode);
                             if (config.left_mode == ActivationMode::TOGGLE) {
                                 if (ev.value == 1) {
                                     if (slot_blocked) left_clicker.set_enabled(false);
@@ -274,14 +292,16 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                                     else if (mouse_left_held) left_clicker.set_enabled(true);
                                 }
                             }
-                            if (config.audio_enabled && left_clicker.is_enabled() != was) {
-                                if (left_clicker.is_enabled()) Audio::beep_on();
+                            bool now = clicker_master_on(left_clicker, gui_state.left_armed, config.left_mode);
+
+                            if (config.audio_enabled && now != was) {
+                                if (now) Audio::beep_on();
                                 else Audio::beep_off();
                             }
                             is_bound_toggle = true;
                         }
                         else if (ev.code == static_cast<unsigned>(config.key_right)) {
-                            bool was = right_clicker.is_enabled();
+                            bool was = clicker_master_on(right_clicker, gui_state.right_armed, config.right_mode);
                             if (config.right_mode == ActivationMode::TOGGLE) {
                                 if (ev.value == 1) {
                                     if (slot_blocked) right_clicker.set_enabled(false);
@@ -296,8 +316,10 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                                     else if (mouse_right_held) right_clicker.set_enabled(true);
                                 }
                             }
-                            if (config.audio_enabled && right_clicker.is_enabled() != was) {
-                                if (right_clicker.is_enabled()) Audio::beep_on();
+                            bool now = clicker_master_on(right_clicker, gui_state.right_armed, config.right_mode);
+
+                            if (config.audio_enabled && now != was) {
+                                if (now) Audio::beep_on();
                                 else Audio::beep_off();
                             }
                             is_bound_toggle = true;
@@ -393,8 +415,8 @@ int main(int argc, char* argv[]) {
             return 0;
         }
         else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
-            printf("Ghast Clicker - Humanized auto-clicker for Linux/Wayland\n\n");
-            printf("Usage: ghast-clicker [options]\n\n");
+            printf("AeroClicker - Humanized auto-clicker for Linux/Wayland\n\n");
+            printf("Usage: aeroclicker [options]\n\n");
             printf("Options:\n");
             printf("  --lcps <n>     Left CPS mean (default: %.1f)\n", config.left.cps_mean);
             printf("  --rcps <n>     Right CPS mean (default: %.1f)\n", config.right.cps_mean);
@@ -405,15 +427,15 @@ int main(int argc, char* argv[]) {
             printf("  --hold         Hold mode\n");
             printf("  --mouse        Mouse mode (arm with key, hold mouse to click)\n");
             printf("  --headless     Run without GUI (CLI only)\n");
-            printf("  --save         Save current config to ~/.config/ghast-clicker/config\n\n");
+            printf("  --save         Save current config to ~/.config/aeroclicker/config\n\n");
             printf("Requires /dev/uinput and /dev/input/* access.\n");
             printf("Run: sudo usermod -aG input $USER  (then re-login)\n");
             return 0;
         }
     }
 
-    printf("\n  Ghast Clicker - Linux/Wayland Port\n");
-    printf("  ─────────────────────────────\n");
+    printf("\n  AeroClicker - Humanized Auto-Clicker\n");
+    printf("  ────────────────────────────────────\n");
 
     UInputDevice device;
     printf("  Virtual mouse device created\n");

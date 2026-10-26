@@ -1,0 +1,2 @@
+# Flat pointer acceleration for the AeroClicker virtual mouse so it matches the real mouse.
+ACTION=="add|change", KERNEL=="event*", ATTRS{name}=="AeroClicker Virtual Mouse", ENV{LIBINPUT_ATTR_POINTER_ACCEL_PROFILE}="flat", ENV{LIBINPUT_ATTR_POINTER_ACCEL}="0"

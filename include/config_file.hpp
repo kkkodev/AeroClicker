@@ -3,7 +3,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <string>
+#include <system_error>
 #include <vector>
 #include <dirent.h>
 #include <sys/stat.h>
@@ -11,9 +13,26 @@
 class ConfigFile {
 public:
     static std::string path() {
-        const char* home = getenv("HOME");
-        if (!home) home = "/tmp";
-        return std::string(home) + "/.config/ghast-clicker";
+        // Resolved once per run. AeroClicker used to be called Ghast Clicker, so if the new
+        // directory does not exist yet but the old one does, seed it from the old directory:
+        // existing profiles, keybinds and macros survive the rename.
+        static const std::string dir = [] {
+            const char* home = getenv("HOME");
+            if (!home) home = "/tmp";
+            const std::string base = std::string(home) + "/.config";
+            const std::string current = base + "/aeroclicker";
+            const std::string legacy = base + "/ghast-clicker";
+
+            struct stat st;
+            if (stat(current.c_str(), &st) != 0 && stat(legacy.c_str(), &st) == 0) {
+                std::error_code ec;
+                std::filesystem::copy(legacy, current,
+                    std::filesystem::copy_options::recursive |
+                    std::filesystem::copy_options::copy_symlinks, ec);
+            }
+            return current;
+        }();
+        return dir;
     }
 
     static void write_profile(FILE* f, const char* prefix, const ClickerProfile& p) {
