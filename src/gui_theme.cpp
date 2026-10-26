@@ -164,8 +164,8 @@ void setup_oxygen_theme(int preset, float custom_r, float custom_g, float custom
     style.GrabMinSize           = 12.0f;
     style.WindowBorderSize      = 0.0f;
     style.ChildBorderSize       = 0.0f;
-    style.PopupBorderSize       = 1.0f;
-    style.FrameBorderSize       = 1.0f;
+    style.PopupBorderSize       = 0.0f;
+    style.FrameBorderSize       = 0.0f;
     style.TabBorderSize         = 0.0f;
     style.WindowRounding        = 4.0f;
     style.ChildRounding         = 4.0f;

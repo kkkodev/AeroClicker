@@ -91,8 +91,9 @@ static void ox_outline(ImDrawList* dl, ImVec2 mn, ImVec2 mx, float R, ImU32 col)
 static float vcenter_top(float y0, float y1, float font_size = 0.0f) {
     ImFont* font = ImGui::GetFont();
     float fs = font_size > 0.0f ? font_size : ImGui::GetFontSize();
-    float scale = fs / font->FontSize;
-    float ink = (font->Ascent + fabsf(font->Descent)) * scale;
+    ImFontBaked* baked = font->GetFontBaked(fs);
+    float scale = fs / baked->Size;
+    float ink = (baked->Ascent + fabsf(baked->Descent)) * scale;
     return y0 + ((y1 - y0) - ink) * 0.5f;
 }
 
@@ -647,7 +648,7 @@ bool combo_framed(const char* id, int* idx, const char* items) {
         // fill inset 1px so it never peeks outside ImGui's own popup border
         field_background(pdl, ImVec2(ppos.x + 1.0f, ppos.y + 1.0f),
                          ImVec2(ppos.x + psize.x - 1.0f, ppos.y + psize.y - 1.0f),
-                         ImGui::GetStyle().PopupRounding, false);
+                         ImGui::GetStyle().PopupRounding, true);
 
         float row_y = ppos.y + PPAD;
         float last_bottom = row_y;
@@ -665,17 +666,19 @@ bool combo_framed(const char* id, int* idx, const char* items) {
             ImGuiID oid_id = ImGui::GetID(oid);
             float o_h = widget_anim(oid_id, hov);
             float o_s = widget_anim(oid_id + 1, i == *idx);
+            ImVec2 cp0 = crisp_min(p0);
+            ImVec2 cr1 = crisp_max(r1);
             if (o_s > 0.01f) {
-                pdl->AddRectFilled(p0, r1, OxCol(g_accent_color, (int)(70 * o_s)), OXY_R);
-                glass_gloss(pdl, p0, r1, OXY_R, p0.y + 1.0f, p0.y + (r1.y - p0.y) * 0.55f, (int)(26 * o_s));
+                pdl->AddRectFilled(cp0, cr1, OxCol(g_accent_color, (int)(70 * o_s)), OXY_R);
+                glass_gloss(pdl, cp0, cr1, OXY_R, cp0.y + 1.0f, cp0.y + (cr1.y - cp0.y) * 0.55f, (int)(26 * o_s));
             }
-            if (down) pdl->AddRectFilled(p0, r1, OxCol(g_accent_active, 60), OXY_R);
+            if (down) pdl->AddRectFilled(cp0, cr1, OxCol(g_accent_active, 60), OXY_R);
             float b_t = o_h > o_s ? o_h : o_s;
             if (b_t > 0.01f)
-                pdl->AddRect(crisp_min(p0), crisp_max(r1),
+                pdl->AddRect(cp0, cr1,
                              lerp_u32(IM_COL32(0, 0, 0, 0), OxCol(OxLight(g_accent_color), 200), b_t),
                              OXY_R, 0, 1.0f / s);
-                ImU32 tcol = (i == *idx) ? IM_COL32(240, 246, 255, 255) : ImGui::GetColorU32(ImGuiCol_Text);
+            ImU32 tcol = (i == *idx) ? IM_COL32(240, 246, 255, 255) : ImGui::GetColorU32(ImGuiCol_Text);
             pdl->AddText(ImVec2(p0.x + ImGui::GetStyle().FramePadding.x, vcenter_top(p0.y, p0.y + h)), tcol, p, nullptr);
             if (clicked) { *idx = i; changed = true; ImGui::CloseCurrentPopup(); }
             row_y = r1.y + 4.0f;
@@ -803,6 +806,9 @@ void end_panel() {
 
     s_panel_inner = 0.0f;
     ImGui::SetCursorScreenPos(ImVec2(s_panel_x, cmn.y - 12.0f + h + PANEL_GAP));
+    // ImGui 1.93+: the last call in a window must be an item, not a bare SetCursorPos(),
+    // otherwise End() asserts "extend window/parent boundaries". Submit a no-size item.
+    ImGui::Dummy(ImVec2(0.0f, 0.0f));
     ImGui::PopID();
 }
 
@@ -866,9 +872,10 @@ void click_indicator(const char* label, bool on) {
     const ImU32 fill_off = IM_COL32(255, 255, 255, 22);
     const ImU32 rim_off  = IM_COL32(255, 255, 255, 45);
     const ImU32 text_off = IM_COL32(200, 212, 228, 150);
-    dl->AddRectFilled(mn, mx, on ? fill_on : fill_off, r);
-    if (on) glass_gloss(dl, mn, mx, r, mn.y + 1.0f, mn.y + sz.y * 0.55f, 70);
-    dl->AddRect(crisp_min(mn), crisp_max(mx), on ? rim_on : rim_off, r, 0, 1.0f);
+    ImVec2 cmn = crisp_min(mn), cmx = crisp_max(mx);
+    dl->AddRectFilled(cmn, cmx, on ? fill_on : fill_off, r);
+    if (on) glass_gloss(dl, cmn, cmx, r, cmn.y + 1.0f, cmn.y + sz.y * 0.55f, 70);
+    dl->AddRect(cmn, cmx, on ? rim_on : rim_off, r, 0, 1.0f);
     dl->AddText(ImVec2(mn.x + pad.x, vcenter_top(mn.y, mx.y)), on ? text_on : text_off, display);
     ImGui::Dummy(sz);
 }
@@ -876,7 +883,7 @@ void click_indicator(const char* label, bool on) {
 void stat_readout(bool on, float cps, uint32_t clicks, float inner_w) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImFont* font = g_font_big ? g_font_big : ImGui::GetFont();   // real 30px atlas font = crisp
-    float big = font->FontSize;
+    float big = font->LegacySize;
     ImVec2 mn = ImGui::GetCursorScreenPos();
     char main_txt[32];
     if (on) snprintf(main_txt, sizeof(main_txt), "%.1f CPS", cps);

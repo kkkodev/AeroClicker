@@ -467,8 +467,8 @@ void gui_run(GuiState& state) {
             ImFont* big = s_font_path[0] ? io.Fonts->AddFontFromFileTTF(s_font_path, 30.0f * ui_scale) : nullptr;
             if (big) big->Scale = 1.0f / ui_scale;
             set_big_font(big);
-            ImGui_ImplOpenGL3_DestroyFontsTexture();
-            ImGui_ImplOpenGL3_CreateFontsTexture();
+            ImGui_ImplOpenGL3_DestroyDeviceObjects();
+            ImGui_ImplOpenGL3_CreateDeviceObjects();
         }
 
         ImGui::NewFrame();
