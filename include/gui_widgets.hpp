@@ -5,7 +5,7 @@
 
 // --- setup / input ---
 void setup_key_callbacks(GLFWwindow* window);
-bool ui_pointer_over_pills();   // cursor is over the L/R on/off pills
+bool ui_pointer_over_window();   // cursor is over AeroClicker's own content area
 const char* key_name(int code);
 void set_big_font(ImFont* font);   // crisp large readout font (loaded at ~30px)
 
@@ -45,5 +45,7 @@ float panel_inner();   // usable content width inside current panel
 
 // --- status ---
 bool click_indicator(const char* label, bool on);   // returns true when clicked
-void stat_readout(bool on, float cps, uint32_t clicks, float inner_w);
+// note: when set while `on`, the readout says "Paused" and shows this line instead of a
+// meaningless "0.0 CPS" (e.g. "cursor over app", "hold the mouse button").
+void stat_readout(bool on, float cps, uint32_t clicks, float inner_w, const char* note = nullptr);
 void segmented_tabs(const char* const* names, int count, int& current_tab);

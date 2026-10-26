@@ -63,6 +63,32 @@ bool read_kde_color(const char* section, const char* key, float &r, float &g, fl
     return false;
 }
 
+ImVec4 g_tb_edge_focused   = ImVec4(0, 0, 0, 0);
+ImVec4 g_tb_edge_unfocused = ImVec4(0, 0, 0, 0);
+bool   g_tb_edge_valid     = false;
+
+// Only the titlebar's *lower edge* colour is read, never its gradient: Oxygen paints a radial
+// highlight that peaks mid-titlebar, and that shape is not exposed to the client, so anything
+// drawn in here could only approximate it. The edge colour is knowable though, and starting
+// the body on it is all a KDE app does — the decoration keeps owning the gradient.
+void load_kde_titlebar_edges() {
+    float r, g, b;
+    g_tb_edge_valid = false;
+    if (!read_kde_color("WM", "activeBackground", r, g, b)) return;
+    g_tb_edge_focused = ImVec4(r, g, b, 1.0f);
+    g_tb_edge_valid   = true;
+
+    // Focused, Oxygen's gradient ends on activeBackground. Unfocused it runs
+    // inactiveBackground -> inactiveBlend, so the edge is inactiveBlend; inactiveBlend=0,0,0
+    // is KDE's "no blend" sentinel, in which case the titlebar is flat inactiveBackground.
+    float ir, ig, ib, br, bg, bb;
+    const bool have_bg  = read_kde_color("WM", "inactiveBackground", ir, ig, ib);
+    const bool have_bl  = read_kde_color("WM", "inactiveBlend", br, bg, bb);
+    if (have_bl && br + bg + bb > 0.0f)   g_tb_edge_unfocused = ImVec4(br, bg, bb, 1.0f);
+    else if (have_bg)                     g_tb_edge_unfocused = ImVec4(ir, ig, ib, 1.0f);
+    else                                  g_tb_edge_unfocused = g_tb_edge_focused;
+}
+
 static bool read_kde_accent_color(float &r, float &g, float &b) {
     return read_kde_color("Colors:Selection", "BackgroundNormal", r, g, b);
 }

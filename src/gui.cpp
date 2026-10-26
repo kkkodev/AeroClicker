@@ -92,9 +92,15 @@ static void toggle_clicker_pill(GuiState& state, bool left_side) {
     // clicker only runs while the physical button is held), so beep on arming rather than
     // on the transient enabled flag.
     const bool was = (mode == ActivationMode::MOUSE) ? armed : clicker.is_enabled();
+    // Same slot-filter rule as the bound keys: a clicker may not start while the active
+    // hotbar slot is not one of the allowed ones.
+    const bool slot_blocked = state.config.slot_filter_enabled &&
+                              !state.config.allowed_slots[state.active_slot.load()];
     if (mode == ActivationMode::MOUSE) {
         armed = !armed;
         if (!armed) clicker.set_enabled(false);
+    } else if (slot_blocked) {
+        clicker.set_enabled(false);
     } else {
         clicker.toggle();
     }
@@ -107,10 +113,16 @@ static void toggle_clicker_pill(GuiState& state, bool left_side) {
 
 static void draw_clicker_card(const char* title, ClickerProfile& profile, ActivationMode& mode,
                               Clicker& clicker, int& key, const ClickerPreset* presets,
-                              float card_w, bool on) {
+                              float card_w, bool on, bool armed) {
     begin_panel(title, card_w, on ? 1 : 0);
     float inner = panel_inner();
-    stat_readout(on, clicker.tracker().avg_cps(), clicker.click_count(), inner);
+    // Explain an empty readout instead of showing "0.0 CPS": paused for the pointer being on
+    // the app, or Mouse mode armed and waiting for the real button.
+    const char* note = nullptr;
+    if (on && clicker.is_paused()) note = "cursor over app";
+    else if (on && mode == ActivationMode::MOUSE && armed && !clicker.is_enabled())
+        note = "hold the mouse button";
+    stat_readout(on, clicker.tracker().avg_cps(), clicker.click_count(), inner, note);
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
     stacked_keybind("Toggle key", key, inner);
     int idx = mode_to_idx(mode);
@@ -129,11 +141,11 @@ static void draw_home_tab(GuiState& state) {
     bool l_on = state.left.is_enabled() || state.left_armed;
     bool r_on = state.right.is_enabled() || state.right_armed;
     draw_clicker_card("Left clicker", state.config.left, state.config.left_mode,
-                      state.left, state.config.key_left, LEFT_PRESETS, card_w, l_on);
+                      state.left, state.config.key_left, LEFT_PRESETS, card_w, l_on, state.left_armed);
     float y_left = ImGui::GetCursorScreenPos().y;
     ImGui::SetCursorScreenPos(ImVec2(c0.x + card_w + gap, c0.y));
     draw_clicker_card("Right clicker", state.config.right, state.config.right_mode,
-                      state.right, state.config.key_right, RIGHT_PRESETS, card_w, r_on);
+                      state.right, state.config.key_right, RIGHT_PRESETS, card_w, r_on, state.right_armed);
     float y_right = ImGui::GetCursorScreenPos().y;
 
     // fresh full-width row below BOTH cards, tip centered
@@ -459,6 +471,7 @@ void gui_run(GuiState& state) {
         if (read_kde_color("Colors:Window", "BackgroundNormal", r, g, b)) g_body_color = ImVec4(r, g, b, 1.0f);
         if (read_kde_color("Colors:Window", "ForegroundNormal", r, g, b)) g_text_color = ImVec4(r, g, b, 1.0f);
     }
+    load_kde_titlebar_edges();
     if (!glfwInit()) { fprintf(stderr, "Failed to initialize GLFW\n"); return; }
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
@@ -544,15 +557,40 @@ void gui_run(GuiState& state) {
             ImU32 body_col = OxCol(g_body_color);
             // On a light theme 1.5x clamps to white, turning the top 120px into a white haze
             // that the (brighter) panels then blend into. Just lift it a touch.
-            ImU32 drop_top = OxCol(ox_is_light() ? ox_tint(g_body_color, 0.10f) : mulc(g_body_color, 1.50f));
-            const float DROP_H = 120.0f;
+            ImVec4 top_col  = ox_is_light() ? ox_tint(g_body_color, 0.10f) : mulc(g_body_color, 1.50f);
+            float  drop_h   = 120.0f;
+            // With a KDE decoration, start the body on the colour its titlebar genuinely ends
+            // on and fade away from there, matching the focused/unfocused pair the decoration
+            // itself switches between. Nothing about the titlebar's own (radial) gradient is
+            // re-created, so there is no shape to line up — only the first row has to match.
+            if (g_tb_edge_valid) {
+                top_col = glfwGetWindowAttrib(window, GLFW_FOCUSED) ? g_tb_edge_focused
+                                                                   : g_tb_edge_unfocused;
+                drop_h  = 56.0f;
+            }
+            ImU32 drop_top = OxCol(top_col);
             ImDrawList* bgdl = ImGui::GetBackgroundDrawList();
             bgdl->AddRectFilled(ImVec2(0, 0), ImVec2((float)win_w, (float)win_h), body_col);
-            bgdl->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2((float)win_w, DROP_H), drop_top, drop_top, body_col, body_col);
-            bgdl->AddLineH(0.0f, (float)win_w, 0.0f,
-                           ox_is_light() ? OxCol(ox_tint(g_body_color, -0.30f), 70)
-                                         : OxCol(mulc(g_body_color, 2.20f), 70));
+            bgdl->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2((float)win_w, drop_h), drop_top, drop_top, body_col, body_col);
+            // A 1px line at y=0 would cut the surface exactly where the decoration hands over.
+            if (!g_tb_edge_valid)
+                bgdl->AddLineH(0.0f, (float)win_w, 0.0f,
+                               ox_is_light() ? OxCol(ox_tint(g_body_color, -0.30f), 70)
+                                             : OxCol(mulc(g_body_color, 2.20f), 70));
         }
+
+        // Synthesized clicks must never land on AeroClicker's own window: while the clicker
+        // runs they arrive faster than the user's press, ImGui keeps seeing the button
+        // already held and every real click on the UI is swallowed. So pause whenever the
+        // cursor is over the app (a synthesized click fires under the pointer, so our own
+        // window is the only way one can reach us). Kept outside the Begin() block so a
+        // hidden/minimized window (Begin returns false) still clears the pause.
+        const bool over_app = glfwGetWindowAttrib(window, GLFW_HOVERED) || ui_pointer_over_window();
+        state.left.set_paused(over_app);
+        state.right.set_paused(over_app);
+        // The input thread forwards physical clicks instead of using them to arm the clicker
+        // while the pointer is over the app (see MOUSE activation mode).
+        state.ui_hovered = over_app;
 
         ImGui::SetNextWindowPos(ImVec2(0, 0));
         ImGui::SetNextWindowSize(ImVec2((float)win_w, (float)win_h));
@@ -561,13 +599,6 @@ void gui_run(GuiState& state) {
         ImGuiWindowFlags_NoBackground;
 
         if (ImGui::Begin("AeroClicker", nullptr, wf)) {
-            // Only block synthesized clicks while the cursor is on the L/R pills. Pausing for
-            // the whole window made the clicker read 0 CPS as soon as the pointer was over
-            // the app, which is where most people leave it while tuning values.
-            const bool over_pill = ui_pointer_over_pills();
-            state.left.set_paused(over_pill);
-            state.right.set_paused(over_pill);
-
             // global session accounting (runs every frame, independent of tab)
             {
                 const auto& lt = state.left.tracker();

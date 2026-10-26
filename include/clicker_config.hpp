@@ -152,8 +152,8 @@ struct Config {
     ClickerProfile left;
     ClickerProfile right;
 
-    ActivationMode left_mode = ActivationMode::TOGGLE;
-    ActivationMode right_mode = ActivationMode::TOGGLE;
+    ActivationMode left_mode = ActivationMode::MOUSE;
+    ActivationMode right_mode = ActivationMode::MOUSE;
 
     int key_left = KEY_F6;
     int key_right = KEY_F7;
@@ -161,7 +161,7 @@ struct Config {
     bool inventory_key_enabled = true;
     int key_escape = KEY_ESC;
 
-    int accent_preset = 0;
+    int accent_preset = 5;   // 5 = Follow KDE (Colors:Selection)
     float accent_r = 0.24f;
     float accent_g = 0.49f;
     float accent_b = 0.78f;
@@ -170,7 +170,7 @@ struct Config {
     bool allowed_slots[9] = {true, false, false, false, false, false, false, false, false};
 
     bool audio_enabled = true;
-    bool macros_enabled = true;
+    bool macros_enabled = false;
     Macro macros[MAX_MACROS] = {};
 
     Config() {

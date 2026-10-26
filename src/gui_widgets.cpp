@@ -14,6 +14,17 @@ static ImVec2 g_binding_rect_min(0, 0), g_binding_rect_max(0, 0);
 static double g_bind_block_until = 0.0;
 static ImFont* g_font_big = nullptr;
 
+// Used to pause synthesized clicks while the cursor is over AeroClicker's own window: a
+// synthetic press/release stream landing on our UI arrives faster than the user's own press,
+// so ImGui keeps seeing the button already held and swallows every real click.
+// GLFW's enter/leave callback is used instead of io.MousePos because the latter stops
+// updating once the pointer leaves the window, which would leave the clicker paused forever.
+static bool g_cursor_in_window = false;
+
+static void cursor_enter_callback(GLFWwindow*, int entered) {
+    g_cursor_in_window = (entered != 0);
+}
+
 // Panel layout constants
 static const float OXY_R     = 4.0f;
 static const float PANEL_R   = 6.0f;
@@ -541,6 +552,7 @@ static void mouse_button_callback(GLFWwindow* window, int button, int action, in
 void setup_key_callbacks(GLFWwindow* window) {
     glfwSetKeyCallback(window, key_callback);
     glfwSetMouseButtonCallback(window, mouse_button_callback);
+    glfwSetCursorEnterCallback(window, cursor_enter_callback);
 }
 
 
@@ -1051,12 +1063,15 @@ bool row_color3(const char* label, float* rgb) {
         const ImVec2 wp = ImGui::GetWindowPos();
         const ImVec2 ws = ImGui::GetWindowSize();
         const ImVec2 wb(wp.x + ws.x, wp.y + ws.y);
-        // Light theme uses the same chrome ramp as other popups. The dark theme needs a
-        // wider ramp than mulc(body, 2.2)->1.45 to read as a gradient on a nearly black
-        // desktop, so lift the top and drop the bottom a little further.
-        const ImU32 ptop = ox_is_light() ? ox_surf_top() : OxCol(mulc(g_body_color, 2.45f));
-        const ImU32 pbot = ox_is_light() ? ox_surf_bot() : OxCol(mulc(g_body_color, 1.28f));
+        // Light theme uses the same chrome ramp as other popups. On a dark theme the popup
+        // surface only shows as a ~12px frame around the picker, so the ramp has to stay
+        // clearly above the window colour the whole way down: the old 2.45x -> 1.28x body
+        // ended almost on the page colour (#222425 vs #191a1b), which read as "no background"
+        // rather than as a gradient. Ramps wider and gets the top gloss every glass surface has.
+        const ImU32 ptop = ox_is_light() ? ox_surf_top() : OxCol(mulc(g_body_color, 3.00f));
+        const ImU32 pbot = ox_is_light() ? ox_surf_bot() : OxCol(mulc(g_body_color, 1.75f));
         AddRoundedRectFilledGradV(pdl, wp, wb, ptop, pbot, OXY_R);
+        glass_gloss(pdl, wp, wb, OXY_R, wp.y + (wb.y - wp.y) * 0.55f, ox_is_light() ? 44 : 38);
         ox_outline(pdl, wp, wb, OXY_R, ox_rim_field(240));
         pdl->ChannelsMerge();
         ImGui::EndPopup();
@@ -1236,24 +1251,7 @@ bool oxygen_list_item(const char* id, const char* label, bool selected, bool sep
 
 // ---------- status ----------
 
-// Screen-space hit rects of the L/R pills, refreshed every frame they are drawn. They are
-// used to pause synthesized clicks only while the cursor is over the pills, so the clicker
-// still runs (and the CPS readout still updates) anywhere else over the app.
-static ImVec2 g_pill_min[2];
-static ImVec2 g_pill_max[2];
-static bool g_pill_valid[2] = { false, false };
-
-bool ui_pointer_over_pills() {
-    if (!g_pill_valid[0] && !g_pill_valid[1]) return false;
-    const ImVec2 mp = ImGui::GetIO().MousePos;
-    for (int i = 0; i < 2; i++) {
-        if (!g_pill_valid[i]) continue;
-        if (mp.x >= g_pill_min[i].x - 2.0f && mp.x <= g_pill_max[i].x + 2.0f &&
-            mp.y >= g_pill_min[i].y - 2.0f && mp.y <= g_pill_max[i].y + 2.0f)
-            return true;
-    }
-    return false;
-}
+bool ui_pointer_over_window() { return g_cursor_in_window; }
 
 ImVec2 click_indicator_size(const char* label) {    char display[32]; snprintf(display, sizeof(display), "%s: %s", label, "ON");
     char alt[32];     snprintf(alt, sizeof(alt), "%s: %s", label, "off");
@@ -1281,13 +1279,6 @@ bool click_indicator(const char* label, bool on) {
     ImGui::PushID(label);
     bool clicked = ImGui::InvisibleButton("##pill", sz);
     const bool hov = ImGui::IsItemHovered();
-    const int pill_idx = (label[0] == 'L' && label[1] == '\0') ? 0
-                       : (label[0] == 'R' && label[1] == '\0') ? 1 : -1;
-    if (pill_idx >= 0) {
-        g_pill_min[pill_idx] = ImGui::GetItemRectMin();
-        g_pill_max[pill_idx] = ImGui::GetItemRectMax();
-        g_pill_valid[pill_idx] = true;
-    }
     float t_h = widget_anim(ImGui::GetID("##pill"), hov);
     ImGui::PopID();
     const bool L = ox_is_light();
@@ -1323,15 +1314,20 @@ bool click_indicator(const char* label, bool on) {
     return clicked;
 }
 
-void stat_readout(bool on, float cps, uint32_t clicks, float inner_w) {
+void stat_readout(bool on, float cps, uint32_t clicks, float inner_w, const char* note) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImFont* font = g_font_big ? g_font_big : ImGui::GetFont();   // real 30px atlas font = crisp
     float big = font->LegacySize;
     ImVec2 mn = ImGui::GetCursorScreenPos();
+    // "0.0 CPS" while the clicker is deliberately idle (cursor on AeroClicker, Mouse mode
+    // waiting for the button) reads as broken, so say why instead of showing an empty rate.
     char main_txt[32];
-    if (on) snprintf(main_txt, sizeof(main_txt), "%.1f CPS", cps);
-    else    snprintf(main_txt, sizeof(main_txt), "Idle");
-    char sub_txt[64]; snprintf(sub_txt, sizeof(sub_txt), "%u clicks", clicks);
+    if (on && note) snprintf(main_txt, sizeof(main_txt), "Paused");
+    else if (on)    snprintf(main_txt, sizeof(main_txt), "%.1f CPS", cps);
+    else            snprintf(main_txt, sizeof(main_txt), "Idle");
+    char sub_txt[64];
+    if (on && note) snprintf(sub_txt, sizeof(sub_txt), "%s", note);
+    else            snprintf(sub_txt, sizeof(sub_txt), "%u clicks", clicks);
     // OxLight(accent) is a 1.3x clamp: on a light theme that turns the big readout into pale
     // cyan on off-white. Use the deeper accent there, and real disabled text instead of the
     // fixed 35%/43% alphas that made "Idle"/"N clicks" nearly vanish.

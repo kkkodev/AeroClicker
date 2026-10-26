@@ -38,10 +38,10 @@ See [Credits](#credits).
 - **Click styles** — optional double-clicks with randomized delay
 - **Inventory pause** — a key that suspends clicking while your inventory is open
 - **Hotbar slot filter** — only click while holding one of the selected slots
-- **Macros** — sequences of left clicks, right clicks, delays and hotbar slot switches, with looping and a keybind
+- **Macros** — optional (off by default): sequences of left clicks, right clicks, delays and hotbar slot switches, with looping and a keybind
 - **Live analytics** — real-time CPS graphs, session averages/peaks, optional recording and CSV export
 - **Profiles** — save and load complete configurations; the `config` profile is loaded automatically at startup
-- **Theming** — follows the KDE colour scheme, with selectable accent presets or a custom accent
+- **Theming** — follows the KDE colour scheme; the accent follows KDE by default, with selectable presets or a custom accent
 - **Sound feedback** — a short beep when a clicker toggles (via `paplay`)
 - **Headless mode** — run the clicker with no window
 
@@ -137,9 +137,9 @@ Reconnect the device (or restart AeroClicker) for the rule to apply.
 | `--lkey <code>` | Left toggle key as an evdev code (default `F6`) |
 | `--rkey <code>` | Right toggle key (default `F7`) |
 | `--invkey <code>` | Inventory key (default `E`) |
-| `--toggle` | Toggle activation (default) |
+| `--toggle` | Toggle activation |
 | `--hold` | Hold activation |
-| `--mouse` | Mouse activation |
+| `--mouse` | Mouse activation (default) |
 | `--headless` | Run without the GUI |
 | `--save` | Save the current configuration and exit |
 | `-h`, `--help` | Show help |

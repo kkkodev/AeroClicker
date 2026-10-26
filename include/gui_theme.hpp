@@ -26,4 +26,13 @@ ImU32 OxCol(ImVec4 c, int a = 255);
 ImVec4 OxLight(ImVec4 c);
 ImVec4 OxDark(ImVec4 c, float k = 0.4f);
 bool read_kde_color(const char* section, const char* key, float &r, float &g, float &b);
+
+// Colour the window decoration's titlebar has at its lower edge (where it meets the client
+// area), for the focused and unfocused window states. The app fades its body from that
+// colour so the surface is continuous; the titlebar's own gradient is never re-created.
+extern ImVec4 g_tb_edge_focused;
+extern ImVec4 g_tb_edge_unfocused;
+extern bool   g_tb_edge_valid;
+void load_kde_titlebar_edges();
+
 void setup_kde_cursor();

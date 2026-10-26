@@ -43,6 +43,31 @@ static bool is_physical_device(int fd) {
     return true;
 }
 
+// Keybinds the binding widget can produce for mouse buttons.
+static bool is_mouse_button(int code) {
+    return code == BTN_LEFT || code == BTN_RIGHT || code == BTN_MIDDLE ||
+           code == BTN_SIDE || code == BTN_EXTRA;
+}
+
+// The mouse device has to be read in two situations:
+//  - a clicker injects through it (MOUSE activation consumes the physical button),
+//  - a hotkey is bound to a mouse button. Without this, binding "Mouse M" as a toggle only
+//    ever worked in Mouse activation mode, because that was the only case the device was
+//    opened at all.
+static bool mouse_read_wanted(const Config& c) {
+    if (c.left_mode == ActivationMode::MOUSE || c.right_mode == ActivationMode::MOUSE) return true;
+    if (is_mouse_button(c.key_left) || is_mouse_button(c.key_right)) return true;
+    for (int m = 0; m < MAX_MACROS; m++)
+        if (c.macros[m].key_bind > 0 && is_mouse_button(c.macros[m].key_bind)) return true;
+    return false;
+}
+
+// Only MOUSE activation needs the exclusive grab; a hotkey-only session reads the device
+// passively so the events reach the system (and the app) exactly once.
+static bool mouse_grab_wanted(const Config& c) {
+    return c.left_mode == ActivationMode::MOUSE || c.right_mode == ActivationMode::MOUSE;
+}
+
 static int find_device(const char* label, bool want_mouse) {
     DIR* dir = opendir("/dev/input");
     if (!dir) return -1;
@@ -87,6 +112,13 @@ static int find_device(const char* label, bool want_mouse) {
                 char name[256] = "Unknown";
                 ioctl(fd, EVIOCGNAME(sizeof(name)), name);
 
+                // Never pick our own virtual mouse back up (not even as the fallback): it
+                // emits the clicks the clicker synthesises, which would re-trigger hotkeys.
+                if (strcasestr(name, "AeroClicker") || strcasestr(name, "Virtual")) {
+                    close(fd);
+                    continue;
+                }
+
                 if (is_physical_device(fd)) {
                     printf("  %s: %s (%s)\n", label, name, path);
                     if (fallback_fd >= 0) close(fallback_fd);
@@ -117,54 +149,63 @@ static int find_device(const char* label, bool want_mouse) {
 static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_clicker,
                           UInputDevice& device, GuiState& gui_state) {
     int kb_fd = find_device("Keyboard", false);
-    if (kb_fd < 0) {
-        fprintf(stderr, "  Error: No keyboard found. Need read access to /dev/input/*\n");
-        return;
-    }
+    if (kb_fd < 0)
+        fprintf(stderr, "  Warning: No keyboard found (need read access to /dev/input/*). "
+                        "Keyboard hotkeys and the slot filter will not work.\n");
 
     int mouse_fd = -1;
-    bool need_mouse = (config.left_mode == ActivationMode::MOUSE ||
-                       config.right_mode == ActivationMode::MOUSE);
-    if (need_mouse) {
-        mouse_fd = find_device("Mouse", true);
-        if (mouse_fd >= 0) {
-            ioctl(mouse_fd, EVIOCGRAB, 1);
-            printf("  Mouse grabbed for click injection\n");
+    bool mouse_grabbed = false;
+
+    // Keeps the mouse device/grab in sync with the current modes and keybinds, both at
+    // startup and when they are changed in the UI.
+    auto sync_mouse_device = [&]() {
+        const bool want_read = mouse_read_wanted(config);
+        const bool want_grab = mouse_grab_wanted(config);
+
+        static bool warned_no_mouse = false;
+        if (want_read && mouse_fd < 0) {
+            mouse_fd = find_device("Mouse", true);
+            if (mouse_fd < 0 && !warned_no_mouse) {
+                warned_no_mouse = true;
+                fprintf(stderr, "  Warning: no mouse device readable (need read access to "
+                                "/dev/input/*). Mouse-button hotkeys and Mouse activation "
+                                "will not work.\n");
+            }
+        } else if (!want_read && mouse_fd >= 0) {
+            if (mouse_grabbed) { ioctl(mouse_fd, EVIOCGRAB, 0); mouse_grabbed = false; }
+            close(mouse_fd);
+            mouse_fd = -1;
         }
-    }
+        if (mouse_fd < 0) return;
+
+        if (want_grab && !mouse_grabbed) {
+            if (ioctl(mouse_fd, EVIOCGRAB, 1) == 0) {
+                mouse_grabbed = true;
+                printf("  Mouse grabbed for click injection\n");
+            }
+        } else if (!want_grab && mouse_grabbed) {
+            ioctl(mouse_fd, EVIOCGRAB, 0);
+            mouse_grabbed = false;
+            printf("  Mouse grab released (hotkey only)\n");
+        }
+    };
 
     bool mouse_left_held = false;
     bool mouse_right_held = false;
 
-    struct pollfd fds[2];
-    int nfds = 1;
-    fds[0].fd = kb_fd;
-    fds[0].events = POLLIN;
-    if (mouse_fd >= 0) {
-        fds[1].fd = mouse_fd;
-        fds[1].events = POLLIN;
-        nfds = 2;
-    }
-
+    struct pollfd fds[2] = {};
     struct input_event ev;
 
     while (g_running) {
-        // Re-check if mouse mode was enabled at runtime
-        bool now_need_mouse = (config.left_mode == ActivationMode::MOUSE ||
-                               config.right_mode == ActivationMode::MOUSE);
-        if (now_need_mouse && mouse_fd < 0) {
-            mouse_fd = find_device("Mouse", true);
-            if (mouse_fd >= 0) {
-                ioctl(mouse_fd, EVIOCGRAB, 1);
-                fds[1].fd = mouse_fd;
-                fds[1].events = POLLIN;
-                nfds = 2;
-            }
-        } else if (!now_need_mouse && mouse_fd >= 0) {
-            ioctl(mouse_fd, EVIOCGRAB, 0);
-            close(mouse_fd);
-            mouse_fd = -1;
-            nfds = 1;
+        sync_mouse_device();
+
+        int nfds = 1;
+        fds[0].fd = kb_fd;          // -1 is fine: poll() ignores negative descriptors
+        fds[0].events = POLLIN;
+        if (mouse_fd >= 0) {
+            fds[1].fd = mouse_fd;
+            fds[1].events = POLLIN;
+            nfds = 2;
         }
 
         int ret = poll(fds, nfds, 50);
@@ -326,17 +367,30 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                         }
                     }
 
+                    // Hotkey-only session (device not grabbed): the compositor already
+                    // delivers these events, so never forward or re-inject them — doing so
+                    // would double every click.
+                    if (!mouse_grabbed) continue;
+
                     if (!is_bound_toggle) {
+                        // While the pointer is over AeroClicker the button belongs to the
+                        // interface: keeping it as a MOUSE-mode trigger makes the whole UI
+                        // unclickable, because the press is swallowed instead of forwarded.
+                        // A filtered hotbar slot blocks MOUSE activation exactly like it
+                        // blocks the bound keys in Toggle/Hold mode.
+                        const bool over_app = gui_state.ui_hovered.load();
                         if (ev.code == BTN_LEFT) {
                             mouse_left_held = (ev.value != 0);
-                            if (config.left_mode == ActivationMode::MOUSE && gui_state.left_armed && !gui_state.in_menu)
+                            if (!over_app && !slot_blocked && config.left_mode == ActivationMode::MOUSE &&
+                                gui_state.left_armed && !gui_state.in_menu)
                                 left_clicker.set_enabled(mouse_left_held);
                             else
                                 device.click(BTN_LEFT, ev.value);
                         }
                         else if (ev.code == BTN_RIGHT) {
                             mouse_right_held = (ev.value != 0);
-                            if (config.right_mode == ActivationMode::MOUSE && gui_state.right_armed && !gui_state.in_menu)
+                            if (!over_app && !slot_blocked && config.right_mode == ActivationMode::MOUSE &&
+                                gui_state.right_armed && !gui_state.in_menu)
                                 right_clicker.set_enabled(mouse_right_held);
                             else
                                 device.click(BTN_RIGHT, ev.value);
@@ -352,17 +406,17 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                     }
                 }
                 else if (ev.type == EV_REL || ev.type == EV_SYN) {
-                    device.emit_raw(ev.type, ev.code, ev.value);
+                    if (mouse_grabbed) device.emit_raw(ev.type, ev.code, ev.value);
                 }
             }
         }
     }
 
     if (mouse_fd >= 0) {
-        ioctl(mouse_fd, EVIOCGRAB, 0);
+        if (mouse_grabbed) ioctl(mouse_fd, EVIOCGRAB, 0);
         close(mouse_fd);
     }
-    close(kb_fd);
+    if (kb_fd >= 0) close(kb_fd);
 }
 
 int main(int argc, char* argv[]) {
@@ -423,9 +477,9 @@ int main(int argc, char* argv[]) {
             printf("  --lkey <code>  Left toggle key (default: %d)\n", config.key_left);
             printf("  --rkey <code>  Right toggle key (default: %d)\n", config.key_right);
             printf("  --invkey <code> Inventory key (default: %d)\n", config.key_inventory);
-            printf("  --toggle       Toggle mode (default)\n");
+            printf("  --toggle       Toggle mode\n");
             printf("  --hold         Hold mode\n");
-            printf("  --mouse        Mouse mode (arm with key, hold mouse to click)\n");
+            printf("  --mouse        Mouse mode (default; arm with key, hold mouse to click)\n");
             printf("  --headless     Run without GUI (CLI only)\n");
             printf("  --save         Save current config to ~/.config/aeroclicker/config\n\n");
             printf("Requires /dev/uinput and /dev/input/* access.\n");

@@ -20,6 +20,9 @@ struct GuiState {
     // Written by the input thread, read by the UI thread: keep it atomic so the label can
     // never keep showing a stale value.
     std::atomic<int> active_slot{0};
+    // Written by the UI thread, read by the input thread: while the pointer is over the app,
+    // physical button presses belong to the interface, not to the clicker's MOUSE arming.
+    std::atomic<bool> ui_hovered{false};
 
     bool show_advanced = false;
     bool show_debug = false;
