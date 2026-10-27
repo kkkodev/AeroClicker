@@ -365,15 +365,51 @@ void ox_plot_lines(const char* id, const float* values, int count, int offset,
         };
         const ImU32 base = ImGui::GetColorU32(ImGuiCol_PlotLines);
         const ImU32 hi   = ImGui::GetColorU32(ImGuiCol_PlotLinesHovered);
-        // ImGui's AA polyline spreads a 1px line over two pixels whenever its vertices land
-        // on fractional coordinates (data-driven Y always does), which reads as "blurry".
-        // Disabling line AA for the trace gives a crisp 1px line (text is unaffected).
-        const ImDrawListFlags saved_flags = dl->Flags;
-        dl->Flags &= ~ImDrawListFlags_AntiAliasedLines;
-        for (int i = 0; i < segments; i++)
-            dl->AddLine(at(i, sample(i)), at(i + 1, sample(i + 1)),
-                        i == hovered_idx ? hi : base);
-        dl->Flags = saved_flags;
+        // ImGui's AA polyline: a 1px trace that follows fractional Y positions smoothly
+        // instead of snapping to whole rows. Non-AA AddLine() per sample is a hard staircase
+        // (the samples are only ~2.5px apart, so every slope reads as pixel-by-pixel steps).
+        //
+        // AA is wrong for horizontal runs though: a 1px line at a fractional Y is feathered
+        // over two rows, so an idle/zero trace turned into a 2px blurry band at the baseline.
+        // Flat runs are therefore snapped to a single physical row; sloped runs keep the AA
+        // polyline.
+        ImVec2 pts[256];
+        int n = segments + 1;
+        if (n > (int)(sizeof(pts) / sizeof(pts[0]))) n = (int)(sizeof(pts) / sizeof(pts[0]));
+        for (int i = 0; i < n; i++) pts[i] = at(i, sample(i));
+
+        const float s_px = fb_scale();
+        auto flat_seg = [&](int i) { return fabsf(pts[i + 1].y - pts[i].y) * s_px < 0.5f; };
+        auto draw_runs = [&](int a, int b, ImU32 col) {
+            int i = a;
+            while (i < b) {
+                if (flat_seg(i)) {
+                    int j = i + 1;
+                    while (j < b && flat_seg(j)) j++;
+                    float y = 0.0f;
+                    for (int k = i; k <= j; k++) y += pts[k].y;
+                    y /= (float)(j - i + 1);
+                    // The row that contains the run, clamped to the plot's inner rect so a
+                    // zero trace sits on the last row instead of straddling the frame.
+                    int row = (int)floorf(y * s_px);
+                    const int last_row  = (int)ceilf(in1.y * s_px) - 1;
+                    const int first_row = (int)floorf(in0.y * s_px);
+                    if (row > last_row) row = last_row;
+                    if (row < first_row) row = first_row;
+                    const float ty = (float)row / s_px;
+                    dl->AddRectFilled(ImVec2(pts[i].x, ty), ImVec2(pts[j].x, ty + 1.0f / s_px), col);
+                    i = j;
+                } else {
+                    int j = i + 1;
+                    while (j < b && !flat_seg(j)) j++;
+                    dl->AddPolyline(&pts[i], j - i + 1, col, ImDrawFlags_None, 1.0f);
+                    i = j;
+                }
+            }
+        };
+        if (n >= 2) draw_runs(0, n - 1, base);
+        if (hovered_idx >= 0 && hovered_idx + 1 < n)
+            draw_runs(hovered_idx, hovered_idx + 1, hi);
 
         if (hovered_idx >= 0) {
             char buf[96];
@@ -583,7 +619,7 @@ void field_gloss_last_item() {
 
 // ---------- scrollbar ----------
 
-void oxygen_scrollbar() {
+void oxygen_scrollbar(float track_top) {
     ImGuiStyle& st = ImGui::GetStyle();
     const float smax = ImGui::GetScrollMaxY();
     if (smax <= 0.0f) return;
@@ -594,8 +630,11 @@ void oxygen_scrollbar() {
     ImDrawList* dl = ImGui::GetWindowDrawList();
     dl->PushClipRect(wp, ImVec2(wp.x + ws.x, wp.y + ws.y), false);
 
+    // The track normally spans the whole window. A sticky header passes its bottom edge so
+    // the scrollbar only runs beside the scrolling content instead of through the tab bar.
+    const float ty0 = (track_top > wp.y) ? track_top : wp.y;
     // track: snapped to whole physical pixels so its 1px border never smears
-    ImVec2 t0(floorf((wp.x + ws.x - sbw) * s) / s, floorf(wp.y * s) / s);
+    ImVec2 t0(floorf((wp.x + ws.x - sbw) * s) / s, floorf(ty0 * s) / s);
     ImVec2 t1(ceilf((wp.x + ws.x) * s) / s, ceilf((wp.y + ws.y) * s) / s);
     AddRoundedRectGradCenter(dl, t0, t1,
                              OxCol(ox_is_light() ? ox_tint(g_body_color, 0.08f) : g_body_color),
@@ -613,7 +652,9 @@ void oxygen_scrollbar() {
 
     // thumb: 2px narrower than the track on each side (keeps a clear gap, looks lighter)
     const float inset = 2.0f;
-    ImVec2 g0(crisp_lo(t0.x + inset), crisp_lo(ty + inset));
+    // One extra pixel at the top: at scroll 0 the thumb would otherwise fuse with the 1px
+    // rule drawn over the track's top edge.
+    ImVec2 g0(crisp_lo(t0.x + inset), crisp_lo(ty + inset + 1.0f));
     ImVec2 g1(crisp_hi(t1.x - inset), crisp_hi(ty + thumb_h - inset));
     float gr = st.ScrollbarRounding - 1.0f; if (gr < 1.0f) gr = 1.0f;
 
@@ -637,11 +678,18 @@ void oxygen_scrollbar() {
 
 // ---------- buttons ----------
 
-bool oxygen_button(const char* label, ImVec2 size_arg, ImU32 c1_override, ImU32 c2_override, bool force_colored) {
+bool oxygen_button(const char* label, ImVec2 size_arg, ImU32 c1_override, ImU32 c2_override,
+                   bool force_colored, OxIcon icon) {
     const float R = OXY_R;
     ImVec2 ls = ImGui::CalcTextSize(label, nullptr, true);
+    const bool has_icon = icon != OxIcon::None;
+    // Oxygen symbolic icons are designed on a 16px grid; drawing them at exactly that
+    // size keeps every pixel of the baked mask on screen without resampling.
+    constexpr float isz = 16.0f;
+    const float igap = 6.0f;
+    const float extra = has_icon ? isz + (ls.x > 0.0f ? igap : 0.0f) : 0.0f;
     ImVec2 sz = size_arg;
-    if (sz.x <= 0) sz.x = ls.x + ImGui::GetStyle().FramePadding.x * 2.0f;
+    if (sz.x <= 0) sz.x = ls.x + extra + ImGui::GetStyle().FramePadding.x * 2.0f;
     if (sz.y <= 0) sz.y = ImGui::GetFrameHeight();
     ImVec2 mn = ImGui::GetCursorScreenPos();
     ImVec2 mx(mn.x + sz.x, mn.y + sz.y);
@@ -676,8 +724,56 @@ bool oxygen_button(const char* label, ImVec2 size_arg, ImU32 c1_override, ImU32 
     ImU32 ink = ox_ink_on(c1);
     if (ox_is_light() && t_a > 0.01f)
         ink = lerp_u32(ink, IM_COL32(255, 255, 255, 255), t_a);
-    dl->AddText(ImVec2(mn.x + (sz.x - ls.x) * 0.5f, vcenter_top(mn.y, mx.y)),
-                ink, label, tend ? tend : nullptr);
+    const float content_w = ls.x + extra;
+    const float tx = mn.x + (sz.x - content_w) * 0.5f;
+    if (has_icon) {
+        ox_draw_icon(dl, icon,
+                     ImVec2(tx + isz * 0.5f, (mn.y + mx.y) * 0.5f), isz, ink);
+        dl->AddText(ImVec2(tx + isz + igap, vcenter_top(mn.y, mx.y)), ink,
+                    label, tend ? tend : nullptr);
+    } else {
+        dl->AddText(ImVec2(mn.x + (sz.x - ls.x) * 0.5f, vcenter_top(mn.y, mx.y)),
+                    ink, label, tend ? tend : nullptr);
+    }
+    return clicked;
+}
+
+bool ox_preset_tile(const char* id, const char* title, const char* sub, ImVec2 size, bool selected) {
+    const float R = OXY_R;
+    ImVec2 mn = ImGui::GetCursorScreenPos();
+    ImVec2 mx(mn.x + size.x, mn.y + size.y);
+    const bool clicked = ImGui::InvisibleButton(id, size);
+    const bool hov = ImGui::IsItemHovered();
+    const bool act = ImGui::IsItemActive();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImGuiID wid = ImGui::GetID(id);
+    const float t_h = widget_anim(wid, hov);
+    const float t_a = widget_anim(wid + 1, act || selected);
+
+    // Same face/rim language as oxygen_button(), so a tile reads as the same control family:
+    // neutral button gradient when unselected, accent fill when it is the active preset.
+    const ImVec4 face = ox_is_light() ? mulc(g_accent_color, 0.80f) : g_accent_color;
+    const ImU32 c1 = lerp_u32(ox_fill_top(), OxCol(face), t_a);
+    const ImU32 c2 = lerp_u32(ox_fill_bot(), OxCol(OxDark(face)), t_a);
+    const ImU32 bc = lerp_u32(ox_rim_neutral(180), ox_accent_rim(), t_h > t_a ? t_h : t_a);
+    const int gloss = ox_is_light() ? 20 : (60 + (int)(60 * t_a));
+    const int shadow = ox_is_light() ? 26 : 60;
+    OxFrame(dl, mn, mx, R, c1, c2, bc, gloss, shadow);
+
+    ImU32 ink = ox_ink_on(c1);
+    if (ox_is_light() && t_a > 0.01f)
+        ink = lerp_u32(ink, IM_COL32(255, 255, 255, 255), t_a);
+    // The range is supporting text: same ink, faded, so the name stays the anchor.
+    const ImU32 ink_dim = (ink & ~IM_COL32_A_MASK) |
+                          ((ImU32)((float)((ink >> IM_COL32_A_SHIFT) & 0xFF) * 0.62f) << IM_COL32_A_SHIFT);
+
+    const float half = size.y * 0.5f;
+    const ImVec2 ts = ImGui::CalcTextSize(title, nullptr, true);
+    const ImVec2 ss = ImGui::CalcTextSize(sub, nullptr, true);
+    dl->AddText(ImVec2(crisp_lo(mn.x + (size.x - ts.x) * 0.5f), vcenter_top(mn.y + 1.0f, mn.y + half)),
+                ink, title);
+    dl->AddText(ImVec2(crisp_lo(mn.x + (size.x - ss.x) * 0.5f), vcenter_top(mn.y + half, mx.y - 1.0f)),
+                ink_dim, sub);
     return clicked;
 }
 
@@ -723,7 +819,11 @@ bool oxygen_checkbox(const char* label, bool* v, bool label_clickable) {
     bool hov = ImGui::IsItemHovered() && (label_clickable || in_box);
     bool act = ImGui::IsItemActive() && (label_clickable || in_box);
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImGuiID id = ImGui::GetID(label);
+    // Identity comes from the "##id" suffix when the label has one, so a checkbox whose visible
+    // text changes with its state ("Enabled##inv" / "Disabled##inv") keeps its animation state
+    // instead of restarting from zero — and popping — on every click.
+    const char* id_part = strstr(label, "##");
+    ImGuiID id = ImGui::GetID(id_part ? id_part : label);
     float t_h = widget_anim(id, hov);
     float t_c = widget_anim(id + 1, *v);
     ImVec2 bx1(mn.x + sz, mn.y + sz);
@@ -751,10 +851,21 @@ bool oxygen_checkbox(const char* label, bool* v, bool label_clickable) {
             ImVec2(cmn.x + sz * 0.45f, cmn.y + sz * 0.66f),
             ImVec2(cmn.x + sz * 0.70f, cmn.y + sz * 0.36f),
         };
-        // On a light theme the checked box is filled with the accent colour, so the tick has
-        // to be white (ox_ink_on() would pick dark ink for a mid-luma blue).
-        ImU32 ink = ox_is_light() ? IM_COL32(255, 255, 255, (int)(255 * t_c)) : ox_ink_on(fill);
-        dl->AddPolyline(pts, 3, ink, 0, th);
+        // The tick fades with the fill but on a steeper curve: it is gone once the box is a
+        // third of the way back to its unchecked shade, instead of hanging over a grey box for
+        // the whole fade. It also always faded by alpha, never by hard-cutting (which is what
+        // made it look like it vanished in one glitchy frame).
+        const float tick_t = (t_c - 0.35f) / 0.65f;
+        const int tick_a = (int)(255.0f * (tick_t < 0.0f ? 0.0f : (tick_t > 1.0f ? 1.0f : tick_t)) + 0.5f);
+        // Ink is picked from the *checked* fill and never the animating one: ox_ink_luma() is a
+        // hard luminance threshold, so choosing from the lerped fill made the tick flip
+        // white<->black part-way through the animation. Light theme uses white on the accent.
+        if (tick_a > 0) {
+            const ImU32 ink = ((ox_is_light() ? IM_COL32(255, 255, 255, 0)
+                                             : ox_ink_on(OxCol(g_accent_active))) & ~IM_COL32_A_MASK)
+                              | ((ImU32)tick_a << IM_COL32_A_SHIFT);
+            dl->AddPolyline(pts, 3, ink, 0, th);
+        }
     }
     if (ls.x > 0.0f)
         dl->AddText(ImVec2(cbx1.x + ImGui::GetStyle().ItemInnerSpacing.x, vcenter_top(mn.y, mn.y + sz)),
@@ -764,7 +875,7 @@ bool oxygen_checkbox(const char* label, bool* v, bool label_clickable) {
 
 // ---------- sliders ----------
 
-static bool slider_widget(const char* id, double* v, double lo, double hi, const char* fmt) {
+static bool slider_widget(const char* id, double* v, double lo, double hi) {
     push_transparent_frame();
     bool changed = ImGui::SliderScalar(id, ImGuiDataType_Double, v, &lo, &hi, "", ImGuiSliderFlags_NoInput);
     pop_transparent_frame();
@@ -808,7 +919,7 @@ bool row_slider(const char* label, double* v, double lo, double hi, const char* 
     ImGui::SetCursorScreenPos(ImVec2(ctrl_x0(), start.y));
     ImGui::SetNextItemWidth(ctrl_w_slider());
     char id[96]; snprintf(id, sizeof(id), "##%s", label);
-    bool changed = slider_widget(id, v, lo, hi, fmt);
+    bool changed = slider_widget(id, v, lo, hi);
     ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
     char vid[112]; snprintf(vid, sizeof(vid), "##%s_val", label);
     if (ox_input_double(vid, v, 0.0, 0.0, fmt, VALUE_W)) {
@@ -823,7 +934,7 @@ bool stacked_slider(const char* label, double* v, double lo, double hi, const ch
     ImGui::TextDisabled("%s", label);
     ImGui::SetNextItemWidth(w - VALUE_W - ImGui::GetStyle().ItemSpacing.x);
     char id[96]; snprintf(id, sizeof(id), "##%s", label);
-    bool changed = slider_widget(id, v, lo, hi, fmt);
+    bool changed = slider_widget(id, v, lo, hi);
     ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
     char vid[112]; snprintf(vid, sizeof(vid), "##%s_val", label);
     if (ox_input_double(vid, v, 0.0, 0.0, fmt, VALUE_W)) {
@@ -1141,7 +1252,7 @@ void stacked_keybind(const char* label, int& key_code, float w) {
 
 float panel_inner() { return s_panel_inner; }
 
-void begin_panel(const char* label, float width, int status) {
+void begin_panel(const char* label, float width, int status, OxIcon icon) {
     ImGui::PushID(label);
     s_panel_hid = ImGui::GetID("##panelh");
     ImGuiStorage* st = ImGui::GetStateStorage();
@@ -1157,18 +1268,36 @@ void begin_panel(const char* label, float width, int status) {
     dl->AddRectFilled(start, p1, OxCol(ox_is_light() ? mulc(g_body_color, 1.10f, 235) : mulc(g_body_color, 1.16f, 235)), PANEL_R);
     ox_outline(dl, start, p1, PANEL_R, ox_rim_neutral(160));
 
+    // Optional symbolic glyph before the title. The group must start at the card's normal
+    // left padding: BeginGroup() adopts the cursor x as the indent for every following line,
+    // so shifting the cursor before BeginGroup() dragged the whole body to the right with it.
+    // Only the title line itself is offset, and ItemSize() then snaps back to the group indent.
+    constexpr float isz = 16.0f;
+    const float igap = 6.0f;
+    const bool has_icon = icon != OxIcon::None;
     ImGui::SetCursorScreenPos(ImVec2(start.x + PANEL_PAD, start.y + 12.0f));
     s_panel_inner = panel_w - PANEL_PAD * 2.0f;
 
     ImGui::BeginGroup();
 
+    if (has_icon)
+        ImGui::SetCursorScreenPos(ImVec2(start.x + PANEL_PAD + isz + igap, start.y + 12.0f));
+
     // The panel header was a 45% accent tint at 200 alpha: pleasant on dark, washed out on
     // a light panel. Deepen it in light mode instead of fading it out.
-    ImGui::PushStyleColor(ImGuiCol_Text, ox_is_light() ? OxCol(lerp4(g_text_color, g_accent_color, 0.55f))
-                                                       : OxCol(lerp4(g_text_color, g_accent_color, 0.45f), 200));
+    const ImVec4 hdr_col = lerp4(g_text_color, g_accent_color, ox_is_light() ? 0.55f : 0.45f);
+    const ImU32 hdr_ink = ox_is_light() ? OxCol(hdr_col) : OxCol(hdr_col, 200);
+    ImGui::PushStyleColor(ImGuiCol_Text, hdr_ink);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 4.0f));
     char up[128]; strtoupper(up, sizeof(up), label);
     ImGui::TextUnformatted(up);
+    if (has_icon) {
+        const ImVec2 tmn = ImGui::GetItemRectMin(), tmx = ImGui::GetItemRectMax();
+        // Full alpha: the 200-alpha header tint plus antialiasing made small glyphs look fuzzy.
+        ox_draw_icon(dl, icon,
+                     ImVec2(start.x + PANEL_PAD + isz * 0.5f, (tmn.y + tmx.y) * 0.5f),
+                     isz, OxCol(hdr_col));
+    }
     ImGui::PopStyleColor();
 
     if (status >= 0) {
@@ -1176,7 +1305,15 @@ void begin_panel(const char* label, float width, int status) {
         float r = 5.0f;
         ImVec2 c(start.x + panel_w - PANEL_PAD - r, (hmn.y + hmx.y) * 0.5f);
         const bool L = ox_is_light();
-        if (status) {
+        if (status == 2) {
+            // Paused: switched on, but not clicking (pointer on this window, inventory open or
+            // a filtered hotbar slot). Amber, so it cannot be mistaken for the green running dot.
+            dl->AddCircleFilled(c, r + 3.5f, IM_COL32(214, 158, 46, L ? 20 : 38));
+            dl->AddCircleFilled(c, r + 1.5f, IM_COL32(232, 176, 64, L ? 38 : 66));
+            dl->AddCircleFilled(c, r,        IM_COL32(214, 158, 46, 255));
+            dl->AddCircle(c, r, L ? IM_COL32(140, 100, 24, 210) : IM_COL32(246, 214, 140, 200), 0, 1.0f);
+            dl->AddCircleFilled(ImVec2(c.x - r * 0.30f, c.y - r * 0.35f), r * 0.45f, IM_COL32(255, 255, 255, L ? 110 : 90));
+        } else if (status) {
             // Softer halo in light mode: the old 40/70 alpha rings smear into a green blur.
             dl->AddCircleFilled(c, r + 3.5f, IM_COL32(46, 148, 84, L ? 22 : 40));
             dl->AddCircleFilled(c, r + 1.5f, IM_COL32(70, 190, 110, L ? 40 : 70));
@@ -1342,23 +1479,56 @@ void stat_readout(bool on, float cps, uint32_t clicks, float inner_w, const char
     ImGui::Dummy(ImVec2(inner_w, ms.y + 4.0f + ss.y));
 }
 
-void segmented_tabs(const char* const* names, int count, int& current_tab) {
+void segmented_tabs(const char* const* names, int count, int& current_tab, const OxIcon* icons,
+                    float max_width) {
     const float R = OXY_R;
     const float PR = R - 1.0f;
-    const float pad_x = 14.0f;
     const float h = ImGui::GetFrameHeight();
+    // Symbolic glyphs sit a touch smaller than the line box, matching the 16px panel icons.
+    // Oxygen symbolic icons are designed on a 16px grid; drawing them at exactly that
+    // size keeps every pixel of the baked mask on screen without resampling.
+    constexpr float isz = 16.0f;
+    const float igap = 6.0f;
     const ImU32 track = ImGui::GetColorU32(ImGuiCol_FrameBg);
     const ImU32 rim = ox_rim_neutral(150);
     const ImU32 txt = ImGui::GetColorU32(ImGuiCol_Text, 0.80f);
     const ImU32 txtSel = ox_ink_fill(g_accent_active, 0.12f);
-    ImVec2 ls[8]; float w[8], total = 0.0f;
-    for (int i = 0; i < count && i < 8; i++) {
-        ls[i] = ImGui::CalcTextSize(names[i]);
-        w[i] = ls[i].x + pad_x * 2.0f;
-        total += w[i];
+    ImVec2 ls[8]; float w[8]; float total = 0.0f;
+    float pad_x = 14.0f;
+    bool show_icons = true;
+    auto measure = [&]() {
+        total = 0.0f;
+        for (int i = 0; i < count && i < 8; i++) {
+            ls[i] = ImGui::CalcTextSize(names[i]);
+            const bool has_icon = show_icons && icons && icons[i] != OxIcon::None;
+            w[i] = ls[i].x + pad_x * 2.0f + (has_icon ? isz + igap : 0.0f);
+            total += w[i];
+        }
+    };
+    // The bar shares its row with the L/R pills, so a narrow window has to give ground: the
+    // padding tightens first, and only when no padding fits do the icons go. Taking the
+    // roomiest variant that fits (rather than the first that fits) keeps the bar from jumping
+    // to its narrowest form while there is still space to spare. If nothing fits it is clipped
+    // — it must never run underneath the pills.
+    if (max_width > 0.0f) {
+        static const float kPads[] = { 14.0f, 12.0f, 10.0f, 8.0f, 6.0f };
+        bool found = false;
+        for (int pass = 0; pass < 2 && !found; pass++) {
+            show_icons = (pass == 0);
+            for (float p : kPads) {
+                pad_x = p;
+                measure();
+                if (total <= max_width) { found = true; break; }
+            }
+        }
+        if (!found) { show_icons = false; pad_x = 6.0f; measure(); }
+    } else {
+        measure();
     }
+    const float bar_w = (max_width > 0.0f && total > max_width) ? max_width : total;
+    const bool clipped = bar_w < total - 0.5f;
     ImVec2 mn = ImGui::GetCursorScreenPos();
-    ImVec2 mx(mn.x + total, mn.y + h);
+    ImVec2 mx(mn.x + bar_w, mn.y + h);
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImVec2 smn = crisp_min(mn), smx = crisp_max(mx);
     // Tab bar: a real vertical ramp like the other raised chrome, instead of a flat slab.
@@ -1371,8 +1541,12 @@ void segmented_tabs(const char* const* names, int count, int& current_tab) {
                                           : lerp_u32(track, IM_COL32(0, 0, 0, 255), 0.25f);
     AddRoundedRectFilledGradV(dl, smn, smx, track_top, track_bot, R);
     ox_outline(dl, mn, mx, R, rim);
+    if (clipped) dl->PushClipRect(ImVec2(mn.x, mn.y - 2.0f), ImVec2(mn.x + bar_w, mx.y + 2.0f), true);
     float x = mn.x;
     for (int i = 0; i < count; i++) {
+        // A tab that would start past the clip is not drawn and gets no hit area, so it cannot
+        // be clicked through the pills sitting next to the bar.
+        if (clipped && x >= mn.x + bar_w - 1.0f) break;
         ImGui::SetCursorScreenPos(ImVec2(x, mn.y));
         bool sel = (current_tab == i);
         ImVec2 s0(x, mn.y), s1(x + w[i], mn.y + h);
@@ -1396,11 +1570,18 @@ void segmented_tabs(const char* const* names, int count, int& current_tab) {
         }
         if (i > 0 && !sel && current_tab != i - 1)
             dl->AddLineV(crisp_lo(s0.x), s0.y + 5, s1.y - 5, rim, 1.0f);
-        dl->AddText(ImVec2(s0.x + (w[i] - ls[i].x) * 0.5f, vcenter_top(s0.y, s1.y)),
-                    sel ? txtSel : txt, names[i]);
+        const bool has_icon = show_icons && icons && icons[i] != OxIcon::None;
+        const float content_w = ls[i].x + (has_icon ? isz + igap : 0.0f);
+        const float cx = s0.x + (w[i] - content_w) * 0.5f;
+        const ImU32 ink = sel ? txtSel : txt;
+        if (has_icon)
+            ox_draw_icon(dl, icons[i], ImVec2(cx + isz * 0.5f, (s0.y + s1.y) * 0.5f), isz, ink);
+        dl->AddText(ImVec2(cx + (has_icon ? isz + igap : 0.0f), vcenter_top(s0.y, s1.y)),
+                    ink, names[i]);
         if (clicked) current_tab = i;
         x += w[i];
     }
+    if (clipped) dl->PopClipRect();
     ImGui::SetCursorScreenPos(ImVec2(mn.x, mx.y));
     ImGui::Spacing();
 }

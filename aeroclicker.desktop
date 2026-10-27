@@ -1,9 +1,11 @@
+#!/usr/bin/env xdg-open
 [Desktop Entry]
 Type=Application
 Name=AeroClicker
 Comment=A humanized auto-clicker for Linux (Wayland and X11)
 Exec=aeroclicker
-Icon=input-mouse
+Icon=aeroclicker
+StartupWMClass=aeroclicker
 Terminal=false
 Categories=Utility;
 Keywords=clicker;auto-clicker;mouse;autoclicker;

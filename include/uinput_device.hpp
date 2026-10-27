@@ -3,6 +3,7 @@
 #include <linux/input.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <cerrno>
 #include <cstring>
 #include <stdexcept>
 
@@ -74,6 +75,14 @@ private:
         ev.type = type;
         ev.code = code;
         ev.value = val;
-        write(fd_, &ev, sizeof(ev));
+        // The node is opened non-blocking, so a full uinput buffer answers EAGAIN instead of
+        // waiting. Ignoring that dropped events silently — and a dropped *release* leaves the
+        // virtual button held, which the desktop sees as a stuck drag — so retry briefly
+        // instead of throwing the event away.
+        for (int attempt = 0; attempt < 50; attempt++) {
+            if (write(fd_, &ev, sizeof(ev)) == (ssize_t)sizeof(ev)) return;
+            if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) return;
+            usleep(100);
+        }
     }
 };

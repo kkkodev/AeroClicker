@@ -161,7 +161,7 @@ struct Config {
     bool inventory_key_enabled = true;
     int key_escape = KEY_ESC;
 
-    int accent_preset = 5;   // 5 = Follow KDE (Colors:Selection)
+    int accent_preset = 0;   // 0 = Follow KDE (Colors:Selection), 1 Blue, 2 Red, 3 Green, 4 Purple, 5 Orange, 6 Custom
     float accent_r = 0.24f;
     float accent_g = 0.49f;
     float accent_b = 0.78f;

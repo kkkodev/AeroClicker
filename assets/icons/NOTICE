@@ -1,0 +1,27 @@
+Symbolic icon artwork
+=====================
+
+The 16px symbolic masks embedded in src/gui_icons_symbolic.inc are derived from two KDE icon
+themes. Both are licensed under the GNU Lesser General Public License version 3 or later; see
+COPYING in this directory for the full licence text.
+
+Oxygen - the theme this UI follows. The source SVGs are bundled under oxygen/ so the masks can
+be regenerated offline with tools/gen_symbolic_icons.py.
+
+    Oxygen icons copyright KDE and contributors, LGPL-3.0-or-later.
+    https://invent.kde.org/frameworks/oxygen-icons
+
+    Used for: navigation arrows, list, speedometer, person, media playback, speaker, folder,
+    sun, save, trash and close.
+
+Breeze - supplies the glyphs Oxygen does not ship symbolically, in the same flat 16px language.
+Read from the system theme directory at generation time.
+
+    Breeze icons copyright KDE and contributors, LGPL-3.0-or-later.
+    https://invent.kde.org/frameworks/breeze-icons
+
+    Used for: home, configure, chart, clock, pointer, globe, checklist, keyboard, grid,
+    terminal, pulse, record, export, refresh and add.
+
+The two mouse-button masks are derived from Oxygen's input-mouse glyph by lighting up the
+matching top button; neither theme ships separate left/right mouse artwork.

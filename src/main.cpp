@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include <csignal>
 #include <atomic>
 #include <chrono>
@@ -16,6 +17,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <linux/input.h>
 
@@ -148,28 +150,54 @@ static int find_device(const char* label, bool want_mouse) {
 
 static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_clicker,
                           UInputDevice& device, GuiState& gui_state) {
-    int kb_fd = find_device("Keyboard", false);
-    if (kb_fd < 0)
-        fprintf(stderr, "  Warning: No keyboard found (need read access to /dev/input/*). "
-                        "Keyboard hotkeys and the slot filter will not work.\n");
+    // A device that was opened at startup can vanish: a keyboard swapped or replugged, a mouse
+    // re-docked, the whole input stack restarting with the compositor. A dead fd never reports
+    // POLLIN again, so without re-acquiring it the hotkeys or the mouse stayed dead until the
+    // app was restarted. EVIOCGNAME fails with ENODEV once the device is gone, which is a cheap
+    // way to notice.
+    auto device_alive = [](int fd) {
+        if (fd < 0) return false;
+        char name[64];
+        return ioctl(fd, EVIOCGNAME(sizeof(name)), name) >= 0;
+    };
+    // Rescanning opens every node under /dev/input, so a missing device is looked for on a
+    // timer instead of on every pass of the loop below (which runs every 50 ms).
+    constexpr auto RESCAN_INTERVAL = std::chrono::seconds(2);
+    using Clock = std::chrono::steady_clock;
+
+    int kb_fd = -1;
+    bool kb_seen = false;
+    bool warned_no_kb = false;
+    auto next_kb_scan = Clock::now();
 
     int mouse_fd = -1;
     bool mouse_grabbed = false;
+    bool mouse_seen = false;
+    auto next_mouse_scan = Clock::now();
 
-    // Keeps the mouse device/grab in sync with the current modes and keybinds, both at
-    // startup and when they are changed in the UI.
+    // Keeps the mouse device/grab in sync with the current modes and keybinds: at startup, when
+    // they are changed in the UI, and after the device is replugged.
     auto sync_mouse_device = [&]() {
         const bool want_read = mouse_read_wanted(config);
         const bool want_grab = mouse_grab_wanted(config);
 
         static bool warned_no_mouse = false;
         if (want_read && mouse_fd < 0) {
-            mouse_fd = find_device("Mouse", true);
-            if (mouse_fd < 0 && !warned_no_mouse) {
-                warned_no_mouse = true;
-                fprintf(stderr, "  Warning: no mouse device readable (need read access to "
-                                "/dev/input/*). Mouse-button hotkeys and Mouse activation "
-                                "will not work.\n");
+            const auto now = Clock::now();
+            if (now >= next_mouse_scan) {
+                mouse_fd = find_device("Mouse", true);
+                if (mouse_fd >= 0) {
+                    if (mouse_seen) printf("  Mouse reconnected\n");
+                    mouse_seen = true;
+                } else {
+                    next_mouse_scan = now + RESCAN_INTERVAL;
+                    if (!warned_no_mouse) {
+                        warned_no_mouse = true;
+                        fprintf(stderr, "  Warning: no mouse device readable (need read access "
+                                        "to /dev/input/*). Mouse-button hotkeys and Mouse "
+                                        "activation will not work until one appears.\n");
+                    }
+                }
             }
         } else if (!want_read && mouse_fd >= 0) {
             if (mouse_grabbed) { ioctl(mouse_fd, EVIOCGRAB, 0); mouse_grabbed = false; }
@@ -192,12 +220,123 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
 
     bool mouse_left_held = false;
     bool mouse_right_held = false;
+    // Which button's current physical press belongs to the clicker (MOUSE mode). Deciding
+    // this once, on the press, and remembering it until the matching release is what keeps
+    // a press and its release symmetric: if the cursor moves over the app (e.g. the click
+    // landed on the titlebar and activated the window) the release used to be forwarded to
+    // the app instead of stopping the clicker, which left it clicking with nothing held.
+    bool mouse_left_owned = false;
+    bool mouse_right_owned = false;
+
+    // The automatic pauses are derived state, recomputed every iteration so that changing the
+    // slot filter or the inventory settings takes effect at once instead of at the next key
+    // press. They pause rather than switch a clicker off, which is what keeps the on/off state
+    // the user asked for visible (and resumable) in the UI.
+    auto apply_pauses = [&](Clicker& clicker, bool slot_override) {
+        clicker.set_pause(Clicker::PAUSE_INVENTORY, gui_state.in_menu.load());
+        const bool filtered = config.slot_filter_enabled && !slot_override &&
+                              !config.allowed_slots[gui_state.active_slot.load()];
+        clicker.set_pause(Clicker::PAUSE_SLOT, filtered);
+    };
+
+    // A clicker's bound key is its master control: it acts even while the app believes the
+    // inventory is open (typing the inventory letter in chat leaves that state inverted), and
+    // it overrides both automatic pauses. The slot filter takes control back as soon as another
+    // hotbar slot is selected. Shared by the keyboard and mouse paths, since the same key can
+    // be bound on either device.
+    //
+    // A clicker that is switched on but held back by a pause is *not* switched off by its own
+    // key: the press means "run now", so it clears the pause and a second press stops it as
+    // usual. Otherwise rescuing the state after a stray inventory key would take two presses.
+    auto handle_clicker_key = [&](bool left_side, int value) {
+        Clicker& clicker = left_side ? left_clicker : right_clicker;
+        bool& armed = left_side ? gui_state.left_armed : gui_state.right_armed;
+        std::atomic<bool>& slot_override = left_side ? gui_state.left_slot_override
+                                                     : gui_state.right_slot_override;
+        const ActivationMode mode = left_side ? config.left_mode : config.right_mode;
+
+        const bool was = clicker_master_on(clicker, armed, mode);
+        const bool unpause_only = value == 1 && was && (clicker.pause_mask() & Clicker::PAUSE_AUTO);
+
+        if (!unpause_only) {
+            if (mode == ActivationMode::TOGGLE) {
+                if (value == 1) clicker.toggle();
+            } else if (mode == ActivationMode::HOLD) {
+                clicker.set_enabled(value != 0);
+            } else {
+                if (value == 1) {
+                    armed = !armed;
+                    const bool button_held = left_side ? mouse_left_held : mouse_right_held;
+                    if (!armed) clicker.set_enabled(false);
+                    else if (button_held) clicker.set_enabled(true);
+                }
+            }
+        }
+
+        const bool now = clicker_master_on(clicker, armed, mode);
+        if (now) {
+            // Coming on (or being un-paused) beats the guessed inventory state and the filter.
+            gui_state.in_menu = false;
+            clicker.set_pause(Clicker::PAUSE_INVENTORY, false);
+            clicker.set_pause(Clicker::PAUSE_SLOT, false);
+            slot_override = true;
+        } else {
+            slot_override = false;
+        }
+        if (config.audio_enabled && now != was) {
+            if (now) Audio::beep_on();
+            else Audio::beep_off();
+        }
+    };
 
     struct pollfd fds[2] = {};
     struct input_event ev;
 
     while (g_running) {
+        // A replugged device leaves the old fd reporting errors forever, so drop it here: the
+        // keyboard acquisition below and sync_mouse_device() then open the new node.
+        if (kb_fd >= 0 && !device_alive(kb_fd)) {
+            fprintf(stderr, "  Keyboard disconnected, waiting for it to come back\n");
+            close(kb_fd);
+            kb_fd = -1;
+            // The hotkeys that could clear the guessed inventory state went with it, so do not
+            // leave the clickers paused because of a key press we can no longer see.
+            gui_state.in_menu = false;
+            next_kb_scan = Clock::now() + RESCAN_INTERVAL;
+        }
+        if (mouse_fd >= 0 && !device_alive(mouse_fd)) {
+            fprintf(stderr, "  Mouse disconnected, waiting for it to come back\n");
+            // Nothing can release a button that vanished, so stop the clickers that were
+            // driving it: otherwise they keep clicking with no physical button held.
+            if (mouse_left_owned)  { left_clicker.set_enabled(false);  mouse_left_owned = false; }
+            if (mouse_right_owned) { right_clicker.set_enabled(false); mouse_right_owned = false; }
+            mouse_left_held = mouse_right_held = false;
+            mouse_grabbed = false;          // the grab went with the device
+            close(mouse_fd);
+            mouse_fd = -1;
+        }
+        // (Re)acquire the keyboard when it is not open: at startup, and after a replug.
+        if (kb_fd < 0) {
+            const auto now = Clock::now();
+            if (now >= next_kb_scan) {
+                kb_fd = find_device("Keyboard", false);
+                if (kb_fd >= 0) {
+                    if (kb_seen) printf("  Keyboard reconnected\n");
+                    kb_seen = true;
+                } else {
+                    next_kb_scan = now + RESCAN_INTERVAL;
+                    if (!warned_no_kb) {
+                        warned_no_kb = true;
+                        fprintf(stderr, "  Warning: No keyboard found (need read access to "
+                                        "/dev/input/*). Keyboard hotkeys and the slot filter "
+                                        "will not work until one appears.\n");
+                    }
+                }
+            }
+        }
         sync_mouse_device();
+        apply_pauses(left_clicker, gui_state.left_slot_override.load());
+        apply_pauses(right_clicker, gui_state.right_slot_override.load());
 
         int nfds = 1;
         fds[0].fd = kb_fd;          // -1 is fine: poll() ignores negative descriptors
@@ -224,20 +363,14 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                     slot = (int)ev.code - KEY_KP1;
                 if (ev.value == 1 && slot >= 0) {
                     gui_state.active_slot = slot;
-                    if (config.slot_filter_enabled && !config.allowed_slots[slot]) {
-                        left_clicker.set_enabled(false);
-                        right_clicker.set_enabled(false);
-                    }
+                    // Selecting a slot hands control back to the filter, so an override made in
+                    // the slot the player just left cannot outlive it.
+                    gui_state.left_slot_override = false;
+                    gui_state.right_slot_override = false;
                 }
 
                 if (config.inventory_key_enabled && ev.value == 1 && ev.code == static_cast<unsigned>(config.key_inventory)) {
-                    if (!gui_state.in_menu) {
-                        gui_state.in_menu = true;
-                        left_clicker.set_enabled(false);
-                        right_clicker.set_enabled(false);
-                    } else {
-                        gui_state.in_menu = false;
-                    }
+                    gui_state.in_menu = !gui_state.in_menu;
                     continue;
                 }
                 if (ev.value == 1 && ev.code == static_cast<unsigned>(config.key_escape) && gui_state.in_menu) {
@@ -245,58 +378,13 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                     continue;
                 }
 
-                if (gui_state.in_menu) continue;
-
-                bool slot_blocked = config.slot_filter_enabled &&
-                                    !config.allowed_slots[gui_state.active_slot.load()];
-
                 if (ev.code == static_cast<unsigned>(config.key_left)) {
-                    bool was = clicker_master_on(left_clicker, gui_state.left_armed, config.left_mode);
-                    if (config.left_mode == ActivationMode::TOGGLE) {
-                        if (ev.value == 1) {
-                            if (slot_blocked) left_clicker.set_enabled(false);
-                            else left_clicker.toggle();
-                        }
-                    } else if (config.left_mode == ActivationMode::HOLD) {
-                        left_clicker.set_enabled(ev.value != 0 && !slot_blocked);
-                    } else {
-                        if (ev.value == 1) {
-                            gui_state.left_armed = !gui_state.left_armed;
-                            if (!gui_state.left_armed) left_clicker.set_enabled(false);
-                            else if (mouse_left_held) left_clicker.set_enabled(true);
-                        }
-                    }
-                    bool now = clicker_master_on(left_clicker, gui_state.left_armed, config.left_mode);
-
-                    if (config.audio_enabled && now != was) {
-                        if (now) Audio::beep_on();
-                        else Audio::beep_off();
-                    }
+                    handle_clicker_key(true, ev.value);
                 }
                 else if (ev.code == static_cast<unsigned>(config.key_right)) {
-                    bool was = clicker_master_on(right_clicker, gui_state.right_armed, config.right_mode);
-                    if (config.right_mode == ActivationMode::TOGGLE) {
-                        if (ev.value == 1) {
-                            if (slot_blocked) right_clicker.set_enabled(false);
-                            else right_clicker.toggle();
-                        }
-                    } else if (config.right_mode == ActivationMode::HOLD) {
-                        right_clicker.set_enabled(ev.value != 0 && !slot_blocked);
-                    } else {
-                        if (ev.value == 1) {
-                            gui_state.right_armed = !gui_state.right_armed;
-                            if (!gui_state.right_armed) right_clicker.set_enabled(false);
-                            else if (mouse_right_held) right_clicker.set_enabled(true);
-                        }
-                    }
-                    bool now = clicker_master_on(right_clicker, gui_state.right_armed, config.right_mode);
-
-                    if (config.audio_enabled && now != was) {
-                        if (now) Audio::beep_on();
-                        else Audio::beep_off();
-                    }
+                    handle_clicker_key(false, ev.value);
                 }
-                else if (ev.value == 1 && config.macros_enabled) {
+                else if (ev.value == 1 && config.macros_enabled && !gui_state.in_menu) {
                     for (int m = 0; m < MAX_MACROS; m++) {
                         if (config.macros[m].key_bind > 0 &&
                             ev.code == static_cast<unsigned>(config.macros[m].key_bind) &&
@@ -312,59 +400,15 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
         if (nfds > 1 && (fds[1].revents & POLLIN)) {
             while (read(mouse_fd, &ev, sizeof(ev)) == sizeof(ev)) {
                 if (ev.type == EV_KEY) {
-                    bool slot_blocked = config.slot_filter_enabled &&
-                                        !config.allowed_slots[gui_state.active_slot.load()];
                     bool is_bound_toggle = false;
 
-                    if (!gui_state.in_menu) {
-                        if (ev.code == static_cast<unsigned>(config.key_left)) {
-                            bool was = clicker_master_on(left_clicker, gui_state.left_armed, config.left_mode);
-                            if (config.left_mode == ActivationMode::TOGGLE) {
-                                if (ev.value == 1) {
-                                    if (slot_blocked) left_clicker.set_enabled(false);
-                                    else left_clicker.toggle();
-                                }
-                            } else if (config.left_mode == ActivationMode::HOLD) {
-                                left_clicker.set_enabled(ev.value != 0 && !slot_blocked);
-                            } else {
-                                if (ev.value == 1) {
-                                    gui_state.left_armed = !gui_state.left_armed;
-                                    if (!gui_state.left_armed) left_clicker.set_enabled(false);
-                                    else if (mouse_left_held) left_clicker.set_enabled(true);
-                                }
-                            }
-                            bool now = clicker_master_on(left_clicker, gui_state.left_armed, config.left_mode);
-
-                            if (config.audio_enabled && now != was) {
-                                if (now) Audio::beep_on();
-                                else Audio::beep_off();
-                            }
-                            is_bound_toggle = true;
-                        }
-                        else if (ev.code == static_cast<unsigned>(config.key_right)) {
-                            bool was = clicker_master_on(right_clicker, gui_state.right_armed, config.right_mode);
-                            if (config.right_mode == ActivationMode::TOGGLE) {
-                                if (ev.value == 1) {
-                                    if (slot_blocked) right_clicker.set_enabled(false);
-                                    else right_clicker.toggle();
-                                }
-                            } else if (config.right_mode == ActivationMode::HOLD) {
-                                right_clicker.set_enabled(ev.value != 0 && !slot_blocked);
-                            } else {
-                                if (ev.value == 1) {
-                                    gui_state.right_armed = !gui_state.right_armed;
-                                    if (!gui_state.right_armed) right_clicker.set_enabled(false);
-                                    else if (mouse_right_held) right_clicker.set_enabled(true);
-                                }
-                            }
-                            bool now = clicker_master_on(right_clicker, gui_state.right_armed, config.right_mode);
-
-                            if (config.audio_enabled && now != was) {
-                                if (now) Audio::beep_on();
-                                else Audio::beep_off();
-                            }
-                            is_bound_toggle = true;
-                        }
+                    if (ev.code == static_cast<unsigned>(config.key_left)) {
+                        handle_clicker_key(true, ev.value);
+                        is_bound_toggle = true;
+                    }
+                    else if (ev.code == static_cast<unsigned>(config.key_right)) {
+                        handle_clicker_key(false, ev.value);
+                        is_bound_toggle = true;
                     }
 
                     // Hotkey-only session (device not grabbed): the compositor already
@@ -376,24 +420,48 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                         // While the pointer is over AeroClicker the button belongs to the
                         // interface: keeping it as a MOUSE-mode trigger makes the whole UI
                         // unclickable, because the press is swallowed instead of forwarded.
-                        // A filtered hotbar slot blocks MOUSE activation exactly like it
-                        // blocks the bound keys in Toggle/Hold mode.
                         const bool over_app = gui_state.ui_hovered.load();
+                        // PAUSE_AUTO is the inventory pause plus the slot filter; both already
+                        // account for the bound key's override, so this path needs no separate
+                        // slot test. over_app is checked locally because ownership is decided
+                        // before the GUI refreshes that pause for this frame.
                         if (ev.code == BTN_LEFT) {
-                            mouse_left_held = (ev.value != 0);
-                            if (!over_app && !slot_blocked && config.left_mode == ActivationMode::MOUSE &&
-                                gui_state.left_armed && !gui_state.in_menu)
-                                left_clicker.set_enabled(mouse_left_held);
-                            else
-                                device.click(BTN_LEFT, ev.value);
+                            if (ev.value == 1) {
+                                mouse_left_held = true;
+                                mouse_left_owned = !over_app &&
+                                                   !(left_clicker.pause_mask() & Clicker::PAUSE_AUTO) &&
+                                                   config.left_mode == ActivationMode::MOUSE &&
+                                                   gui_state.left_armed;
+                                if (mouse_left_owned) left_clicker.set_enabled(true);
+                                else device.click(BTN_LEFT, 1);
+                            } else if (ev.value == 0) {
+                                mouse_left_held = false;
+                                if (mouse_left_owned) {
+                                    left_clicker.set_enabled(false);
+                                    mouse_left_owned = false;
+                                } else {
+                                    device.click(BTN_LEFT, 0);
+                                }
+                            }
                         }
                         else if (ev.code == BTN_RIGHT) {
-                            mouse_right_held = (ev.value != 0);
-                            if (!over_app && !slot_blocked && config.right_mode == ActivationMode::MOUSE &&
-                                gui_state.right_armed && !gui_state.in_menu)
-                                right_clicker.set_enabled(mouse_right_held);
-                            else
-                                device.click(BTN_RIGHT, ev.value);
+                            if (ev.value == 1) {
+                                mouse_right_held = true;
+                                mouse_right_owned = !over_app &&
+                                                    !(right_clicker.pause_mask() & Clicker::PAUSE_AUTO) &&
+                                                    config.right_mode == ActivationMode::MOUSE &&
+                                                    gui_state.right_armed;
+                                if (mouse_right_owned) right_clicker.set_enabled(true);
+                                else device.click(BTN_RIGHT, 1);
+                            } else if (ev.value == 0) {
+                                mouse_right_held = false;
+                                if (mouse_right_owned) {
+                                    right_clicker.set_enabled(false);
+                                    mouse_right_owned = false;
+                                } else {
+                                    device.click(BTN_RIGHT, 0);
+                                }
+                            }
                         }
                         else {
                             device.click(ev.code, ev.value);
@@ -424,8 +492,14 @@ int main(int argc, char* argv[]) {
     // Redirect HOME so GTK can't find ~/.local/share/icons/kora.
     if (getuid() == 0) {
         const char* real_home = getenv("HOME");
-        char saved_home[256] = "";
-        if (real_home) strncpy(saved_home, real_home, sizeof(saved_home) - 1);
+        // HOME is replaced below, so the config location has to be pinned to the real home
+        // first: left alone, ~/.config follows HOME to /tmp, where saving quietly fails and
+        // where another local user could plant the directory it writes into.
+        struct stat st;
+        if (real_home && stat(real_home, &st) == 0) {
+            ConfigFile::use_dir(std::string(real_home) + "/.config/aeroclicker",
+                                st.st_uid, st.st_gid);
+        }
 
         setenv("HOME", "/tmp", 1);
         setenv("XDG_DATA_HOME", "/tmp", 1);
@@ -499,6 +573,10 @@ int main(int argc, char* argv[]) {
 
     signal(SIGINT, on_signal);
     signal(SIGTERM, on_signal);
+    // The toggle chime pipes its samples into `paplay`; if that child is already gone the
+    // write raises SIGPIPE, whose default action would kill the app. Ignore it so the write
+    // just fails, which audio.hpp checks.
+    signal(SIGPIPE, SIG_IGN);
 
     GuiState gui_state(config, left_clicker, right_clicker, device);
 

@@ -12,9 +12,10 @@ class Clicker {
     const UInputDevice& device_;
     std::atomic<bool> enabled_{false};
     std::atomic<bool> running_{true};
-    // Set while the mouse is over AeroClicker's own window: synthesized clicks must not hit
-    // the interface (e.g. toggling the L/R pills with the cursor still on top of them).
-    std::atomic<bool> paused_{false};
+    // Why a clicker is not clicking even though the user switched it on. Several causes apply
+    // at once, so they are bits rather than one flag: closing the inventory must not un-pause
+    // a clicker whose pointer is sitting on AeroClicker's own window.
+    std::atomic<uint32_t> pause_mask_{0};
     std::thread thread_;
     double current_trend_ = 0.0;
 
@@ -29,7 +30,7 @@ public:
 
     ~Clicker() {
         running_ = false;
-        paused_ = false;
+        pause_mask_ = 0;
         enabled_ = true;
         if (thread_.joinable()) thread_.join();
     }
@@ -37,10 +38,24 @@ public:
     Clicker(const Clicker&) = delete;
     Clicker& operator=(const Clicker&) = delete;
 
+    enum Pause : uint32_t {
+        PAUSE_POINTER   = 1u << 0,   // pointer is over AeroClicker's own window
+        PAUSE_INVENTORY = 1u << 1,   // the inventory key says the inventory is open
+        PAUSE_SLOT      = 1u << 2,   // the active hotbar slot is filtered out
+    };
+    static constexpr uint32_t PAUSE_AUTO = PAUSE_INVENTORY | PAUSE_SLOT;
+
     void set_enabled(bool v) { enabled_ = v; }
     bool is_enabled() const { return enabled_; }
-    void set_paused(bool v) { paused_ = v; }
-    bool is_paused() const { return paused_; }
+    void set_pause(uint32_t reason, bool on) {
+        if (on) pause_mask_.fetch_or(reason);
+        else    pause_mask_.fetch_and(~reason);
+    }
+    bool is_paused() const { return pause_mask_.load() != 0; }
+    uint32_t pause_mask() const { return pause_mask_.load(); }
+    // Synthesized clicks must not hit AeroClicker's own interface (e.g. toggling the L/R
+    // pills with the cursor still on top of them): the GUI drives this one directly.
+    void set_paused(bool v) { set_pause(PAUSE_POINTER, v); }
     void toggle() { enabled_ = !enabled_.load(); }
     uint32_t click_count() const { return click_count_.load(); }
     ClickerProfile& profile() { return profile_; }
@@ -68,7 +83,7 @@ private:
             }
 
             while (enabled_ && running_) {
-                if (paused_) {
+                if (pause_mask_.load() != 0) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(5));
                     continue;
                 }

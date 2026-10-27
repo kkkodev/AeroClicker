@@ -9,10 +9,32 @@
 #include <vector>
 #include <dirent.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 class ConfigFile {
 public:
+    // A profile is a plain file name inside the config directory, and the Settings tab passes
+    // through exactly what was typed there. Anything that could climb out of that directory is
+    // refused, so a name like "../../.bashrc" cannot overwrite a file somewhere else.
+    static bool valid_name(const std::string& n) {
+        if (n.empty() || n.size() > 64) return false;
+        if (n[0] == '.') return false;
+        return n.find('/') == std::string::npos && n.find('\\') == std::string::npos;
+    }
+
+    // Overrides where the config lives, for when HOME is not the user's home: as root the app
+    // redirects HOME to /tmp so GTK cannot trip over an unreadable icon theme, and the config
+    // must not follow it into a world-writable directory. `owner` is chowned onto everything
+    // written, because sudo writes as root but the files belong to the login user.
+    static void use_dir(const std::string& dir, uid_t owner = static_cast<uid_t>(-1),
+                        gid_t group = static_cast<gid_t>(-1)) {
+        dir_override() = dir;
+        owner_uid() = owner;
+        owner_gid() = group;
+    }
+
     static std::string path() {
+        if (!dir_override().empty()) return dir_override();
         // Resolved once per run. AeroClicker used to be called Ghast Clicker, so if the new
         // directory does not exist yet but the old one does, seed it from the old directory:
         // existing profiles, keybinds and macros survive the rename.
@@ -35,6 +57,12 @@ public:
         return dir;
     }
 
+private:
+    static std::string& dir_override() { static std::string d; return d; }
+    static uid_t& owner_uid() { static uid_t u = static_cast<uid_t>(-1); return u; }
+    static gid_t& owner_gid() { static gid_t g = static_cast<gid_t>(-1); return g; }
+
+public:
     static void write_profile(FILE* f, const char* prefix, const ClickerProfile& p) {
         fprintf(f, "%s.cps_mean %g\n", prefix, p.cps_mean);
         fprintf(f, "%s.cps_stddev %g\n", prefix, p.cps_stddev);
@@ -107,11 +135,13 @@ public:
     }
 
     static bool load(Config& cfg, const std::string& filename = "config") {
+        if (!valid_name(filename)) return false;
         std::string p = path() + "/" + filename;
         FILE* f = fopen(p.c_str(), "r");
         if (!f) return false;
 
         char line[256];
+        bool accent_order_seen = false;   // file was written with the current accent list
         while (fgets(line, sizeof(line), f)) {
             char key[96];
             double val;
@@ -125,6 +155,7 @@ public:
             else if (!strcmp(key, "key_inventory")) cfg.key_inventory = (int)val;
             else if (!strcmp(key, "inventory_key_enabled")) cfg.inventory_key_enabled = (int)val != 0;
             else if (!strcmp(key, "accent_preset")) cfg.accent_preset = (int)val;
+            else if (!strcmp(key, "accent_order")) accent_order_seen = true;
             else if (!strcmp(key, "accent_r")) cfg.accent_r = val;
             else if (!strcmp(key, "accent_g")) cfg.accent_g = val;
             else if (!strcmp(key, "accent_b")) cfg.accent_b = val;
@@ -174,16 +205,29 @@ public:
                 }
             }
         }
+        // accent_preset used to be Oxygen Blue, Red, Green, Purple, Custom, Follow KDE; it is
+        // now Follow KDE, Blue, Red, Green, Purple, Orange, Custom. Saved files carry an order
+        // marker, so a file without one still holds old numbers and is remapped exactly once.
+        if (!accent_order_seen) {
+            static const int legacy_to_current[6] = { 1, 2, 3, 4, 6, 0 };
+            cfg.accent_preset = (cfg.accent_preset >= 0 && cfg.accent_preset < 6)
+                              ? legacy_to_current[cfg.accent_preset] : 0;
+        }
+        if (cfg.accent_preset < 0 || cfg.accent_preset > 6) cfg.accent_preset = 0;
         fclose(f);
         return true;
     }
 
     static bool save(const Config& cfg, const std::string& filename = "config") {
+        if (!valid_name(filename)) return false;
         std::string dir = path();
         mkdir(dir.c_str(), 0755);
 
         std::string p = dir + "/" + filename;
-        FILE* f = fopen(p.c_str(), "w");
+        // Written beside the target and renamed into place: truncating the live file first
+        // means a crash or a full disk part-way through loses every setting.
+        std::string tmp = p + ".tmp";
+        FILE* f = fopen(tmp.c_str(), "w");
         if (!f) return false;
 
         write_profile(f, "left", cfg.left);
@@ -194,6 +238,7 @@ public:
         fprintf(f, "key_inventory %d\n", cfg.key_inventory);
         fprintf(f, "inventory_key_enabled %d\n", cfg.inventory_key_enabled ? 1 : 0);
         fprintf(f, "accent_preset %d\n", cfg.accent_preset);
+        fprintf(f, "accent_order 1\n");
         fprintf(f, "accent_r %f\n", cfg.accent_r);
         fprintf(f, "accent_g %f\n", cfg.accent_g);
         fprintf(f, "accent_b %f\n", cfg.accent_b);
@@ -224,7 +269,12 @@ public:
             }
         }
 
-        fclose(f);
+        if (fclose(f) != 0) { ::remove(tmp.c_str()); return false; }
+        if (::rename(tmp.c_str(), p.c_str()) != 0) { ::remove(tmp.c_str()); return false; }
+        if (owner_uid() != static_cast<uid_t>(-1)) {
+            (void)chown(p.c_str(), owner_uid(), owner_gid());
+            (void)chown(dir.c_str(), owner_uid(), owner_gid());
+        }
         return true;
     }
 
@@ -237,6 +287,12 @@ public:
         struct dirent* entry;
         while ((entry = readdir(d))) {
             if (entry->d_name[0] == '.') continue;
+            // The live config and a stray subdirectory are not profiles: listing them let
+            // "Delete" remove the running config itself.
+            if (!strcmp(entry->d_name, "config")) continue;
+            struct stat st;
+            std::string p = dir + "/" + entry->d_name;
+            if (stat(p.c_str(), &st) != 0 || !S_ISREG(st.st_mode)) continue;
             result.push_back(entry->d_name);
         }
         closedir(d);
@@ -244,6 +300,7 @@ public:
     }
 
     static bool remove_profile(const std::string& filename) {
+        if (!valid_name(filename)) return false;
         std::string p = path() + "/" + filename;
         return ::remove(p.c_str()) == 0;
     }
