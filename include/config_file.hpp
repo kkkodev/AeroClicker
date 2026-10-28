@@ -170,6 +170,7 @@ public:
             else if (!strcmp(key, "right_mode")) cfg.right_mode = (int)val == 0 ? ActivationMode::TOGGLE : ((int)val == 1 ? ActivationMode::HOLD : ActivationMode::MOUSE);
             else if (!strcmp(key, "slot_auto_enabled")) cfg.slot_auto_enabled = (int)val != 0;
             else if (!strcmp(key, "pause_in_menu")) cfg.pause_in_menu = (int)val != 0;
+            else if (!strcmp(key, "right_placeable_only")) cfg.right_placeable_only = (int)val != 0;
             else if (!strcmp(key, "audio_enabled")) cfg.audio_enabled = (int)val != 0;
             else if (!strcmp(key, "macro_count")) { /* counted implicitly */ }
             else {
@@ -254,6 +255,7 @@ public:
         fprintf(f, "right_mode %d\n", cfg.right_mode == ActivationMode::TOGGLE ? 0 : (cfg.right_mode == ActivationMode::HOLD ? 1 : 2));
         fprintf(f, "slot_auto_enabled %d\n", cfg.slot_auto_enabled ? 1 : 0);
         fprintf(f, "pause_in_menu %d\n", cfg.pause_in_menu ? 1 : 0);
+        fprintf(f, "right_placeable_only %d\n", cfg.right_placeable_only ? 1 : 0);
         for (int i = 0; i < 9; i++)
             fprintf(f, "left_slot_%d %d\nright_slot_%d %d\n",
                     i, cfg.left_slots[i] ? 1 : 0, i, cfg.right_slots[i] ? 1 : 0);

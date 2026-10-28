@@ -105,6 +105,7 @@ static ActivationMode idx_to_mode(int i) { return i == 0 ? ActivationMode::TOGGL
 static const char* pause_reason_text(uint32_t mask) {
     if (mask & Clicker::PAUSE_INVENTORY) return "menu is open";
     if (mask & Clicker::PAUSE_POINTER)   return "cursor over app";
+    if (mask & Clicker::PAUSE_HELD_ITEM) return "held item is not a block";
     return "paused";
 }
 
@@ -272,8 +273,21 @@ static void draw_home_tab(GuiState& state) {
 
 // ---------------- Left / Right (advanced) ----------------
 
-static void draw_side_tab(ClickerProfile& p, ActivationMode mode) {
+static void draw_side_tab(GuiState& state, ClickerProfile& p, ActivationMode mode, bool right_side) {
     ImGui::Spacing();
+    if (right_side) {
+        begin_panel("Placement gate", -1.0f, -1, OxIcon::Grid);
+        row_check("Only With a Placeable Item", &state.config.right_placeable_only);
+        if (state.config.right_placeable_only) {
+            if (state.mc_item_known.load())
+                ImGui::TextDisabled("Pauses while the held item is not a block");
+            else if (state.mc_linked.load())
+                ImGui::TextDisabled("Bridge mod is too old to report the held item");
+            else
+                ImGui::TextDisabled("Needs the Minecraft bridge mod");
+        }
+        end_panel();
+    }
     begin_panel("Rate", -1.0f, -1, OxIcon::Gauge);
     row_slider("Speed (CPS)", &p.cps_mean, CPS_MEAN_LO, CPS_MEAN_HI, "%.1f");
     row_slider("CPS Variation", &p.cps_stddev, 0.0, 5.0, "%.2f");
@@ -804,8 +818,8 @@ void gui_run(GuiState& state) {
             switch (current_tab) {
                 case 0: draw_home_tab(state); break;
                 case 1: draw_settings_tab(state, profiles, selected_profile, profile_name_buf, status_msg, status_timer); break;
-                case 2: draw_side_tab(state.config.left, state.config.left_mode); break;
-                case 3: draw_side_tab(state.config.right, state.config.right_mode); break;
+                case 2: draw_side_tab(state, state.config.left, state.config.left_mode, false); break;
+                case 3: draw_side_tab(state, state.config.right, state.config.right_mode, true); break;
                 case 4: draw_macros_tab(state); break;
                 case 5: draw_analytics_tab(state, status_msg, status_timer); break;
             }

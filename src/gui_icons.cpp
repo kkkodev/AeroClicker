@@ -5,7 +5,7 @@
 
 namespace {
 
-// 16px masks baked from the Oxygen and Breeze symbolic sets by tools/gen_symbolic_icons.py.
+// 16px masks baked from the Oxygen and Breeze symbolic sets (see gui_icons_symbolic.inc).
 #include "gui_icons_symbolic.inc"
 
 constexpr int kMaskSize = 16;

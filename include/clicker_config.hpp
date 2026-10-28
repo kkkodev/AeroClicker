@@ -186,6 +186,9 @@ struct Config {
     bool right_slots[9] = {false, false, false, false, false, false, false, false, true};
     // Screens include the inventory, chat, chests and NPC menus: clicking them is never wanted.
     bool pause_in_menu = true;
+    // Right clicker only: click while the held item is a block. The bridge mod reports the
+    // held item, so this is inert without it (and with an older mod build).
+    bool right_placeable_only = false;
 
     bool audio_enabled = true;
     bool macros_enabled = false;

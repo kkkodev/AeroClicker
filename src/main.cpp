@@ -135,8 +135,8 @@ static int find_device(const char* label, bool want_mouse) {
                 // Keep as fallback if no physical device found
                 if (fallback_fd < 0) {
                     fallback_fd = fd;
-                    strncpy(fallback_name, name, sizeof(fallback_name) - 1);
-                    strncpy(fallback_path, path, sizeof(fallback_path) - 1);
+                    snprintf(fallback_name, sizeof(fallback_name), "%s", name);
+                    snprintf(fallback_path, sizeof(fallback_path), "%s", path);
                     continue;
                 }
             }
@@ -364,8 +364,10 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
         // pick-block, and "in menu" covers chat, chests and NPC dialogs.
         int mc_slot = -1;
         bool mc_screen = false;
-        mc_live = McLink::poll(mc_slot, mc_screen);
+        int mc_block = -1;
+        mc_live = McLink::poll(mc_slot, mc_screen, mc_block);
         gui_state.mc_linked = mc_live;
+        gui_state.mc_item_known = mc_live && mc_block >= 0;
         if (mc_live) {
             if (mc_slot >= 0) gui_state.active_slot = mc_slot;
             // Edge-triggered: an explicit press (hotkey or pill) may un-pause while a screen is
@@ -394,6 +396,11 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
         }
         apply_pauses(left_clicker);
         apply_pauses(right_clicker);
+        // Right-click gate: only click while the held item is a block. With no game, or a mod
+        // build that does not report the held item (block == -1), the gate stays inert rather
+        // than blocking every right click.
+        right_clicker.set_pause(Clicker::PAUSE_HELD_ITEM,
+                                config.right_placeable_only && mc_live && mc_block == 0);
 
         int nfds = 1;
         fds[0].fd = kb_fd;          // -1 is fine: poll() ignores negative descriptors
@@ -454,23 +461,29 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                         // interface: keeping it as a MOUSE-mode trigger makes the whole UI
                         // unclickable, because the press is swallowed instead of forwarded.
                         const bool over_app = gui_state.ui_hovered.load();
-                        // PAUSE_AUTO already accounts for the bound key's override, so this
-                        // path needs no separate menu test. over_app is checked locally because
-                        // ownership is decided before the GUI refreshes that pause for this
-                        // frame.
+                        // PAUSE_NO_TAKEOVER covers both the menu pause (which a bound key can
+                        // clear) and the placeable gate (which it cannot), so a press the
+                        // clicker would not act on is forwarded instead of swallowed. over_app
+                        // is checked locally because ownership is decided before the GUI
+                        // refreshes those pauses for this frame.
                         if (ev.code == BTN_LEFT) {
                             if (ev.value == 1) {
                                 mouse_left_held = true;
                                 mouse_left_owned = !over_app &&
-                                                   !(left_clicker.pause_mask() & Clicker::PAUSE_AUTO) &&
+                                                   !(left_clicker.pause_mask() & Clicker::PAUSE_NO_TAKEOVER) &&
                                                    config.left_mode == ActivationMode::MOUSE &&
                                                    gui_state.left_armed;
                                 if (mouse_left_owned) left_clicker.set_enabled_gated(true);
                                 else device.click(BTN_LEFT, 1);
                             } else if (ev.value == 0) {
                                 mouse_left_held = false;
-                                if (mouse_left_owned) {
+                                // A MOUSE-mode clicker can be switched on while this button is
+                                // already down (slot change or hotkey). The press was forwarded,
+                                // so the release is too, but the clicker must still stop: it has
+                                // no other way to learn the button is gone.
+                                if (config.left_mode == ActivationMode::MOUSE)
                                     left_clicker.set_enabled(false);
+                                if (mouse_left_owned) {
                                     mouse_left_owned = false;
                                 } else {
                                     device.click(BTN_LEFT, 0);
@@ -481,15 +494,16 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                             if (ev.value == 1) {
                                 mouse_right_held = true;
                                 mouse_right_owned = !over_app &&
-                                                    !(right_clicker.pause_mask() & Clicker::PAUSE_AUTO) &&
+                                                    !(right_clicker.pause_mask() & Clicker::PAUSE_NO_TAKEOVER) &&
                                                     config.right_mode == ActivationMode::MOUSE &&
                                                     gui_state.right_armed;
                                 if (mouse_right_owned) right_clicker.set_enabled_gated(true);
                                 else device.click(BTN_RIGHT, 1);
                             } else if (ev.value == 0) {
                                 mouse_right_held = false;
-                                if (mouse_right_owned) {
+                                if (config.right_mode == ActivationMode::MOUSE)
                                     right_clicker.set_enabled(false);
+                                if (mouse_right_owned) {
                                     mouse_right_owned = false;
                                 } else {
                                     device.click(BTN_RIGHT, 0);

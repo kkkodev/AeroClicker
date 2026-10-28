@@ -56,7 +56,7 @@ install(CODE "
 
 # The window icon is looked up by name from the icon theme (see the app id hint in src/gui.cpp),
 # so the desktop entry's Icon= name needs one file per theme size. The PNGs are already baked
-# from assets/aeroclicker.png and committed; regenerate them with tools/gen_app_icon.py.
+# from assets/aeroclicker.png and committed, so nothing has to be generated at build time.
 foreach(size 16 24 32 48 64 128 256 512)
     install(FILES assets/icons/app/${size}x${size}/aeroclicker.png
             DESTINATION share/icons/hicolor/${size}x${size}/apps)

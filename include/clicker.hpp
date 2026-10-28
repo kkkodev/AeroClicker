@@ -45,8 +45,13 @@ public:
     enum Pause : uint32_t {
         PAUSE_POINTER   = 1u << 0,   // pointer is over AeroClicker's own window
         PAUSE_INVENTORY = 1u << 1,   // the bridge mod reports an open game screen
+        PAUSE_HELD_ITEM = 1u << 2,   // the bridge mod reports a non-block in hand
     };
+    // Pauses an explicit key press may override: the user asked to run now.
     static constexpr uint32_t PAUSE_AUTO = PAUSE_INVENTORY;
+    // Pauses that must keep a physical MOUSE press out of the clicker. If it would not click,
+    // the press belongs to the game, and swallowing it would break normal right-click use.
+    static constexpr uint32_t PAUSE_NO_TAKEOVER = PAUSE_INVENTORY | PAUSE_HELD_ITEM;
 
     void set_enabled(bool v) {
         if (!v) gated_start_ = false;

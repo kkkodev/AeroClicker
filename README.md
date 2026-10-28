@@ -50,11 +50,12 @@ See [Credits](#credits).
 - **Activation modes** — Toggle, Hold, and Mouse (arm with a key, then hold your real mouse button)
 - **Slot activation** — the Minecraft hotbar slot switches each clicker on and off, with a per-clicker set of slots (default: slot 1 left, slot 9 right); it reads the game through the [bridge mod](#minecraft-slot-and-inventory-state)
 - **Menu pause** — clicking stops while the game has any screen open (inventory, chat, chests, NPC menus) and resumes when it closes
+- **Placeable-item gate** — the right clicker can require a block in hand, so right-click actions never fire on a sword, a pearl or an empty hand; it uses the same [bridge mod](#placeable-item-gate)
 - **Macros** — optional, off by default: sequences of left clicks, right clicks, delays and hotbar slot switches, with looping and a keybind
 - **Headless mode** — run the clicker with no window
 
 **Interface**
-- **Paused readout** — a switched-on clicker that is not clicking shows `Paused` and the reason (menu open, cursor over the app) with an amber dot, and its **L/R** pill turns amber, instead of a misleading green `ON`
+- **Paused readout** — a switched-on clicker that is not clicking shows `Paused` and the reason (menu open, held item not a block, cursor over the app) with an amber dot, and its **L/R** pill turns amber, instead of a misleading green `ON`
 - **Live analytics** — real-time CPS graphs, session averages and peaks, optional recording and CSV export
 - **Profiles** — save and load complete configurations; the `config` profile is loaded automatically at startup
 - **Theming** — follows the KDE colour scheme and accent; accents can also be fixed to Blue, Red, Green, Purple or Orange, or a custom colour
@@ -79,8 +80,6 @@ chance as the click rate rises.
 - C++17 compiler, CMake 3.16+
 - GLFW 3 — 3.4 or newer for the native titlebar icon — and OpenGL 3
 - Optional: `paplay` (PipeWire/PulseAudio) for toggle sounds
-- Optional: Python 3 with Pillow, only for the icon generators in `tools/`; not needed to build
-  or install
 
 Dear ImGui 1.93.0 is vendored in `imgui-1.93.0/`, so no extra downloads are needed. GLFW older
 than 3.4 still builds, but then the window gets no Wayland app id and your desktop will show a
@@ -225,6 +224,7 @@ and an amber dot instead of a running CPS figure:
 | --- | --- |
 | `cursor over app` | the pointer is over AeroClicker's own window — the clicker stops rather than clicking the interface, and resumes when the pointer leaves |
 | `menu is open` | the game reports an open screen — the inventory, chat, a chest, or an NPC menu |
+| `held item is not a block` | the right clicker's placeable-item gate is on and the held item cannot be placed (see [Placeable-item gate](#placeable-item-gate)) |
 
 The on/off state is kept, so closing the menu resumes clicking on its own. To force it, press the
 clicker's hotkey (or its **L/R** pill): an explicit press un-pauses a paused clicker instead of
@@ -234,23 +234,31 @@ re-applies the slot rules.
 ### Minecraft slot and inventory state
 
 AeroClicker only sees keyboard and mouse events, which is not enough in Minecraft: the active
-hotbar slot moves with the wheel, pick-block or a rebound key, and an open inventory, chat, chest
-or NPC menu looks exactly like a normal world. The companion mod in `tools/mc-bridge` publishes
-those two facts, and the app uses them for slot activation and the menu pause. Nothing falls back
-to key guessing: without the mod, slot activation and the menu pause simply do nothing.
+hotbar slot moves with the wheel, pick-block or a rebound key, an open inventory, chat, chest or
+NPC menu looks exactly like a normal world, and the held item is invisible from outside. The
+companion mod in `tools/mc-bridge` publishes those three facts, and the app uses them for slot
+activation, the menu pause and the right clicker's placeable-item gate. Nothing falls back to key
+guessing: without the mod, slot activation and the menu pause simply do nothing, and the gate
+stays inert.
 
-The mod is read-only: every 50 ms it writes the selected slot and whether any screen is open to
-`$XDG_RUNTIME_DIR/aeroclicker-mc.state`, and that is all it does. Nothing is sent to the server
-and no input is changed, so it is invisible to anti-cheat in the same way as a HUD or scoreboard
-mod. When the file stops updating (the game closed or crashed), the app treats the game as gone
-after 2.5 seconds: slot activation stops and any clicker it switched on is switched off.
+The mod is read-only: every 50 ms it writes the selected slot, whether any screen is open and
+whether the held item is a block to `$XDG_RUNTIME_DIR/aeroclicker-mc.state` as a single line:
+
+```
+slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch ms> block=<0|1|-1>
+```
+
+That is all it does. Nothing is sent to the server and no input is changed, so it is invisible to
+anti-cheat in the same way as a HUD or scoreboard mod. When the file stops updating (the game
+closed or crashed), the app treats the game as gone after 2.5 seconds: slot activation stops and
+any clicker it switched on is switched off.
 
 #### Installing the mod (optional)
 
-Skip this if you do not want slot activation or the menu pause. Nothing is installed
-automatically: AeroClicker does not copy the jar anywhere, and `cmake --install` does not touch
-your Minecraft folders. You choose the launcher and the instance, and put the jar in that
-instance's `mods` folder yourself, like any other Fabric mod:
+Skip this if you do not want slot activation, the menu pause or the placeable-item gate. Nothing
+is installed automatically: AeroClicker does not copy the jar anywhere, and `cmake --install` does
+not touch your Minecraft folders. You choose the launcher and the instance, and put the jar in
+that instance's `mods` folder yourself, like any other Fabric mod:
 
 | Launcher | Where to find the instance |
 | --- | --- |
@@ -278,6 +286,24 @@ leaves it on but paused. A key or pill press still works normally and holds unti
 change. Settings → Slot activation is where the per-clicker slot lists live; the defaults are
 slot 1 for the left clicker and slot 9 for the right one.
 
+#### Placeable-item gate
+
+The Right tab has **Only With a Placeable Item**. With it on, the right clicker only clicks while
+the held item is a block that can be placed, and pauses with the reason `held item is not a
+block` for anything else — a sword, a bucket, food, an empty hand. It is the right-click
+equivalent of only bridging when you actually hold blocks, so a right click never throws a pearl,
+starts drinking a potion or wears down a tool by accident.
+
+The gate is driven by the same mod, so it needs a live link and a mod build that reports the held
+item. Without either it stays inert instead of blocking every right click: an app build cannot
+guess what is in your hand, and a silent no-op is safer than a clicker that never fires. The
+state line's `block` field is `1` for a block, `0` for anything else, and `-1` for "this build
+cannot tell".
+
+A physical right press is only taken over when the clicker would actually act on it. While the
+gate is blocking, the press and its release go to the game untouched, so you can still use a
+bow, place water or open a door by hand without switching the gate off.
+
 ---
 
 ## Interface
@@ -286,7 +312,7 @@ slot 1 for the left clicker and slot 9 for the right one.
 | --- | --- |
 | **Home** | Both clickers at a glance, with live CPS, click counts and on/off pills, plus the slot activation readout |
 | **Settings** | Slot activation, menu pause, audio, profiles, accent |
-| **Left / Right** | Presets, speed, distribution, humanization, hold timing, spikes, breaks, hotkey and activation mode |
+| **Left / Right** | Presets, speed, distribution, humanization, hold timing, spikes, breaks, hotkey and activation mode; the Right tab adds the placeable-item gate |
 | **Macros** | Build macro sequences and bind them to a key |
 | **Analytics** | Measured CPS graphs (real press timing, not the target), session statistics, recording and CSV export |
 
@@ -338,6 +364,12 @@ keybinds survive the rename.
   open, and it does not guess. Install it as described in
   [Minecraft slot and inventory state](#minecraft-slot-and-inventory-state).
 
+**The right clicker stops with `held item is not a block`**
+- That is the placeable-item gate doing its job: the held item cannot be placed. Hold a block, or
+  switch **Only With a Placeable Item** off on the Right tab. The gate also reports this reason if
+  the bridge mod is running an older build that does not export the held item; update the jar and
+  restart Minecraft, since Fabric only loads mods at startup.
+
 **No toggle sounds**
 - Install `paplay` (PipeWire/PulseAudio). Sound is optional; AeroClicker silently skips it when
   `paplay` is unavailable.
@@ -354,20 +386,18 @@ keybinds survive the rename.
 
 ## Development
 
-A normal build and install need only a compiler, CMake, GLFW and OpenGL. The helper scripts in
-`tools/` are optional, and their output is already in the tree:
+A normal build and install need only a compiler, CMake, GLFW and OpenGL. Nothing in `tools/` is
+needed to build the app, and all of its output is already in the tree:
 
 | Path | What it does | Needed to build? |
 | --- | --- | --- |
-| `tools/gen_app_icon.py` | Regenerates `assets/icons/app/{16…512}/aeroclicker.png` from `assets/aeroclicker.png`, trimming transparent padding so the artwork fills each size. Needs Python 3 + Pillow. | No |
-| `tools/gen_symbolic_icons.py` | Regenerates `src/gui_icons_symbolic.inc`, the 16 px monochrome UI icon masks, from the Oxygen and Breeze symbolic sets. Needs those themes installed. | No |
 | `tools/mc-bridge/` | Fabric mod source, `build.sh` and the prebuilt jar. Needed only to rebuild the jar; users copy the jar themselves into the instance they choose. | No |
 
-So neither Python, Pillow nor the icon themes are needed for a normal build or install —
-`cmake --install` copies the PNGs already in `assets/`. If you change `assets/aeroclicker.png`,
-run `python3 tools/gen_app_icon.py` and reinstall to refresh the installed copies. The two
-generators can be deleted without breaking the build; keep `tools/mc-bridge/` if you want to
-offer the Minecraft mod.
+So neither Python nor the icon themes are needed for a normal build or install: `cmake --install`
+copies the PNGs already in `assets/`, and the 16 px symbolic masks are committed in
+`src/gui_icons_symbolic.inc`. The generated app icons and masks are checked in, so the generators
+that produced them are not part of the repository — the PNGs are the source of truth now. Keep
+`tools/mc-bridge/` if you want to offer the Minecraft mod.
 
 ---
 

@@ -25,6 +25,9 @@ struct GuiState {
     // True while the bridge mod's state file is fresh (see include/mc_link.hpp). active_slot,
     // in_menu and slot activation all come from the game itself; there is no guessing.
     std::atomic<bool> mc_linked{false};
+    // True when the live bridge build also reports the held item, which the placeable gate
+    // needs. A link without it is a slot/menu-only mod build, so the gate cannot work.
+    std::atomic<bool> mc_item_known{false};
     // Written by the UI thread, read by the input thread: while the pointer is over the app,
     // physical button presses belong to the interface, not to the clicker's MOUSE arming.
     std::atomic<bool> ui_hovered{false};
