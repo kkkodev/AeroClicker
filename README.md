@@ -288,7 +288,7 @@ slot 1 for the left clicker and slot 9 for the right one.
 
 #### Placeable-item gate
 
-The Right tab has **Only With a Placeable Item**. With it on, the right clicker only clicks while
+The Right tab has **Placeable only**. With it on, the right clicker only clicks while
 the held item is a block that can be placed, and pauses with the reason `held item is not a
 block` for anything else — a sword, a bucket, food, an empty hand. It is the right-click
 equivalent of only bridging when you actually hold blocks, so a right click never throws a pearl,
@@ -366,7 +366,7 @@ keybinds survive the rename.
 
 **The right clicker stops with `held item is not a block`**
 - That is the placeable-item gate doing its job: the held item cannot be placed. Hold a block, or
-  switch **Only With a Placeable Item** off on the Right tab. The gate also reports this reason if
+  switch **Placeable only** off on the Right tab. The gate also reports this reason if
   the bridge mod is running an older build that does not export the held item; update the jar and
   restart Minecraft, since Fabric only loads mods at startup.
 

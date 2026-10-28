@@ -418,13 +418,16 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
             while (read(kb_fd, &ev, sizeof(ev)) == sizeof(ev)) {
                 if (ev.type != EV_KEY) continue;
 
-                if (ev.code == static_cast<unsigned>(config.key_left)) {
-                    handle_clicker_key(true, ev.value);
-                }
-                else if (ev.code == static_cast<unsigned>(config.key_right)) {
-                    handle_clicker_key(false, ev.value);
-                }
-                else if (ev.value == 1 && config.macros_enabled && !gui_state.in_menu) {
+                // The two clickers may share one key. Test each side separately: an else-if
+                // chain would give the key to the left clicker only and the right one would
+                // never toggle.
+                const bool left_key  = ev.code == static_cast<unsigned>(config.key_left);
+                const bool right_key = ev.code == static_cast<unsigned>(config.key_right);
+                if (left_key)  handle_clicker_key(true, ev.value);
+                if (right_key) handle_clicker_key(false, ev.value);
+                // A key that belongs to a clicker is not also a macro key.
+                if (!left_key && !right_key && ev.value == 1 &&
+                    config.macros_enabled && !gui_state.in_menu) {
                     for (int m = 0; m < MAX_MACROS; m++) {
                         if (config.macros[m].key_bind > 0 &&
                             ev.code == static_cast<unsigned>(config.macros[m].key_bind) &&
@@ -440,16 +443,13 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
         if (nfds > 1 && (fds[1].revents & POLLIN)) {
             while (read(mouse_fd, &ev, sizeof(ev)) == sizeof(ev)) {
                 if (ev.type == EV_KEY) {
-                    bool is_bound_toggle = false;
-
-                    if (ev.code == static_cast<unsigned>(config.key_left)) {
-                        handle_clicker_key(true, ev.value);
-                        is_bound_toggle = true;
-                    }
-                    else if (ev.code == static_cast<unsigned>(config.key_right)) {
-                        handle_clicker_key(false, ev.value);
-                        is_bound_toggle = true;
-                    }
+                    // Same as the keyboard path: both clickers may be bound to this one
+                    // button, so each side is handled independently.
+                    const bool left_key  = ev.code == static_cast<unsigned>(config.key_left);
+                    const bool right_key = ev.code == static_cast<unsigned>(config.key_right);
+                    const bool is_bound_toggle = left_key || right_key;
+                    if (left_key)  handle_clicker_key(true, ev.value);
+                    if (right_key) handle_clicker_key(false, ev.value);
 
                     // Hotkey-only session (device not grabbed): the compositor already
                     // delivers these events, so never forward or re-inject them — doing so

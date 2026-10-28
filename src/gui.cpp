@@ -277,10 +277,11 @@ static void draw_side_tab(GuiState& state, ClickerProfile& p, ActivationMode mod
     ImGui::Spacing();
     if (right_side) {
         begin_panel("Placement gate", -1.0f, -1, OxIcon::Grid);
-        row_check("Only With a Placeable Item", &state.config.right_placeable_only);
+        // Short enough for the label column: a longer caption runs into the checkbox.
+        row_check("Placeable only", &state.config.right_placeable_only);
         if (state.config.right_placeable_only) {
             if (state.mc_item_known.load())
-                ImGui::TextDisabled("Pauses while the held item is not a block");
+                ImGui::TextDisabled("Right-click only while the held item is a block");
             else if (state.mc_linked.load())
                 ImGui::TextDisabled("Bridge mod is too old to report the held item");
             else
