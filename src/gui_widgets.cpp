@@ -1306,8 +1306,8 @@ void begin_panel(const char* label, float width, int status, OxIcon icon) {
         ImVec2 c(start.x + panel_w - PANEL_PAD - r, (hmn.y + hmx.y) * 0.5f);
         const bool L = ox_is_light();
         if (status == 2) {
-            // Paused: switched on, but not clicking (pointer on this window, inventory open or
-            // a filtered hotbar slot). Amber, so it cannot be mistaken for the green running dot.
+            // Paused: switched on, but not clicking (pointer on this window, or a game screen
+            // is open). Amber, so it cannot be mistaken for the green running dot.
             dl->AddCircleFilled(c, r + 3.5f, IM_COL32(214, 158, 46, L ? 20 : 38));
             dl->AddCircleFilled(c, r + 1.5f, IM_COL32(232, 176, 64, L ? 38 : 66));
             dl->AddCircleFilled(c, r,        IM_COL32(214, 158, 46, 255));
@@ -1390,6 +1390,33 @@ bool oxygen_list_item(const char* id, const char* label, bool selected, bool sep
 
 bool ui_pointer_over_window() { return g_cursor_in_window; }
 
+void oxygen_slot_chip(ImVec2 mn, ImVec2 mx, const char* label, bool mapped, bool current) {
+    const float R = 3.0f;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    // Same face/rim language as the preset tiles: neutral button gradient when unmapped,
+    // accent fill when the slot is part of a clicker's mapping. Only the selected slot gets
+    // the full-strength face; the other mapped slots stay translucent so the active one wins.
+    const ImVec4 face = ox_is_light() ? mulc(g_accent_color, 0.80f) : g_accent_color;
+    const ImU32 c1 = mapped ? OxCol(face, current ? 255 : 120) : ox_fill_top();
+    const ImU32 c2 = mapped ? OxCol(OxDark(face), current ? 255 : 95) : ox_fill_bot();
+    const ImU32 bc = current ? ox_accent_rim()
+                             : (mapped ? OxCol(face, 150) : ox_rim_neutral(150));
+    const int gloss = ox_is_light() ? (current ? 26 : 20) : (current ? 70 : 50);
+    const int shadow = ox_is_light() ? 22 : 40;
+    OxFrame(dl, mn, mx, R, c1, c2, bc, gloss, shadow);
+
+    ImU32 ink;
+    if (mapped) {
+        ink = current ? ox_ink_on(c1) : ImGui::GetColorU32(ImGuiCol_Text);
+        if (current && ox_is_light()) ink = IM_COL32(255, 255, 255, 255);
+    } else {
+        ink = current ? ImGui::GetColorU32(ImGuiCol_Text) : ox_text_dim();
+    }
+    const ImVec2 ts = ImGui::CalcTextSize(label);
+    dl->AddText(ImVec2(crisp_lo(mn.x + ((mx.x - mn.x) - ts.x) * 0.5f), vcenter_top(mn.y, mx.y)),
+                ink, label);
+}
+
 ImVec2 click_indicator_size(const char* label) {    char display[32]; snprintf(display, sizeof(display), "%s: %s", label, "ON");
     char alt[32];     snprintf(alt, sizeof(alt), "%s: %s", label, "off");
     // widest of both states so the pill never resizes when toggling
@@ -1403,7 +1430,7 @@ ImVec2 click_indicator_size(const char* label) {    char display[32]; snprintf(d
     return ImVec2(tw + 24.0f, ls.y + 10.0f);
 }
 
-bool click_indicator(const char* label, bool on) {
+bool click_indicator(const char* label, bool on, bool paused) {
     char display[32];
     snprintf(display, sizeof(display), "%s: %s", label, on ? "ON" : "off");
     ImVec2 sz = click_indicator_size(label);
@@ -1419,17 +1446,24 @@ bool click_indicator(const char* label, bool on) {
     float t_h = widget_anim(ImGui::GetID("##pill"), hov);
     ImGui::PopID();
     const bool L = ox_is_light();
+    // Amber means "on but held back": an open game screen or the pointer on this window. The
+    // same colour as the paused dot on the cards, so the top bar and the card agree.
+    const bool amber = on && paused;
     // Dark-theme fills; the light theme draws a vertical ramp in both states (a flat pale
     // fill plus a white gloss reads as "no gradient" on an already light background).
-    const ImU32 fill_on  = IM_COL32(46, 148, 84, 235);
-    const ImU32 rim_on   = L ? IM_COL32(24, 86, 48, 230) : IM_COL32(150, 230, 180, 160);
-    const ImU32 text_on  = L ? IM_COL32(245, 255, 248, 255) : IM_COL32(235, 255, 242, 255);
+    const ImU32 fill_on  = amber ? IM_COL32(190, 136, 34, 235) : IM_COL32(46, 148, 84, 235);
+    const ImU32 rim_on   = amber ? (L ? IM_COL32(104, 70, 10, 230) : IM_COL32(248, 212, 132, 165))
+                                 : (L ? IM_COL32(24, 86, 48, 230) : IM_COL32(150, 230, 180, 160));
+    const ImU32 text_on  = amber ? IM_COL32(255, 248, 228, 255)
+                                 : (L ? IM_COL32(245, 255, 248, 255) : IM_COL32(235, 255, 242, 255));
     const ImU32 rim_off  = L ? OxCol(lerp4(g_body_color, g_text_color, 0.42f), 200) : IM_COL32(255, 255, 255, 45);
     const ImU32 text_off = L ? OxCol(lerp4(g_body_color, g_text_color, 0.68f)) : IM_COL32(200, 212, 228, 150);
     ImVec2 cmn = crisp_min(mn), cmx = crisp_max(mx);
     if (L) {
-        ImU32 top_c = on ? IM_COL32(80, 186, 120, 255) : OxCol(ox_tint(g_body_color, 0.80f));
-        ImU32 bot_c = on ? IM_COL32(32, 118, 62, 255)  : OxCol(ox_tint(g_body_color, 0.14f));
+        ImU32 top_c = on ? (amber ? IM_COL32(226, 176, 66, 255) : IM_COL32(80, 186, 120, 255))
+                         : OxCol(ox_tint(g_body_color, 0.80f));
+        ImU32 bot_c = on ? (amber ? IM_COL32(162, 108, 16, 255) : IM_COL32(32, 118, 62, 255))
+                         : OxCol(ox_tint(g_body_color, 0.14f));
         AddRoundedRectFilledGradV(dl, cmn, cmx, top_c, bot_c, r);
         glass_gloss(dl, cmn, cmx, r, cmn.y + sz.y * 0.55f, on ? 84 : 64);
     } else if (on) {

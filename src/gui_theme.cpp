@@ -511,25 +511,43 @@ ImVec4 OxDark(ImVec4 c, float k) {
     return ImVec4(c.x*k, c.y*k, c.z*k, 1.0f);
 }
 
-static bool parse_kde_mouse_section(const char* path, char* theme, size_t tn, char* size, size_t sn) {
-    FILE* f = fopen(path, "r");
-    if (!f) return false;
+// Reads one key from a KDE config file. A plain header ("[Mouse]", as in kcminputrc) and a
+// Look-and-Feel defaults header ("[kcminputrc][Mouse]") both match on their trailing section.
+static bool ini_string(FILE* f, const char* section, const char* key, char* out, size_t on) {
     char line[256];
-    bool in_mouse = false, found = false;
+    bool in = false;
+    const size_t slen = strlen(section);
     while (fgets(line, sizeof(line), f)) {
-        if (line[0] == '[') { in_mouse = (strncmp(line, "[Mouse]", 7) == 0); continue; }
-        if (!in_mouse) continue;
+        char* end = line + strlen(line);
+        while (end > line && (end[-1] == '\n' || end[-1] == '\r' || end[-1] == ' ' || end[-1] == '\t'))
+            *--end = '\0';
+        if (line[0] == '[') {
+            const size_t len = (size_t)(end - line);
+            in = len >= slen + 2 && line[len - slen - 2] == '[' &&
+                 !strncmp(line + len - slen - 1, section, slen) && line[len - 1] == ']';
+            continue;
+        }
+        if (!in) continue;
         char* eq = strchr(line, '=');
         if (!eq) continue;
         *eq = '\0';
-        char* key = line; char* val = eq + 1;
-        while (*key == ' ' || *key == '\t') key++;
-        char* e = key + strlen(key); while (e > key && (e[-1]==' '||e[-1]=='\t'||e[-1]=='\n'||e[-1]=='\r')) *--e = '\0';
-        while (*val == ' ' || *val == '\t') val++;
-        e = val + strlen(val); while (e > val && (e[-1]==' '||e[-1]=='\t'||e[-1]=='\n'||e[-1]=='\r')) *--e = '\0';
-        if (!strcasecmp(key, "cursorTheme") && !theme[0]) { strncpy(theme, val, tn - 1); theme[tn - 1] = 0; found = true; }
-        else if (!strcasecmp(key, "cursorSize") && !size[0]) { strncpy(size, val, sn - 1); size[sn - 1] = 0; found = true; }
+        char* k = line;   char* v = eq + 1;
+        while (*k == ' ' || *k == '\t') k++;
+        while (*v == ' ' || *v == '\t') v++;
+        if (!strcasecmp(k, key)) {
+            strncpy(out, v, on - 1);
+            out[on - 1] = '\0';
+            return true;
+        }
     }
+    return false;
+}
+
+static bool ini_string(const std::string& path, const char* section, const char* key,
+                       char* out, size_t on) {
+    FILE* f = fopen(path.c_str(), "r");
+    if (!f) return false;
+    const bool found = ini_string(f, section, key, out, on);
     fclose(f);
     return found;
 }
@@ -539,11 +557,29 @@ void setup_kde_cursor() {
     char size[32]   = "";
     const char* home = getenv("HOME");
     if (home) {
-        std::string p = std::string(home) + "/.config/kcminputrc";
-        parse_kde_mouse_section(p.c_str(), theme, sizeof(theme), size, sizeof(size));
-        if (!theme[0]) {   // some Plasma versions keep it in kdeglobals instead
-            std::string g = std::string(home) + "/.config/kdeglobals";
-            parse_kde_mouse_section(g.c_str(), theme, sizeof(theme), size, sizeof(size));
+        const std::string config = std::string(home) + "/.config/";
+        // The user's explicit choice; some Plasma versions keep it in kdeglobals instead.
+        if (!ini_string(config + "kcminputrc", "Mouse", "cursorTheme", theme, sizeof(theme)))
+            ini_string(config + "kdeglobals", "Mouse", "cursorTheme", theme, sizeof(theme));
+        if (!ini_string(config + "kcminputrc", "Mouse", "cursorSize", size, sizeof(size)))
+            ini_string(config + "kdeglobals", "Mouse", "cursorSize", size, sizeof(size));
+        // A profile that never changed the cursor has no kcminputrc entry, and Plasma then uses
+        // whatever the active global theme bundles. Mirror that: Air and Oxygen light ship
+        // Oxygen_White/Oxygen_Black, so falling back to the stock dark Breeze cursor made the
+        // app the odd one out.
+        char lf[128] = "";
+        if ((!theme[0] || !size[0]) &&
+            ini_string(config + "kdeglobals", "KDE", "LookAndFeelPackage", lf, sizeof(lf)) && lf[0]) {
+            const std::string roots[] = {
+                std::string(home) + "/.local/share/plasma/look-and-feel/",
+                "/usr/share/plasma/look-and-feel/",
+            };
+            for (const std::string& root : roots) {
+                const std::string defaults = root + lf + "/contents/defaults";
+                if (!theme[0]) ini_string(defaults, "Mouse", "cursorTheme", theme, sizeof(theme));
+                if (!size[0])  ini_string(defaults, "Mouse", "cursorSize",  size,  sizeof(size));
+                if (theme[0]) break;
+            }
         }
     }
     if (!theme[0]) { const char* t = getenv("XCURSOR_THEME"); if (t && t[0]) { strncpy(theme, t, sizeof(theme) - 1); theme[sizeof(theme) - 1] = 0; } }

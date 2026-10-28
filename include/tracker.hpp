@@ -40,14 +40,17 @@ class Tracker {
     }
 
 public:
-    void record(double cps, double hold_ns, double interval_ns, double trend) {
-        cps_samples_[pos_] = cps;
+    // target_cps is what the humanization model asked for; actual_cps is measured from the
+    // real press-to-press time, so the readout and the CSV show what actually happened.
+    void record(double target_cps, double actual_cps, double hold_ns, double interval_ns,
+                double trend) {
+        cps_samples_[pos_] = actual_cps;
         hold_samples_[pos_] = hold_ns / 1'000'000.0;
         pos_ = (pos_ + 1) % WINDOW;
         if (count_ < WINDOW) count_++;
         total_clicks_++;
 
-        cps_graph_[graph_pos_] = static_cast<float>(cps);
+        cps_graph_[graph_pos_] = static_cast<float>(actual_cps);
         graph_pos_ = (graph_pos_ + 1) % GRAPH_SIZE;
         if (graph_count_ < GRAPH_SIZE) graph_count_++;
 
@@ -55,7 +58,7 @@ public:
             std::lock_guard<std::mutex> lock(mu_);
             if (history_.size() >= MAX_HISTORY)
                 history_.pop_front();
-            history_.push_back({now_ms(), cps, cps, static_cast<int64_t>(hold_ns),
+            history_.push_back({now_ms(), target_cps, actual_cps, static_cast<int64_t>(hold_ns),
                                 static_cast<int64_t>(interval_ns), trend});
         }
     }

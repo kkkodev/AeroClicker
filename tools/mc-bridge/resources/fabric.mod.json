@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "aeroclicker-bridge",
+  "name": "AeroClicker Bridge",
+  "version": "1.0.0",
+  "description": "Read-only export of the selected hotbar slot and the open-screen flag for the AeroClicker desktop app. Sends nothing to the server.",
+  "authors": ["AeroClicker"],
+  "license": "GPL-3.0-only",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["dev.aeroclicker.bridge.StateExport"]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": ">=26.1.2",
+    "java": ">=21"
+  }
+}

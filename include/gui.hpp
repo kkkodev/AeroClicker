@@ -16,17 +16,15 @@ struct GuiState {
 
     bool left_armed = false;
     bool right_armed = false;
-    // Written by the input thread (the inventory key) and by the GUI (the L/R pills), read by
-    // both, so it is atomic.
+    // Written by the input thread (the bridge mod's screen flag) and by the GUI (the L/R
+    // pills), read by both, so it is atomic.
     std::atomic<bool> in_menu{false};
     // Written by the input thread, read by the UI thread: keep it atomic so the label can
     // never keep showing a stale value.
     std::atomic<int> active_slot{0};
-    // Set when the user switches a clicker on with its bound key or its pill while the active
-    // hotbar slot is filtered out, so that explicit press beats the filter. Handed back to the
-    // filter on the next slot change (see apply_pauses in main.cpp).
-    std::atomic<bool> left_slot_override{false};
-    std::atomic<bool> right_slot_override{false};
+    // True while the bridge mod's state file is fresh (see include/mc_link.hpp). active_slot,
+    // in_menu and slot activation all come from the game itself; there is no guessing.
+    std::atomic<bool> mc_linked{false};
     // Written by the UI thread, read by the input thread: while the pointer is over the app,
     // physical button presses belong to the interface, not to the clicker's MOUSE arming.
     std::atomic<bool> ui_hovered{false};

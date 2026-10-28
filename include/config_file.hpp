@@ -94,6 +94,8 @@ public:
         fprintf(f, "%s.break_duration_min %g\n", prefix, p.break_duration_min);
         fprintf(f, "%s.break_duration_max %g\n", prefix, p.break_duration_max);
         fprintf(f, "%s.distribution %d\n", prefix, static_cast<int>(p.distribution));
+        fprintf(f, "%s.hold_drift_ms %g\n", prefix, p.hold_drift_ms);
+        fprintf(f, "%s.hold_drift_tension %g\n", prefix, p.hold_drift_tension);
     }
 
     static void read_profile_key(const char* key, double val, const char* prefix, ClickerProfile& p) {
@@ -131,7 +133,14 @@ public:
         else if (match("break_interval_max")) p.break_interval_max = val;
         else if (match("break_duration_min")) p.break_duration_min = val;
         else if (match("break_duration_max")) p.break_duration_max = val;
-        else if (match("distribution")) p.distribution = static_cast<DistributionType>(static_cast<int>(val));
+        else if (match("distribution")) {
+            // 2 is UNIFORM, 0 is GAUSSIAN. 1 was POISSON, which no longer exists: a profile
+            // saved with it comes back as Gaussian instead of silently becoming uniform.
+            p.distribution = static_cast<int>(val) == 2 ? DistributionType::UNIFORM
+                                                        : DistributionType::GAUSSIAN;
+        }
+        else if (match("hold_drift_ms")) p.hold_drift_ms = val;
+        else if (match("hold_drift_tension")) p.hold_drift_tension = val;
     }
 
     static bool load(Config& cfg, const std::string& filename = "config") {
@@ -152,8 +161,6 @@ public:
 
             if (!strcmp(key, "key_left")) cfg.key_left = (int)val;
             else if (!strcmp(key, "key_right")) cfg.key_right = (int)val;
-            else if (!strcmp(key, "key_inventory")) cfg.key_inventory = (int)val;
-            else if (!strcmp(key, "inventory_key_enabled")) cfg.inventory_key_enabled = (int)val != 0;
             else if (!strcmp(key, "accent_preset")) cfg.accent_preset = (int)val;
             else if (!strcmp(key, "accent_order")) accent_order_seen = true;
             else if (!strcmp(key, "accent_r")) cfg.accent_r = val;
@@ -161,15 +168,18 @@ public:
             else if (!strcmp(key, "accent_b")) cfg.accent_b = val;
             else if (!strcmp(key, "left_mode")) cfg.left_mode = (int)val == 0 ? ActivationMode::TOGGLE : ((int)val == 1 ? ActivationMode::HOLD : ActivationMode::MOUSE);
             else if (!strcmp(key, "right_mode")) cfg.right_mode = (int)val == 0 ? ActivationMode::TOGGLE : ((int)val == 1 ? ActivationMode::HOLD : ActivationMode::MOUSE);
-            else if (!strcmp(key, "slot_filter_enabled")) cfg.slot_filter_enabled = (int)val != 0;
+            else if (!strcmp(key, "slot_auto_enabled")) cfg.slot_auto_enabled = (int)val != 0;
+            else if (!strcmp(key, "pause_in_menu")) cfg.pause_in_menu = (int)val != 0;
             else if (!strcmp(key, "audio_enabled")) cfg.audio_enabled = (int)val != 0;
             else if (!strcmp(key, "macro_count")) { /* counted implicitly */ }
             else {
                 bool handled = false;
                 for (int i = 0; i < 9 && !handled; i++) {
                     char sbuf[32];
-                    snprintf(sbuf, sizeof(sbuf), "allowed_slot_%d", i);
-                    if (!strcmp(key, sbuf)) { cfg.allowed_slots[i] = (int)val != 0; handled = true; }
+                    snprintf(sbuf, sizeof(sbuf), "left_slot_%d", i);
+                    if (!strcmp(key, sbuf)) { cfg.left_slots[i] = (int)val != 0; handled = true; }
+                    snprintf(sbuf, sizeof(sbuf), "right_slot_%d", i);
+                    if (!strcmp(key, sbuf)) { cfg.right_slots[i] = (int)val != 0; handled = true; }
                 }
                 for (int m = 0; m < MAX_MACROS && !handled; m++) {
                     char buf[64];
@@ -235,8 +245,6 @@ public:
 
         fprintf(f, "key_left %d\n", cfg.key_left);
         fprintf(f, "key_right %d\n", cfg.key_right);
-        fprintf(f, "key_inventory %d\n", cfg.key_inventory);
-        fprintf(f, "inventory_key_enabled %d\n", cfg.inventory_key_enabled ? 1 : 0);
         fprintf(f, "accent_preset %d\n", cfg.accent_preset);
         fprintf(f, "accent_order 1\n");
         fprintf(f, "accent_r %f\n", cfg.accent_r);
@@ -244,9 +252,11 @@ public:
         fprintf(f, "accent_b %f\n", cfg.accent_b);
         fprintf(f, "left_mode %d\n", cfg.left_mode == ActivationMode::TOGGLE ? 0 : (cfg.left_mode == ActivationMode::HOLD ? 1 : 2));
         fprintf(f, "right_mode %d\n", cfg.right_mode == ActivationMode::TOGGLE ? 0 : (cfg.right_mode == ActivationMode::HOLD ? 1 : 2));
-        fprintf(f, "slot_filter_enabled %d\n", cfg.slot_filter_enabled ? 1 : 0);
+        fprintf(f, "slot_auto_enabled %d\n", cfg.slot_auto_enabled ? 1 : 0);
+        fprintf(f, "pause_in_menu %d\n", cfg.pause_in_menu ? 1 : 0);
         for (int i = 0; i < 9; i++)
-            fprintf(f, "allowed_slot_%d %d\n", i, cfg.allowed_slots[i] ? 1 : 0);
+            fprintf(f, "left_slot_%d %d\nright_slot_%d %d\n",
+                    i, cfg.left_slots[i] ? 1 : 0, i, cfg.right_slots[i] ? 1 : 0);
 
         fprintf(f, "audio_enabled %d\n", cfg.audio_enabled ? 1 : 0);
 

@@ -14,7 +14,7 @@ public:
     UInputDevice() {
         fd_ = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
         if (fd_ < 0)
-            throw std::runtime_error("Cannot open /dev/uinput (run as root or add user to input group)");
+            throw std::runtime_error("Cannot open /dev/uinput");
 
         ioctl(fd_, UI_SET_EVBIT, EV_KEY);
         ioctl(fd_, UI_SET_KEYBIT, BTN_LEFT);

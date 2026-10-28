@@ -3,6 +3,7 @@
 #include "clicker_config.hpp"
 #include "config_file.hpp"
 #include "gui.hpp"
+#include "mc_link.hpp"
 #include "tracker.hpp"
 #include "uinput_device.hpp"
 
@@ -13,6 +14,7 @@
 #include <csignal>
 #include <atomic>
 #include <chrono>
+#include <memory>
 #include <thread>
 #include <dirent.h>
 #include <fcntl.h>
@@ -76,13 +78,15 @@ static int find_device(const char* label, bool want_mouse) {
 
     int fallback_fd = -1;
     char fallback_name[256] = "";
-    char fallback_path[128] = "";
+    // "/dev/input/" plus a dirent name: 128 bytes was shorter than the compiler's worst case
+    // for d_name (255), which is what produced the -Wformat-truncation warning.
+    char fallback_path[512] = "";
 
     struct dirent* entry;
     while ((entry = readdir(dir))) {
         if (strncmp(entry->d_name, "event", 5) != 0) continue;
 
-        char path[128];
+        char path[512];
         snprintf(path, sizeof(path), "/dev/input/%s", entry->d_name);
 
         int fd = open(path, O_RDONLY | O_NONBLOCK);
@@ -220,6 +224,17 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
 
     bool mouse_left_held = false;
     bool mouse_right_held = false;
+    // True while the bridge mod's state file is fresh. Refreshed every loop iteration and read
+    // by the key handling below, which must not guess what the game already reports. mc_menu/
+    // mc_synced remember the last state the file reported, so a deliberate un-pause is not
+    // undone on every poll.
+    bool mc_live = false;
+    bool mc_menu = false;
+    bool mc_synced = false;
+    // Slot activation bookkeeping: the mapping is applied when the slot changes, and not again
+    // in between, so a deliberate press of a clicker's key is not undone on the next poll.
+    int  auto_slot = -1;
+    bool auto_engaged = false;
     // Which button's current physical press belongs to the clicker (MOUSE mode). Deciding
     // this once, on the press, and remembering it until the matching release is what keeps
     // a press and its release symmetric: if the cursor moves over the app (e.g. the click
@@ -228,31 +243,25 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
     bool mouse_left_owned = false;
     bool mouse_right_owned = false;
 
-    // The automatic pauses are derived state, recomputed every iteration so that changing the
-    // slot filter or the inventory settings takes effect at once instead of at the next key
-    // press. They pause rather than switch a clicker off, which is what keeps the on/off state
-    // the user asked for visible (and resumable) in the UI.
-    auto apply_pauses = [&](Clicker& clicker, bool slot_override) {
-        clicker.set_pause(Clicker::PAUSE_INVENTORY, gui_state.in_menu.load());
-        const bool filtered = config.slot_filter_enabled && !slot_override &&
-                              !config.allowed_slots[gui_state.active_slot.load()];
-        clicker.set_pause(Clicker::PAUSE_SLOT, filtered);
+    // The automatic pause is derived state, recomputed every iteration so that toggling the
+    // option takes effect at once instead of at the next key press. It pauses rather than
+    // switches a clicker off, which is what keeps the on/off state the user asked for visible
+    // (and resumable) in the UI.
+    auto apply_pauses = [&](Clicker& clicker) {
+        clicker.set_pause(Clicker::PAUSE_INVENTORY, config.pause_in_menu && gui_state.in_menu.load());
     };
 
-    // A clicker's bound key is its master control: it acts even while the app believes the
-    // inventory is open (typing the inventory letter in chat leaves that state inverted), and
-    // it overrides both automatic pauses. The slot filter takes control back as soon as another
-    // hotbar slot is selected. Shared by the keyboard and mouse paths, since the same key can
-    // be bound on either device.
+    // A clicker's bound key is its master control: it acts even while a game screen is open, and
+    // it overrides the automatic pause. The next slot change hands control back to the slot
+    // rules. Shared by the keyboard and mouse paths, since the same key can be bound on either
+    // device.
     //
     // A clicker that is switched on but held back by a pause is *not* switched off by its own
     // key: the press means "run now", so it clears the pause and a second press stops it as
-    // usual. Otherwise rescuing the state after a stray inventory key would take two presses.
+    // usual.
     auto handle_clicker_key = [&](bool left_side, int value) {
         Clicker& clicker = left_side ? left_clicker : right_clicker;
         bool& armed = left_side ? gui_state.left_armed : gui_state.right_armed;
-        std::atomic<bool>& slot_override = left_side ? gui_state.left_slot_override
-                                                     : gui_state.right_slot_override;
         const ActivationMode mode = left_side ? config.left_mode : config.right_mode;
 
         const bool was = clicker_master_on(clicker, armed, mode);
@@ -268,25 +277,44 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                     armed = !armed;
                     const bool button_held = left_side ? mouse_left_held : mouse_right_held;
                     if (!armed) clicker.set_enabled(false);
-                    else if (button_held) clicker.set_enabled(true);
+                    else if (button_held) clicker.set_enabled_gated(true);
                 }
             }
         }
 
         const bool now = clicker_master_on(clicker, armed, mode);
         if (now) {
-            // Coming on (or being un-paused) beats the guessed inventory state and the filter.
+            // Coming on (or being un-paused) beats the pause from an open game screen.
             gui_state.in_menu = false;
             clicker.set_pause(Clicker::PAUSE_INVENTORY, false);
-            clicker.set_pause(Clicker::PAUSE_SLOT, false);
-            slot_override = true;
-        } else {
-            slot_override = false;
         }
         if (config.audio_enabled && now != was) {
             if (now) Audio::beep_on();
             else Audio::beep_off();
         }
+    };
+
+    // Slot activation: the selected slot switches a clicker on when it is one of that clicker's
+    // own slots, and off otherwise. Only the bridge mod knows the real slot, so this runs only
+    // while it is live.
+    auto set_slot_master = [&](bool left_side, bool on) {
+        Clicker& clicker = left_side ? left_clicker : right_clicker;
+        bool& armed = left_side ? gui_state.left_armed : gui_state.right_armed;
+        const ActivationMode mode = left_side ? config.left_mode : config.right_mode;
+        if (mode == ActivationMode::MOUSE) {
+            armed = on;
+            if (!on) clicker.set_enabled(false);
+            else if (left_side ? mouse_left_held : mouse_right_held) clicker.set_enabled_gated(true);
+        } else if (mode == ActivationMode::TOGGLE) {
+            clicker.set_enabled(on);
+        } else if (!on) {
+            // HOLD: the key owns the on state, but an unmapped slot still stops clicking.
+            clicker.set_enabled(false);
+        }
+    };
+    auto apply_slot_auto = [&](int slot) {
+        set_slot_master(true,  slot >= 0 && config.left_slots[slot]);
+        set_slot_master(false, slot >= 0 && config.right_slots[slot]);
     };
 
     struct pollfd fds[2] = {};
@@ -299,9 +327,6 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
             fprintf(stderr, "  Keyboard disconnected, waiting for it to come back\n");
             close(kb_fd);
             kb_fd = -1;
-            // The hotkeys that could clear the guessed inventory state went with it, so do not
-            // leave the clickers paused because of a key press we can no longer see.
-            gui_state.in_menu = false;
             next_kb_scan = Clock::now() + RESCAN_INTERVAL;
         }
         if (mouse_fd >= 0 && !device_alive(mouse_fd)) {
@@ -328,15 +353,47 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                     if (!warned_no_kb) {
                         warned_no_kb = true;
                         fprintf(stderr, "  Warning: No keyboard found (need read access to "
-                                        "/dev/input/*). Keyboard hotkeys and the slot filter "
-                                        "will not work until one appears.\n");
+                                        "/dev/input/*). Keyboard hotkeys will not work "
+                                        "until one appears.\n");
                     }
                 }
             }
         }
         sync_mouse_device();
-        apply_pauses(left_clicker, gui_state.left_slot_override.load());
-        apply_pauses(right_clicker, gui_state.right_slot_override.load());
+        // The bridge mod, when it runs, is ground truth: the slot survives the wheel and
+        // pick-block, and "in menu" covers chat, chests and NPC dialogs.
+        int mc_slot = -1;
+        bool mc_screen = false;
+        mc_live = McLink::poll(mc_slot, mc_screen);
+        gui_state.mc_linked = mc_live;
+        if (mc_live) {
+            if (mc_slot >= 0) gui_state.active_slot = mc_slot;
+            // Edge-triggered: an explicit press (hotkey or pill) may un-pause while a screen is
+            // open, and that choice must survive the next poll. Only a screen opening or
+            // closing re-applies what the game says.
+            const bool menu = mc_slot < 0 || mc_screen;
+            if (!mc_synced || menu != mc_menu) {
+                mc_menu = menu;
+                mc_synced = true;
+                gui_state.in_menu = menu;
+            }
+            if (config.slot_auto_enabled &&
+                (!auto_engaged || mc_slot != auto_slot)) {
+                apply_slot_auto(mc_slot);
+                auto_slot = mc_slot;
+                auto_engaged = true;
+            }
+        } else {
+            mc_synced = false;   // no game: nothing drives the slot rules until it comes back
+            // Do not leave a clicker running that the slot rules switched on: the game they were
+            // following is gone.
+            if (auto_engaged) {
+                if (config.slot_auto_enabled) apply_slot_auto(-1);
+                auto_engaged = false;
+            }
+        }
+        apply_pauses(left_clicker);
+        apply_pauses(right_clicker);
 
         int nfds = 1;
         fds[0].fd = kb_fd;          // -1 is fine: poll() ignores negative descriptors
@@ -353,30 +410,6 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
         if (fds[0].revents & POLLIN) {
             while (read(kb_fd, &ev, sizeof(ev)) == sizeof(ev)) {
                 if (ev.type != EV_KEY) continue;
-
-                // Hotbar slots: top-row digits and numpad digits both work, so the filter
-                // tracks whatever the player actually uses.
-                int slot = -1;
-                if (ev.code >= KEY_1 && ev.code <= KEY_9)
-                    slot = (int)ev.code - KEY_1;
-                else if (ev.code >= KEY_KP1 && ev.code <= KEY_KP9)
-                    slot = (int)ev.code - KEY_KP1;
-                if (ev.value == 1 && slot >= 0) {
-                    gui_state.active_slot = slot;
-                    // Selecting a slot hands control back to the filter, so an override made in
-                    // the slot the player just left cannot outlive it.
-                    gui_state.left_slot_override = false;
-                    gui_state.right_slot_override = false;
-                }
-
-                if (config.inventory_key_enabled && ev.value == 1 && ev.code == static_cast<unsigned>(config.key_inventory)) {
-                    gui_state.in_menu = !gui_state.in_menu;
-                    continue;
-                }
-                if (ev.value == 1 && ev.code == static_cast<unsigned>(config.key_escape) && gui_state.in_menu) {
-                    gui_state.in_menu = false;
-                    continue;
-                }
 
                 if (ev.code == static_cast<unsigned>(config.key_left)) {
                     handle_clicker_key(true, ev.value);
@@ -421,10 +454,10 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                         // interface: keeping it as a MOUSE-mode trigger makes the whole UI
                         // unclickable, because the press is swallowed instead of forwarded.
                         const bool over_app = gui_state.ui_hovered.load();
-                        // PAUSE_AUTO is the inventory pause plus the slot filter; both already
-                        // account for the bound key's override, so this path needs no separate
-                        // slot test. over_app is checked locally because ownership is decided
-                        // before the GUI refreshes that pause for this frame.
+                        // PAUSE_AUTO already accounts for the bound key's override, so this
+                        // path needs no separate menu test. over_app is checked locally because
+                        // ownership is decided before the GUI refreshes that pause for this
+                        // frame.
                         if (ev.code == BTN_LEFT) {
                             if (ev.value == 1) {
                                 mouse_left_held = true;
@@ -432,7 +465,7 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                                                    !(left_clicker.pause_mask() & Clicker::PAUSE_AUTO) &&
                                                    config.left_mode == ActivationMode::MOUSE &&
                                                    gui_state.left_armed;
-                                if (mouse_left_owned) left_clicker.set_enabled(true);
+                                if (mouse_left_owned) left_clicker.set_enabled_gated(true);
                                 else device.click(BTN_LEFT, 1);
                             } else if (ev.value == 0) {
                                 mouse_left_held = false;
@@ -451,7 +484,7 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                                                     !(right_clicker.pause_mask() & Clicker::PAUSE_AUTO) &&
                                                     config.right_mode == ActivationMode::MOUSE &&
                                                     gui_state.right_armed;
-                                if (mouse_right_owned) right_clicker.set_enabled(true);
+                                if (mouse_right_owned) right_clicker.set_enabled_gated(true);
                                 else device.click(BTN_RIGHT, 1);
                             } else if (ev.value == 0) {
                                 mouse_right_held = false;
@@ -520,8 +553,6 @@ int main(int argc, char* argv[]) {
             config.key_left = atoi(argv[++i]);
         else if (strcmp(argv[i], "--rkey") == 0 && i + 1 < argc)
             config.key_right = atoi(argv[++i]);
-        else if (strcmp(argv[i], "--invkey") == 0 && i + 1 < argc)
-            config.key_inventory = atoi(argv[++i]);
         else if (strcmp(argv[i], "--hold") == 0) {
             config.left_mode = ActivationMode::HOLD;
             config.right_mode = ActivationMode::HOLD;
@@ -550,7 +581,6 @@ int main(int argc, char* argv[]) {
             printf("  --rcps <n>     Right CPS mean (default: %.1f)\n", config.right.cps_mean);
             printf("  --lkey <code>  Left toggle key (default: %d)\n", config.key_left);
             printf("  --rkey <code>  Right toggle key (default: %d)\n", config.key_right);
-            printf("  --invkey <code> Inventory key (default: %d)\n", config.key_inventory);
             printf("  --toggle       Toggle mode\n");
             printf("  --hold         Hold mode\n");
             printf("  --mouse        Mouse mode (default; arm with key, hold mouse to click)\n");
@@ -565,7 +595,19 @@ int main(int argc, char* argv[]) {
     printf("\n  AeroClicker - Humanized Auto-Clicker\n");
     printf("  ────────────────────────────────────\n");
 
-    UInputDevice device;
+    // A missing /dev/uinput permission is the most common startup failure, and the raw
+    // exception used to escape main() as an abort. Fail with the one command that fixes it
+    // instead; running as root is not the answer and is not suggested.
+    std::unique_ptr<UInputDevice> device_holder;
+    try {
+        device_holder = std::make_unique<UInputDevice>();
+    } catch (const std::exception& e) {
+        fprintf(stderr, "\n  Cannot start: %s\n"
+                        "  Add your user to the input group, then log out and back in:\n"
+                        "      sudo usermod -aG input $USER\n\n", e.what());
+        return 1;
+    }
+    UInputDevice& device = *device_holder;
     printf("  Virtual mouse device created\n");
 
     Clicker left_clicker(config.left, device);

@@ -52,7 +52,11 @@ void end_panel();
 float panel_inner();   // usable content width inside current panel
 
 // --- status ---
-bool click_indicator(const char* label, bool on);   // returns true when clicked
+// Read-only Oxygen surface for the Home page's hotbar chips: neutral face when the slot is
+// not mapped, the same accent face as a selected preset when it is, and a 2px accent ring on
+// the slot the game currently has selected.
+void oxygen_slot_chip(ImVec2 mn, ImVec2 mx, const char* label, bool mapped, bool current);
+bool click_indicator(const char* label, bool on, bool paused = false);   // returns true when clicked
 // note: when set while `on`, the readout says "Paused" and shows this line instead of a
 // meaningless "0.0 CPS" (e.g. "cursor over app", "hold the mouse button").
 void stat_readout(bool on, float cps, uint32_t clicks, float inner_w, const char* note = nullptr);

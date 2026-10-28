@@ -12,9 +12,9 @@
 #include <cstring>
 #include <cstdlib>
 
-static const char* TAB_NAMES[] = { "Home", "Left", "Right", "Macros", "Settings", "Analytics" };
-static const OxIcon TAB_ICONS[] = { OxIcon::Home, OxIcon::ArrowLeft, OxIcon::ArrowRight,
-                                    OxIcon::List, OxIcon::Sliders, OxIcon::Chart };
+static const char* TAB_NAMES[] = { "Home", "Settings", "Left", "Right", "Macros", "Analytics" };
+static const OxIcon TAB_ICONS[] = { OxIcon::Home, OxIcon::Sliders, OxIcon::ArrowLeft,
+                                    OxIcon::ArrowRight, OxIcon::List, OxIcon::Chart };
 static const int TAB_COUNT = 6;
 
 static char s_font_path[256]   = "";
@@ -46,6 +46,7 @@ static bool same_profile(const ClickerProfile& a, const ClickerProfile& b) {
            a.breaks_enabled == b.breaks_enabled &&
            eq(a.break_interval_min, b.break_interval_min) && eq(a.break_interval_max, b.break_interval_max) &&
            eq(a.break_duration_min, b.break_duration_min) && eq(a.break_duration_max, b.break_duration_max) &&
+           eq(a.hold_drift_ms, b.hold_drift_ms) && eq(a.hold_drift_tension, b.hold_drift_tension) &&
            a.distribution == b.distribution;
 }
 
@@ -102,8 +103,7 @@ static ActivationMode idx_to_mode(int i) { return i == 0 ? ActivationMode::TOGGL
 
 // Why a switched-on clicker is not clicking, most specific cause first.
 static const char* pause_reason_text(uint32_t mask) {
-    if (mask & Clicker::PAUSE_INVENTORY) return "inventory is open";
-    if (mask & Clicker::PAUSE_SLOT)      return "slot not allowed";
+    if (mask & Clicker::PAUSE_INVENTORY) return "menu is open";
     if (mask & Clicker::PAUSE_POINTER)   return "cursor over app";
     return "paused";
 }
@@ -115,8 +115,6 @@ static void toggle_clicker_pill(GuiState& state, bool left_side) {
     Clicker& clicker = left_side ? state.left : state.right;
     const ActivationMode mode = left_side ? state.config.left_mode : state.config.right_mode;
     bool& armed = left_side ? state.left_armed : state.right_armed;
-    std::atomic<bool>& slot_override = left_side ? state.left_slot_override
-                                                 : state.right_slot_override;
     // The pill shows the master on/off state. In MOUSE mode that is the armed flag (the
     // clicker only runs while the physical button is held), so beep on arming rather than
     // on the transient enabled flag.
@@ -134,14 +132,10 @@ static void toggle_clicker_pill(GuiState& state, bool left_side) {
     }
     const bool now = (mode == ActivationMode::MOUSE) ? armed : clicker.is_enabled();
     if (now) {
-        // Coming on (or being un-paused) beats the guessed inventory state and the filter; the
-        // next hotbar slot change hands control back to the filter.
+        // Coming on (or being un-paused) beats the pause from an open game screen; the next
+        // slot change hands control back to the slot rules.
         state.in_menu = false;
         clicker.set_pause(Clicker::PAUSE_INVENTORY, false);
-        clicker.set_pause(Clicker::PAUSE_SLOT, false);
-        slot_override = true;
-    } else {
-        slot_override = false;
     }
     if (state.config.audio_enabled && now != was) {
         if (now) Audio::beep_on();
@@ -168,9 +162,9 @@ static void draw_top_bar(GuiState& state, int& current_tab, bool l_on, bool r_on
     if (x < origin.x) x = origin.x;
     float y = origin.y + (ImGui::GetFrameHeight() - szL.y) * 0.5f;
     ImGui::SetCursorScreenPos(ImVec2(x, y));
-    if (click_indicator("L", l_on)) toggle_clicker_pill(state, true);
+    if (click_indicator("L", l_on, state.left.pause_mask() != 0)) toggle_clicker_pill(state, true);
     ImGui::SameLine(0, pill_gap);
-    if (click_indicator("R", r_on)) toggle_clicker_pill(state, false);
+    if (click_indicator("R", r_on, state.right.pause_mask() != 0)) toggle_clicker_pill(state, false);
     ImGui::SetCursorScreenPos(after_tabs);
     // ImGui 1.93+: the last call must be an item, not a bare SetCursorPos().
     ImGui::Dummy(ImVec2(0.0f, 0.0f));
@@ -179,9 +173,9 @@ static void draw_top_bar(GuiState& state, int& current_tab, bool l_on, bool r_on
 static void draw_clicker_card(const char* title, ClickerProfile& profile, ActivationMode& mode,
                               Clicker& clicker, int& key, const ClickerPreset* presets,
                               float card_w, bool on, bool armed, OxIcon icon) {
-    // A switched-on clicker that is not clicking says so, and says why: the inventory key, a
-    // filtered hotbar slot and the pointer sitting on this window all pause it without
-    // changing its on/off state, so the readout has to name the pause instead of the state.
+    // A switched-on clicker that is not clicking says so, and says why: an open game screen or
+    // the pointer sitting on this window pauses it without changing its on/off state, so the
+    // readout has to name the pause instead of the state.
     const uint32_t pauses = clicker.pause_mask();
     const bool paused = on && pauses != 0;
     begin_panel(title, card_w, paused ? 2 : (on ? 1 : 0), icon);
@@ -203,6 +197,46 @@ static void draw_clicker_card(const char* title, ClickerProfile& profile, Activa
     end_panel();
                               }
 
+// Home-page slot activation readout: the hotbar slot the game has selected, which slots are
+// mapped, and what the current one does. Shown only while slot activation is on, so the home
+// page stays exactly as it was for anyone not using the bridge mod.
+static void draw_slot_indicator(GuiState& state, float width) {
+    const bool live = state.mc_linked.load();
+    const int  slot = state.active_slot.load();
+    begin_panel("Slot activation", width, -1, OxIcon::Grid);
+    const float inner = panel_inner();
+
+    // 1-9 chips: tinted while mapped, ringed on the slot the game has selected. Read-only,
+    // because the mapping itself lives in Settings.
+    const float gap = 4.0f;
+    const float chip_h = ImGui::GetFrameHeight();
+    const float chip_w = (inner - gap * 8.0f) / 9.0f;
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    for (int i = 0; i < 9; i++) {
+        const ImVec2 a(p.x + (chip_w + gap) * (float)i, p.y);
+        const ImVec2 b(a.x + chip_w, a.y + chip_h);
+        const bool mapped = state.config.left_slots[i] || state.config.right_slots[i];
+        const bool current = live && i == slot;
+        char n[4]; snprintf(n, sizeof(n), "%d", i + 1);
+        oxygen_slot_chip(a, b, n, mapped, current);
+    }
+    ImGui::Dummy(ImVec2(inner, chip_h));
+
+    if (!live) {
+        ImGui::TextDisabled("Waiting for the Minecraft link - install the bridge mod (see README)");
+    } else {
+        const bool l = slot >= 0 && state.config.left_slots[slot];
+        const bool r = slot >= 0 && state.config.right_slots[slot];
+        if (l || r) {
+            ImGui::Text("Slot %d - %s on", slot + 1,
+                        l && r ? "left and right clickers" : (l ? "left clicker" : "right clicker"));
+        } else {
+            ImGui::TextDisabled("Slot %d - no clicker on this slot", slot + 1);
+        }
+    }
+    end_panel();
+}
+
 static void draw_home_tab(GuiState& state) {
     ImGui::Spacing();
     const float gap = 12.0f;
@@ -222,9 +256,14 @@ static void draw_home_tab(GuiState& state) {
 
     // fresh full-width row below BOTH cards, tip centered
     float y = y_left > y_right ? y_left : y_right;
+    const float full_w = card_w * 2.0f + gap;
+    if (state.config.slot_auto_enabled) {
+        ImGui::SetCursorScreenPos(ImVec2(c0.x, y));
+        draw_slot_indicator(state, full_w);
+        y = ImGui::GetCursorScreenPos().y;
+    }
     const char* tip = "Tip: press the toggle key anywhere in-game to start or stop clicking.";
     ImVec2 ts = ImGui::CalcTextSize(tip, nullptr, true);
-    float full_w = card_w * 2.0f + gap;
     float x = c0.x + (full_w - ts.x) * 0.5f;
     if (x < c0.x) x = c0.x;
     ImGui::SetCursorScreenPos(ImVec2(x, y));
@@ -233,16 +272,24 @@ static void draw_home_tab(GuiState& state) {
 
 // ---------------- Left / Right (advanced) ----------------
 
-static void draw_side_tab(ClickerProfile& p) {
+static void draw_side_tab(ClickerProfile& p, ActivationMode mode) {
     ImGui::Spacing();
     begin_panel("Rate", -1.0f, -1, OxIcon::Gauge);
     row_slider("Speed (CPS)", &p.cps_mean, CPS_MEAN_LO, CPS_MEAN_HI, "%.1f");
     row_slider("CPS Variation", &p.cps_stddev, 0.0, 5.0, "%.2f");
     row_slider("Min CPS", &p.cps_min, CPS_MEAN_LO, CPS_MIN_HI, "%.1f");
     row_slider("Max CPS", &p.cps_max, 5.0, CPS_MAX_HI, "%.1f");
-    int d = (int)p.distribution;
-    if (row_combo("Distribution", &d, "Gaussian\0Poisson\0Uniform\0")) p.distribution = (DistributionType)d;
+    int d = p.distribution == DistributionType::UNIFORM ? 1 : 0;
+    if (row_combo("Distribution", &d, "Gaussian\0Uniform\0"))
+        p.distribution = d == 1 ? DistributionType::UNIFORM : DistributionType::GAUSSIAN;
+    // Start delay is a MOUSE-mode gate: hold the button this long before the train begins.
+    // Toggle and hold starts are immediate, so the control is disabled there instead of
+    // pretending to do something.
+    ImGui::BeginDisabled(mode != ActivationMode::MOUSE);
     row_slider("Start Delay (ms)", &p.start_delay_ms, 0.0, 500.0, "%.0f");
+    ImGui::EndDisabled();
+    if (mode != ActivationMode::MOUSE)
+        ImGui::TextDisabled("Only applies in MOUSE mode");
     end_panel();
 
     begin_panel("Humanization", -1.0f, -1, OxIcon::Person);
@@ -262,6 +309,8 @@ static void draw_side_tab(ClickerProfile& p) {
     row_slider("Hold Max (ms)", &p.hold_ms_max, 20.0, 150.0, "%.1f");
     row_slider("Heavy Hold Chance", &p.hold_ms_heavy_chance, 0.0, 0.1, "%.3f");
     if (p.hold_ms_heavy_chance > 0) { row_slider("Heavy Hold Min", &p.hold_ms_heavy_min, 5.0, 50.0, "%.1f"); row_slider("Heavy Hold Max", &p.hold_ms_heavy_max, 10.0, 80.0, "%.1f"); }
+    row_slider("Hold Drift (ms)", &p.hold_drift_ms, 0.0, 10.0, "%.1f");
+    if (p.hold_drift_ms > 0) row_slider("Drift Tension", &p.hold_drift_tension, 0.0, 0.2, "%.3f");
     end_panel();
 
     begin_panel("Double click", -1.0f, -1, OxIcon::Click);
@@ -362,44 +411,83 @@ static void draw_macros_tab(GuiState& state) {
 
 // ---------------- Settings ----------------
 
+// One clicker's row of 1-9 toggles, in its own inset so the two mappings read as a pair of
+// blocks instead of running into the switches above them. The slot the game currently has
+// selected is outlined, so the mapping can be set without counting boxes.
+static void slot_row(const char* label, bool* slots, int active_slot, bool live) {
+    const ImGuiStyle& st = ImGui::GetStyle();
+    const float pad = 9.0f;
+    const float label_h = ImGui::GetTextLineHeight();
+    const float gap = 6.0f;
+    const float row_h = ImGui::GetFrameHeight();
+    const float box_h = pad * 2.0f + label_h + gap + row_h;
+
+    const ImVec2 start = ImGui::GetCursorScreenPos();
+    const ImVec2 end(start.x + panel_inner(), start.y + box_h);
+    field_background(ImGui::GetWindowDrawList(), start, end, 4.0f, true,
+                     ox_is_light() ? 120 : 150);
+
+    ImGui::SetCursorScreenPos(ImVec2(start.x + pad, start.y + pad));
+    ImGui::TextUnformatted(label);
+
+    // Spread the nine boxes across the inset instead of leaving them bunched at the left,
+    // which made each block look like an empty field with a stray row of controls.
+    const float cb_h = ImGui::GetFrameHeight();
+    float widths[9];
+    float total_w = 0.0f;
+    for (int i = 0; i < 9; i++) {
+        char slabel[4]; snprintf(slabel, sizeof(slabel), "%d", i + 1);
+        const float tw = ImGui::CalcTextSize(slabel).x;
+        widths[i] = cb_h + (tw > 0.0f ? ImGui::GetStyle().ItemInnerSpacing.x + tw : 0.0f);
+        total_w += widths[i];
+    }
+    float spread = (panel_inner() - pad * 2.0f - total_w) / 8.0f;
+    if (spread < st.ItemSpacing.x) spread = st.ItemSpacing.x;
+    const float row_y = start.y + pad + label_h + gap;
+
+    ImGui::PushID(label);
+    float x = start.x + pad;
+    for (int i = 0; i < 9; i++) {
+        ImGui::SetCursorScreenPos(ImVec2(x, row_y));
+        char slabel[4]; snprintf(slabel, sizeof(slabel), "%d", i + 1);
+        if (live && i == active_slot) {
+            const ImVec2 p = ImGui::GetCursorScreenPos();
+            const ImVec2 a(p.x - 3.0f, p.y - 2.0f);
+            const ImVec2 b(p.x + widths[i] + 3.0f, p.y + cb_h + 2.0f);
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            dl->AddRectFilled(a, b, OxCol(g_accent_color, 32), 4.0f);
+            dl->AddRect(a, b, OxCol(g_accent_color, 190), 4.0f, 0, 1.0f);
+        }
+        oxygen_checkbox(slabel, &slots[i]);
+        x += widths[i] + spread;
+    }
+    ImGui::PopID();
+
+    // Continue below the inset rather than inside it.
+    ImGui::SetCursorScreenPos(ImVec2(start.x, end.y + st.ItemSpacing.y));
+    ImGui::Dummy(ImVec2(0.0f, 0.0f));
+}
+
 static void draw_settings_tab(GuiState& state, std::vector<std::string>& profiles, int& selected_profile,
                               char* profile_name_buf, char* status_msg, float& status_timer) {
     ImGui::Spacing();
-    begin_panel("Keybinds", -1.0f, -1, OxIcon::Keyboard);
-    ImGui::BeginDisabled(!state.config.inventory_key_enabled);
-    keybind_row("Inventory Key", state.config.key_inventory);
+    begin_panel("Slot activation", -1.0f, -1, OxIcon::Grid);
+    row_check("Follow hotbar slots", &state.config.slot_auto_enabled);
+    ImGui::TextDisabled("Switches a clicker on while one of its slots is selected");
+    row_check("Pause on menus", &state.config.pause_in_menu);
+    ImGui::TextDisabled("Covers the inventory, chat, chests and NPC menus");
+    ImGui::BeginDisabled(!state.config.slot_auto_enabled);
+    const int active_slot = state.active_slot.load();
+    const bool live = state.mc_linked.load();
+    slot_row("Left clicker", state.config.left_slots, active_slot, live);
+    slot_row("Right clicker", state.config.right_slots, active_slot, live);
     ImGui::EndDisabled();
-    ImGui::SameLine();
-    oxygen_checkbox(state.config.inventory_key_enabled ? "Enabled##inv" : "Disabled##inv",
-                    &state.config.inventory_key_enabled);
-    ImGui::TextDisabled("Pauses clicking while the inventory is open");
-    end_panel();
-
-    begin_panel("Hotbar slot filter", -1.0f, -1, OxIcon::Grid);
-    row_check("Enable Slot Filter", &state.config.slot_filter_enabled);
-    ImGui::TextDisabled("Only click while holding one of the selected slots");
-    if (state.config.slot_filter_enabled) {
-        const int active_slot = state.active_slot.load();
-        for (int i = 0; i < 9; i++) {
-            if (i > 0) ImGui::SameLine();
-            char slabel[4]; snprintf(slabel, sizeof(slabel), "%d", i + 1);
-            // Mark which slot the filter currently sees, so it is obvious whether the app is
-            // tracking the player's hotbar.
-            if (i == active_slot) {
-                const float sz = ImGui::GetFrameHeight();
-                const ImVec2 p = ImGui::GetCursorScreenPos();
-                const float tw = ImGui::CalcTextSize(slabel).x;
-                const float w = sz + (tw > 0.0f ? ImGui::GetStyle().ItemInnerSpacing.x + tw : 0.0f);
-                ImDrawList* dl = ImGui::GetWindowDrawList();
-                const ImVec2 a(p.x - 3.0f, p.y - 2.0f);
-                const ImVec2 b(p.x + w + 3.0f, p.y + sz + 2.0f);
-                dl->AddRectFilled(a, b, OxCol(g_accent_color, 32), 4.0f);
-                dl->AddRect(a, b, OxCol(g_accent_color, 190), 4.0f, 0, 1.0f);
-            }
-            oxygen_checkbox(slabel, &state.config.allowed_slots[i]);
-        }
-        ImGui::Text("Active slot: %d", active_slot + 1);
-    }
+    // Slot activation is driven by the game itself: the bridge mod (tools/mc-bridge) is the
+    // only source for the selected slot, so there is no guessing to fall back on.
+    if (live)
+        ImGui::TextColored(ok_text_color(), "Minecraft link: live (slot %d)", active_slot + 1);
+    else
+        ImGui::TextDisabled("Minecraft link: not detected - install the bridge mod (see README)");
     end_panel();
 
     begin_panel("Audio", -1.0f, -1, OxIcon::Speaker);
@@ -570,7 +658,7 @@ void gui_run(GuiState& state) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
     glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
-    GLFWwindow* window = glfwCreateWindow(760, 640, "AeroClicker", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(760, 700, "AeroClicker", nullptr, nullptr);
     if (GLFWcursor* cur = glfwCreateStandardCursor(GLFW_ARROW_CURSOR))
         glfwSetCursor(window, cur);
     if (!window) { fprintf(stderr, "Failed to create GLFW window\n"); glfwTerminate(); return; }
@@ -715,19 +803,19 @@ void gui_run(GuiState& state) {
             ImGui::PushClipRect(ImVec2(0.0f, content_top), ImVec2((float)win_w, (float)win_h), true);
             switch (current_tab) {
                 case 0: draw_home_tab(state); break;
-                case 1: draw_side_tab(state.config.left); break;
-                case 2: draw_side_tab(state.config.right); break;
-                case 3: draw_macros_tab(state); break;
-                case 4: draw_settings_tab(state, profiles, selected_profile, profile_name_buf, status_msg, status_timer); break;
+                case 1: draw_settings_tab(state, profiles, selected_profile, profile_name_buf, status_msg, status_timer); break;
+                case 2: draw_side_tab(state.config.left, state.config.left_mode); break;
+                case 3: draw_side_tab(state.config.right, state.config.right_mode); break;
+                case 4: draw_macros_tab(state); break;
                 case 5: draw_analytics_tab(state, status_msg, status_timer); break;
             }
             ImGui::PopClipRect();
             oxygen_scrollbar(content_top);
 
-            // A single crisp separator under the floating bar. No shadow: just a subtle 1px
-            // rule. The window's own clip rect stops at the scrollbar, so push a full-window
-            // clip first; otherwise the rule would end exactly where the scrollbar begins.
-            {
+            // A single crisp separator under the floating bar, but only while the page actually
+            // scrolls: with no scrollbar there is nothing to separate the bar from, so the rule
+            // would just be a stray line across the top of the content.
+            if (ImGui::GetScrollMaxY() > 0.0f) {
                 const float s = ImGui::GetIO().DisplayFramebufferScale.x;
                 const float scale = s > 0.0f ? s : 1.0f;
                 const float ly = floorf(content_top * scale) / scale;
