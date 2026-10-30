@@ -48,8 +48,9 @@ See [Credits](#credits).
 - **Activation modes** — Toggle, Hold, and Mouse (arm with a key, then hold your real mouse button)
 - **Slot activation** — a Minecraft hotbar slot switches each clicker on and off, with a per-clicker set of slots (default: slot 1 left, slot 9 right); it reads the game through the [bridge mod](#minecraft-mod)
 - **Menu pause** — clicking stops while the game has a screen open (inventory, chat, chests, NPC menus) and resumes when it closes
-- **Left gate** — the left clicker can require a mob or player in the crosshair, a sword in hand, or both, so it does not fire while you mine or build; the default is target-in-crosshair
-- **Right gate** — the right clicker can require a placeable block in hand, so right-click actions never fire on a sword, a pearl or an empty hand
+- **Left gate** — the left clicker can require a mob or player in the crosshair, a sword in hand, or both, so it does not fire while you mine or build; the default is target-in-crosshair, and the target check reaches about one block past vanilla reach so an incoming player is a target before they can hit you
+- **Right gate** — the right clicker can require a placeable block in hand, so right-click actions never fire on a sword, a pearl or an empty hand; **Skip beds** is on by default, so holding a bed keeps it off
+- **Jump reset / Sprint reset** — optional and off by default: after your own left click, press Space with humanized timing, or break sprint with a W-, S- or Shift-tap for 1–3 ticks
 - **Macros** — optional, off by default: sequences of left clicks, right clicks, delays and slot switches, with looping and a keybind
 - **Headless mode** — run the clicker with no window
 
@@ -202,6 +203,7 @@ and an amber dot instead of a running CPS figure:
 | `cursor over app` | the pointer is over AeroClicker's own window |
 | `menu is open` | the game reports an open screen |
 | `held item is not a block` | **Right gate** is on and the held item cannot be placed |
+| `holding a bed` | **Right gate** and **Skip beds** are on and the held item is a bed |
 | `no mob or player in crosshair` | the left gate is set to target-in-crosshair (or sword + target) and you are not looking at a mob or player |
 | `no sword in hand` | the left gate is set to sword-only (or sword + mob/player) and the held item is not a sword |
 
@@ -222,16 +224,17 @@ Nothing falls back to key guessing: without the mod, slot activation and the men
 nothing, and both gates stay inert.
 
 The mod is read-only. Every 50 ms it writes the selected slot, whether a screen is open, whether
-the held item is a block, whether it is a sword and whether the crosshair is on a living entity
-(a mob or another player) to `$XDG_RUNTIME_DIR/aeroclicker-mc.state` as a single line:
+the held item is a block, whether it is a sword or a bed, and whether the crosshair is on a
+living entity (a mob or another player) to `$XDG_RUNTIME_DIR/aeroclicker-mc.state` as a single
+line:
 
 ```
-slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch ms> block=<0|1|-1> sword=<0|1|-1> target=<0|1|-1>
+slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch ms> block=<0|1|-1> sword=<0|1|-1> target=<0|1|-1> bed=<0|1|-1>
 ```
 
-`block`, `sword` and `target` are `1` for yes, `0` for no and `-1` for "this mod build cannot
-tell". They come after `ms` so an older app build still parses the prefix, and an older mod
-build's `player` field is read as `target`. Nothing is sent to the server and no input is
+`block`, `sword`, `target` and `bed` are `1` for yes, `0` for no and `-1` for "this mod build
+cannot tell". They come after `ms` so an older app build still parses the prefix, and an older
+mod build's `player` field is read as `target`. Nothing is sent to the server and no input is
 changed. When the file stops updating (the game closed or crashed), the app treats the game as
 gone after 2.5 seconds: slot activation stops and any clicker it switched on is switched off.
 
@@ -281,6 +284,11 @@ untouched. Mining, breaking and building work normally, and the clicker resumes 
 look at a mob or player. A physical press is only taken over when the clicker would actually act
 on it.
 
+The target check reaches about one block past vanilla attack reach. When a player runs at you,
+they become a target while still out of range, so clicking is already underway by the time they
+can be hit instead of starting a few milliseconds late. A block in the crosshair still wins: the
+gate pauses while you mine even if a mob is just behind the block.
+
 In Mouse mode this also works mid-press: press and hold while the crosshair is on a block, then
 move it onto a mob or player, and clicking starts without letting go of the button (the press
 went to the game, so the clicker joins in rather than taking it over). Releasing still stops it.
@@ -305,6 +313,31 @@ item. Without either it stays inert instead of blocking every right click. A phy
 is only taken over when the clicker would actually act on it; while the gate is blocking, the
 press and its release go to the game untouched.
 
+**Skip beds** sits under the right gate and is on by default. A bed is a placeable block, so
+without it a right clicker would place the bed the moment you hold one; with it the clicker
+pauses with `holding a bed` instead. The check is separate from the placeable check, so you can
+turn it off when you actually want a bed placed. It needs a bridge build that reports `bed`; an
+older jar leaves it inert.
+
+### Combat resets
+
+Settings has two optional panels below the Minecraft block, both off by default. They fire from
+your own left clicks — real presses and the clicker's generated ones — because the game's hit
+packets are not visible from outside. A cooldown stands in for hit confirmation.
+
+- **Jump reset** presses Space shortly after an attack, with a configurable chance, delay and
+  hold. By default it only fires while you are moving forward, respects the slot filter, and
+  stays quiet while a game screen is open.
+- **Sprint reset** briefly breaks sprint after an attack so the next hit deals full sprint
+  knockback. It can use **W-Tap** (release W), **S-Tap** (tap S) or **Shift-Tap** (tap Shift)
+  for 1–3 ticks. W-Tap needs to hide a W you are still holding, so it grabs the keyboard while
+  no key is down and forwards every key through a virtual keyboard; S-Tap and Shift-Tap do not
+  need the grab.
+
+Their toggle keys default to F9 and F10 and can be changed in the panels. The modules need
+`/dev/uinput` like the clickers do; if the virtual keyboard cannot be created, the panels say so
+and the rest of the app still works. Nothing here needs the bridge mod.
+
 ### Are the gates an anti-cheat feature?
 
 No. They are behaviour filters, not a guarantee of being undetected. Target-in-crosshair makes a
@@ -322,7 +355,7 @@ server's rules.
 | Tab | What it does |
 | --- | --- |
 | **Home** | Both clickers at a glance, with live CPS, click counts, on/off pills and the slot activation readout |
-| **Settings** | A mod-only **Minecraft** panel (link status, slot activation, menu pause, both gates) above a divider, then audio, profiles and accent — everything below the divider works without the mod |
+| **Settings** | A mod-only **Minecraft** panel (link status, slot activation, menu pause, both gates, bed skip) above a divider, then jump/sprint reset, audio, profiles and accent — everything below the divider works without the mod |
 | **Left / Right** | Presets, speed, distribution, humanization, hold timing, spikes, breaks, hotkey and activation mode |
 | **Macros** | Build macro sequences and bind them to a key |
 | **Analytics** | Measured CPS graphs, session statistics, recording and CSV export |
@@ -408,8 +441,9 @@ no Python or icon tooling is required. `tools/mc-bridge/` holds the Fabric mod s
 
 Changes in this fork include the rename to AeroClicker, the Dear ImGui 1.93.0 upgrade, the custom
 Oxygen/KDE-inspired interface, new Home/Settings/Macros/Analytics tabs, the pause/hotkey
-behaviour, the Minecraft bridge and gates, and assorted fixes. Thanks to everyone whose commits
-appear in the history.
+behaviour, the Minecraft bridge and gates, the Jump Reset and Sprint Reset modules ported from
+Ghast Clicker (see [commit 23d201b](https://github.com/Aubergine-UX/Ghast-Clicker/commit/23d201b971529b2cef929cb092f1d4c9f3b4c9c2)),
+and assorted fixes. Thanks to everyone whose commits appear in the history.
 
 ---
 

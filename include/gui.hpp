@@ -8,11 +8,16 @@
 #include <vector>
 #include <string>
 
+class Combat;
+
 struct GuiState {
     Config& config;
     Clicker& left;
     Clicker& right;
     MacroRunner macro_runner;
+    // Null when the virtual keyboard could not be created; the Combat panel then explains
+    // that the reset modules are unavailable instead of pretending the toggles work.
+    Combat* combat = nullptr;
 
     bool left_armed = false;
     bool right_armed = false;
@@ -30,6 +35,7 @@ struct GuiState {
     std::atomic<bool> mc_block_known{false};
     std::atomic<bool> mc_sword_known{false};
     std::atomic<bool> mc_target_known{false};
+    std::atomic<bool> mc_bed_known{false};
     // Written by the UI thread, read by the input thread: while the pointer is over the app,
     // physical button presses belong to the interface, not to the clicker's MOUSE arming.
     std::atomic<bool> ui_hovered{false};

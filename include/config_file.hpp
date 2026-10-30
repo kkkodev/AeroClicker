@@ -143,6 +143,37 @@ public:
         else if (match("hold_drift_tension")) p.hold_drift_tension = val;
     }
 
+    static bool read_combat_key(const char* key, double val, Config& cfg) {
+        JumpResetProfile& j = cfg.jump_reset;
+        SprintResetProfile& s = cfg.sprint_reset;
+        if (!strcmp(key, "jump_reset.chance")) j.chance = val;
+        else if (!strcmp(key, "jump_reset.delay_ms_mean")) j.delay_ms_mean = val;
+        else if (!strcmp(key, "jump_reset.delay_ms_stddev")) j.delay_ms_stddev = val;
+        else if (!strcmp(key, "jump_reset.delay_ms_min")) j.delay_ms_min = val;
+        else if (!strcmp(key, "jump_reset.delay_ms_max")) j.delay_ms_max = val;
+        else if (!strcmp(key, "jump_reset.hold_ms_mean")) j.hold_ms_mean = val;
+        else if (!strcmp(key, "jump_reset.hold_ms_stddev")) j.hold_ms_stddev = val;
+        else if (!strcmp(key, "jump_reset.hold_ms_min")) j.hold_ms_min = val;
+        else if (!strcmp(key, "jump_reset.hold_ms_max")) j.hold_ms_max = val;
+        else if (!strcmp(key, "jump_reset.cooldown_ms")) j.cooldown_ms = val;
+        else if (!strcmp(key, "jump_reset.forward_only")) j.forward_only = (int)val != 0;
+        else if (!strcmp(key, "jump_reset.allow_in_menu")) j.allow_in_menu = (int)val != 0;
+        else if (!strcmp(key, "jump_reset.use_slot_filter")) j.use_slot_filter = (int)val != 0;
+        else if (!strcmp(key, "sprint_reset.mode")) s.mode = static_cast<SprintResetMode>((int)val);
+        else if (!strcmp(key, "sprint_reset.chance")) s.chance = val;
+        else if (!strcmp(key, "sprint_reset.delay_ms_min")) s.delay_ms_min = val;
+        else if (!strcmp(key, "sprint_reset.delay_ms_max")) s.delay_ms_max = val;
+        else if (!strcmp(key, "sprint_reset.duration_ticks_mean")) s.duration_ticks_mean = val;
+        else if (!strcmp(key, "sprint_reset.duration_ticks_stddev")) s.duration_ticks_stddev = val;
+        else if (!strcmp(key, "sprint_reset.duration_ticks_min")) s.duration_ticks_min = val;
+        else if (!strcmp(key, "sprint_reset.duration_ticks_max")) s.duration_ticks_max = val;
+        else if (!strcmp(key, "sprint_reset.cooldown_ms")) s.cooldown_ms = val;
+        else if (!strcmp(key, "sprint_reset.forward_only")) s.forward_only = (int)val != 0;
+        else if (!strcmp(key, "sprint_reset.use_slot_filter")) s.use_slot_filter = (int)val != 0;
+        else return false;
+        return true;
+    }
+
     static bool load(Config& cfg, const std::string& filename = "config") {
         if (!valid_name(filename)) return false;
         std::string p = path() + "/" + filename;
@@ -171,6 +202,12 @@ public:
             else if (!strcmp(key, "slot_auto_enabled")) cfg.slot_auto_enabled = (int)val != 0;
             else if (!strcmp(key, "pause_in_menu")) cfg.pause_in_menu = (int)val != 0;
             else if (!strcmp(key, "right_placeable_only")) cfg.right_placeable_only = (int)val != 0;
+            else if (!strcmp(key, "right_gate_no_bed")) cfg.right_gate_no_bed = (int)val != 0;
+            else if (!strcmp(key, "key_jump_reset")) cfg.key_jump_reset = (int)val;
+            else if (!strcmp(key, "key_sprint_reset")) cfg.key_sprint_reset = (int)val;
+            else if (!strcmp(key, "jump_reset_enabled")) cfg.jump_reset_enabled = (int)val != 0;
+            else if (!strcmp(key, "sprint_reset_enabled")) cfg.sprint_reset_enabled = (int)val != 0;
+            else if (read_combat_key(key, val, cfg)) { }
             else if (!strcmp(key, "left_gate")) {
                 cfg.left_gate = (int)val;
                 if (cfg.left_gate < 0) cfg.left_gate = 0;
@@ -230,6 +267,10 @@ public:
                               ? legacy_to_current[cfg.accent_preset] : 0;
         }
         if (cfg.accent_preset < 0 || cfg.accent_preset > 6) cfg.accent_preset = 0;
+        // A hand-edited sprint mode must stay inside the enum.
+        int sm = static_cast<int>(cfg.sprint_reset.mode);
+        if (sm < 0 || sm > 2) sm = 0;
+        cfg.sprint_reset.mode = static_cast<SprintResetMode>(sm);
         fclose(f);
         return true;
     }
@@ -251,6 +292,8 @@ public:
 
         fprintf(f, "key_left %d\n", cfg.key_left);
         fprintf(f, "key_right %d\n", cfg.key_right);
+        fprintf(f, "key_jump_reset %d\n", cfg.key_jump_reset);
+        fprintf(f, "key_sprint_reset %d\n", cfg.key_sprint_reset);
         fprintf(f, "accent_preset %d\n", cfg.accent_preset);
         fprintf(f, "accent_order 1\n");
         fprintf(f, "accent_r %f\n", cfg.accent_r);
@@ -261,7 +304,37 @@ public:
         fprintf(f, "slot_auto_enabled %d\n", cfg.slot_auto_enabled ? 1 : 0);
         fprintf(f, "pause_in_menu %d\n", cfg.pause_in_menu ? 1 : 0);
         fprintf(f, "right_placeable_only %d\n", cfg.right_placeable_only ? 1 : 0);
+        fprintf(f, "right_gate_no_bed %d\n", cfg.right_gate_no_bed ? 1 : 0);
         fprintf(f, "left_gate %d\n", cfg.left_gate);
+
+        fprintf(f, "jump_reset_enabled %d\n", cfg.jump_reset_enabled ? 1 : 0);
+        fprintf(f, "sprint_reset_enabled %d\n", cfg.sprint_reset_enabled ? 1 : 0);
+        const JumpResetProfile& j = cfg.jump_reset;
+        fprintf(f, "jump_reset.chance %g\n", j.chance);
+        fprintf(f, "jump_reset.delay_ms_mean %g\n", j.delay_ms_mean);
+        fprintf(f, "jump_reset.delay_ms_stddev %g\n", j.delay_ms_stddev);
+        fprintf(f, "jump_reset.delay_ms_min %g\n", j.delay_ms_min);
+        fprintf(f, "jump_reset.delay_ms_max %g\n", j.delay_ms_max);
+        fprintf(f, "jump_reset.hold_ms_mean %g\n", j.hold_ms_mean);
+        fprintf(f, "jump_reset.hold_ms_stddev %g\n", j.hold_ms_stddev);
+        fprintf(f, "jump_reset.hold_ms_min %g\n", j.hold_ms_min);
+        fprintf(f, "jump_reset.hold_ms_max %g\n", j.hold_ms_max);
+        fprintf(f, "jump_reset.cooldown_ms %g\n", j.cooldown_ms);
+        fprintf(f, "jump_reset.forward_only %d\n", j.forward_only ? 1 : 0);
+        fprintf(f, "jump_reset.allow_in_menu %d\n", j.allow_in_menu ? 1 : 0);
+        fprintf(f, "jump_reset.use_slot_filter %d\n", j.use_slot_filter ? 1 : 0);
+        const SprintResetProfile& s = cfg.sprint_reset;
+        fprintf(f, "sprint_reset.mode %d\n", static_cast<int>(s.mode));
+        fprintf(f, "sprint_reset.chance %g\n", s.chance);
+        fprintf(f, "sprint_reset.delay_ms_min %g\n", s.delay_ms_min);
+        fprintf(f, "sprint_reset.delay_ms_max %g\n", s.delay_ms_max);
+        fprintf(f, "sprint_reset.duration_ticks_mean %g\n", s.duration_ticks_mean);
+        fprintf(f, "sprint_reset.duration_ticks_stddev %g\n", s.duration_ticks_stddev);
+        fprintf(f, "sprint_reset.duration_ticks_min %g\n", s.duration_ticks_min);
+        fprintf(f, "sprint_reset.duration_ticks_max %g\n", s.duration_ticks_max);
+        fprintf(f, "sprint_reset.cooldown_ms %g\n", s.cooldown_ms);
+        fprintf(f, "sprint_reset.forward_only %d\n", s.forward_only ? 1 : 0);
+        fprintf(f, "sprint_reset.use_slot_filter %d\n", s.use_slot_filter ? 1 : 0);
         for (int i = 0; i < 9; i++)
             fprintf(f, "left_slot_%d %d\nright_slot_%d %d\n",
                     i, cfg.left_slots[i] ? 1 : 0, i, cfg.right_slots[i] ? 1 : 0);

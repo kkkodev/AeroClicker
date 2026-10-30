@@ -1,6 +1,7 @@
 #include "audio.hpp"
 #include "clicker.hpp"
 #include "clicker_config.hpp"
+#include "combat.hpp"
 #include "config_file.hpp"
 #include "gui.hpp"
 #include "mc_link.hpp"
@@ -58,7 +59,8 @@ static bool is_mouse_button(int code) {
 //  - a hotkey is bound to a mouse button. Without this, binding "Mouse M" as a toggle only
 //    ever worked in Mouse activation mode, because that was the only case the device was
 //    opened at all.
-static bool mouse_read_wanted(const Config& c) {
+static bool mouse_read_wanted(const Config& c, bool combat_active) {
+    if (combat_active) return true;
     if (c.left_mode == ActivationMode::MOUSE || c.right_mode == ActivationMode::MOUSE) return true;
     if (is_mouse_button(c.key_left) || is_mouse_button(c.key_right)) return true;
     for (int m = 0; m < MAX_MACROS; m++)
@@ -152,8 +154,43 @@ static int find_device(const char* label, bool want_mouse) {
     return -1;
 }
 
+static bool any_key_down(int fd) {
+    unsigned char keys[KEY_MAX / 8 + 1] = {};
+    if (ioctl(fd, EVIOCGKEY(sizeof(keys)), keys) < 0) return false;
+    for (unsigned char b : keys)
+        if (b) return true;
+    return false;
+}
+
+// Seeds the virtual keyboard's idea of which physical keys are held. Called when the device is
+// opened and after a replug, so a key that was already down is known before W-Tap masks it.
+static void sync_key_state(int fd, VirtualKeyboard& kb) {
+    unsigned char keys[KEY_MAX / 8 + 1] = {};
+    ioctl(fd, EVIOCGKEY(sizeof(keys)), keys);
+    bool down[UInputKeyboard::MAX_CODE + 1] = {};
+    for (int i = 0; i <= UInputKeyboard::MAX_CODE; i++)
+        down[i] = keys[i / 8] & (1 << (i % 8));
+    kb.sync_physical(down);
+}
+
+// Tells the combat modules that an attack happened. A press over AeroClicker's own window is
+// an interface click, not an attack; an open game screen is passed through so the modules can
+// apply their own menu filter.
+static void notify_attack(Config& config, GuiState& gui_state, Combat* combat) {
+    if (!combat || gui_state.ui_hovered.load()) return;
+    const int slot = gui_state.active_slot.load();
+    const bool slot_blocked = config.slot_auto_enabled &&
+                              (slot < 0 || !config.left_slots[slot]);
+    combat->on_attack({gui_state.in_menu.load(), slot_blocked});
+}
+
+static void beep(bool on) {
+    if (on) Audio::beep_on();
+    else Audio::beep_off();
+}
+
 static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_clicker,
-                          UInputDevice& device, GuiState& gui_state) {
+                          UInputDevice& device, Combat* combat, GuiState& gui_state) {
     // A device that was opened at startup can vanish: a keyboard swapped or replugged, a mouse
     // re-docked, the whole input stack restarting with the compositor. A dead fd never reports
     // POLLIN again, so without re-acquiring it the hotkeys or the mouse stayed dead until the
@@ -179,10 +216,16 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
     bool mouse_seen = false;
     auto next_mouse_scan = Clock::now();
 
+    // The keyboard is grabbed only while Sprint Reset is in W-Tap mode; it is what lets the
+    // module release a W you are still physically holding.
+    bool kb_grabbed = false;
+    bool last_jump_enabled = false;
+    bool last_sprint_enabled = false;
+
     // Keeps the mouse device/grab in sync with the current modes and keybinds: at startup, when
     // they are changed in the UI, and after the device is replugged.
     auto sync_mouse_device = [&]() {
-        const bool want_read = mouse_read_wanted(config);
+        const bool want_read = mouse_read_wanted(config, combat && combat->any_enabled());
         const bool want_grab = mouse_grab_wanted(config);
 
         static bool warned_no_mouse = false;
@@ -335,6 +378,10 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
         // keyboard acquisition below and sync_mouse_device() then open the new node.
         if (kb_fd >= 0 && !device_alive(kb_fd)) {
             fprintf(stderr, "  Keyboard disconnected, waiting for it to come back\n");
+            if (kb_grabbed) {
+                if (combat) combat->keyboard.set_forwarding(false);
+                kb_grabbed = false;
+            }
             close(kb_fd);
             kb_fd = -1;
             next_kb_scan = Clock::now() + RESCAN_INTERVAL;
@@ -360,6 +407,7 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                 if (kb_fd >= 0) {
                     if (kb_seen) printf("  Keyboard reconnected\n");
                     kb_seen = true;
+                    if (combat) sync_key_state(kb_fd, combat->keyboard);
                 } else {
                     next_kb_scan = now + RESCAN_INTERVAL;
                     if (!warned_no_kb) {
@@ -372,16 +420,55 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
             }
         }
         sync_mouse_device();
+
+        // Mirror the Settings toggles into the modules. The F9/F10 hotkeys write the config
+        // too, so this is the single place the live state follows.
+        if (combat) {
+            if (config.jump_reset_enabled != last_jump_enabled) {
+                last_jump_enabled = config.jump_reset_enabled;
+                combat->jump.set_enabled(last_jump_enabled);
+            }
+            if (config.sprint_reset_enabled != last_sprint_enabled) {
+                last_sprint_enabled = config.sprint_reset_enabled;
+                combat->sprint.set_enabled(last_sprint_enabled);
+            }
+
+            // W-Tap has to hide a W that is physically held, so the keyboard is grabbed and
+            // every key is forwarded through the virtual device. Only switch while nothing is
+            // down: a key pressed on one side of the grab and released on the other would stay
+            // stuck in the compositor.
+            const bool want_kb_grab = combat->sprint.needs_keyboard_grab();
+            if (kb_fd >= 0 && want_kb_grab != kb_grabbed && !any_key_down(kb_fd)) {
+                if (want_kb_grab) {
+                    if (ioctl(kb_fd, EVIOCGRAB, 1) == 0) {
+                        if (any_key_down(kb_fd)) {
+                            ioctl(kb_fd, EVIOCGRAB, 0);
+                        } else {
+                            kb_grabbed = true;
+                            combat->keyboard.set_forwarding(true);
+                            printf("  Keyboard grabbed for W-Tap\n");
+                        }
+                    }
+                } else {
+                    combat->keyboard.set_forwarding(false);
+                    ioctl(kb_fd, EVIOCGRAB, 0);
+                    kb_grabbed = false;
+                    printf("  Keyboard released\n");
+                }
+            }
+        }
+
         // The bridge mod, when it runs, is ground truth: the slot survives the wheel and
         // pick-block, and "in menu" covers chat, chests and NPC dialogs.
         int mc_slot = -1;
         bool mc_screen = false;
-        int mc_block = -1, mc_sword = -1, mc_target = -1;
-        mc_live = McLink::poll(mc_slot, mc_screen, mc_block, mc_sword, mc_target);
+        int mc_block = -1, mc_sword = -1, mc_target = -1, mc_bed = -1;
+        mc_live = McLink::poll(mc_slot, mc_screen, mc_block, mc_sword, mc_target, mc_bed);
         gui_state.mc_linked = mc_live;
         gui_state.mc_block_known = mc_live && mc_block >= 0;
         gui_state.mc_sword_known = mc_live && mc_sword >= 0;
         gui_state.mc_target_known = mc_live && mc_target >= 0;
+        gui_state.mc_bed_known = mc_live && mc_bed >= 0;
         if (mc_live) {
             if (mc_slot >= 0) gui_state.active_slot = mc_slot;
             // Edge-triggered: an explicit press (hotkey or pill) may un-pause while a screen is
@@ -415,6 +502,9 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
         // than blocking every click. With no link at all they are inert too.
         right_clicker.set_pause(Clicker::PAUSE_HELD_ITEM,
                                 config.right_placeable_only && mc_live && mc_block == 0);
+        right_clicker.set_pause(Clicker::PAUSE_HELD_BED,
+                                config.right_placeable_only && config.right_gate_no_bed &&
+                                mc_live && mc_bed == 1);
         const int left_gate = config.left_gate;
         left_clicker.set_pause(Clicker::PAUSE_NO_SWORD,
                                mc_live && (left_gate & 1) && mc_sword == 0);
@@ -455,15 +545,34 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
             while (read(kb_fd, &ev, sizeof(ev)) == sizeof(ev)) {
                 if (ev.type != EV_KEY) continue;
 
+                // Keep the physical-key mirror current and, while W-Tap has the keyboard
+                // grabbed, forward the key through the virtual device.
+                if (combat) combat->keyboard.on_physical(ev.code, ev.value);
+
                 // The two clickers may share one key. Test each side separately: an else-if
                 // chain would give the key to the left clicker only and the right one would
                 // never toggle.
                 const bool left_key  = ev.code == static_cast<unsigned>(config.key_left);
                 const bool right_key = ev.code == static_cast<unsigned>(config.key_right);
+                const bool jump_key  = ev.code == static_cast<unsigned>(config.key_jump_reset);
+                const bool sprint_key = ev.code == static_cast<unsigned>(config.key_sprint_reset);
                 if (left_key)  handle_clicker_key(true, ev.value);
                 if (right_key) handle_clicker_key(false, ev.value);
-                // A key that belongs to a clicker is not also a macro key.
-                if (!left_key && !right_key && ev.value == 1 &&
+                // Combat reset toggles. They write the config so the Settings checkbox and the
+                // next config save agree with the live state.
+                if (combat && ev.value == 1) {
+                    if (jump_key) {
+                        config.jump_reset_enabled = !config.jump_reset_enabled;
+                        combat->jump.set_enabled(config.jump_reset_enabled);
+                        if (config.audio_enabled) beep(config.jump_reset_enabled);
+                    } else if (sprint_key) {
+                        config.sprint_reset_enabled = !config.sprint_reset_enabled;
+                        combat->sprint.set_enabled(config.sprint_reset_enabled);
+                        if (config.audio_enabled) beep(config.sprint_reset_enabled);
+                    }
+                }
+                // A key that belongs to a clicker or a combat reset is not also a macro key.
+                if (!left_key && !right_key && !jump_key && !sprint_key && ev.value == 1 &&
                     config.macros_enabled && !gui_state.in_menu) {
                     for (int m = 0; m < MAX_MACROS; m++) {
                         if (config.macros[m].key_bind > 0 &&
@@ -490,8 +599,13 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
 
                     // Hotkey-only session (device not grabbed): the compositor already
                     // delivers these events, so never forward or re-inject them — doing so
-                    // would double every click.
-                    if (!mouse_grabbed) continue;
+                    // would double every click. They are still real attacks, though, so the
+                    // reset modules hear about them.
+                    if (!mouse_grabbed) {
+                        if (ev.code == BTN_LEFT && ev.value == 1 && !is_bound_toggle)
+                            notify_attack(config, gui_state, combat);
+                        continue;
+                    }
 
                     if (!is_bound_toggle) {
                         // While the pointer is over AeroClicker the button belongs to the
@@ -516,6 +630,9 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                                 if (mouse_left_owned) left_clicker.set_enabled_gated(true);
                                 else {
                                     device.click(BTN_LEFT, 1);
+                                    // The press reaches the game, so it is a real attack even
+                                    // though the clicker did not take it over.
+                                    notify_attack(config, gui_state, combat);
                                     // Only a gate may be waited out. A press forwarded because a
                                     // menu was open or the pointer was over the app must not
                                     // begin clicking by itself later.
@@ -564,7 +681,8 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                                         gui_state.right_armed &&
                                         !(pauses & (Clicker::PAUSE_INVENTORY |
                                                     Clicker::PAUSE_POINTER)) &&
-                                        (pauses & Clicker::PAUSE_HELD_ITEM);
+                                        (pauses & (Clicker::PAUSE_HELD_ITEM |
+                                                   Clicker::PAUSE_HELD_BED));
                                 }
                             } else if (ev.value == 0) {
                                 mouse_right_held = false;
@@ -599,6 +717,10 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
     if (mouse_fd >= 0) {
         if (mouse_grabbed) ioctl(mouse_fd, EVIOCGRAB, 0);
         close(mouse_fd);
+    }
+    if (kb_grabbed) {
+        if (combat) combat->keyboard.set_forwarding(false);
+        ioctl(kb_fd, EVIOCGRAB, 0);
     }
     if (kb_fd >= 0) close(kb_fd);
 }
@@ -636,6 +758,10 @@ int main(int argc, char* argv[]) {
             config.key_left = atoi(argv[++i]);
         else if (strcmp(argv[i], "--rkey") == 0 && i + 1 < argc)
             config.key_right = atoi(argv[++i]);
+        else if (strcmp(argv[i], "--jkey") == 0 && i + 1 < argc)
+            config.key_jump_reset = atoi(argv[++i]);
+        else if (strcmp(argv[i], "--skey") == 0 && i + 1 < argc)
+            config.key_sprint_reset = atoi(argv[++i]);
         else if (strcmp(argv[i], "--hold") == 0) {
             config.left_mode = ActivationMode::HOLD;
             config.right_mode = ActivationMode::HOLD;
@@ -664,6 +790,8 @@ int main(int argc, char* argv[]) {
             printf("  --rcps <n>     Right CPS mean (default: %.1f)\n", config.right.cps_mean);
             printf("  --lkey <code>  Left toggle key (default: %d)\n", config.key_left);
             printf("  --rkey <code>  Right toggle key (default: %d)\n", config.key_right);
+            printf("  --jkey <code>  Jump reset toggle key (default: %d)\n", config.key_jump_reset);
+            printf("  --skey <code>  Sprint reset toggle key (default: %d)\n", config.key_sprint_reset);
             printf("  --toggle       Toggle mode\n");
             printf("  --hold         Hold mode\n");
             printf("  --mouse        Mouse mode (default; arm with key, hold mouse to click)\n");
@@ -693,6 +821,16 @@ int main(int argc, char* argv[]) {
     UInputDevice& device = *device_holder;
     printf("  Virtual mouse device created\n");
 
+    // The combat resets need a second virtual device (a keyboard). A failure here must not take
+    // the clickers down with it: the Settings panel says the resets are unavailable instead.
+    std::unique_ptr<Combat> combat;
+    try {
+        combat = std::make_unique<Combat>(config);
+        printf("  Virtual keyboard device created (combat resets)\n");
+    } catch (const std::exception& e) {
+        fprintf(stderr, "  Warning: combat resets unavailable: %s\n", e.what());
+    }
+
     Clicker left_clicker(config.left, device);
     Clicker right_clicker(config.right, device);
 
@@ -704,18 +842,35 @@ int main(int argc, char* argv[]) {
     signal(SIGPIPE, SIG_IGN);
 
     GuiState gui_state(config, left_clicker, right_clicker, device);
+    gui_state.combat = combat.get();
+
+    // A generated click is our attack signal. Physical presses are reported by the input
+    // thread; a press the clicker took over never reaches the game, so its generated clicks
+    // are the only attacks to report. The callback runs on the clicker thread.
+    if (combat) {
+        left_clicker.set_on_press([&config, &gui_state, combat_ptr = combat.get()] {
+            if (gui_state.ui_hovered.load()) return;
+            const int slot = gui_state.active_slot.load();
+            const bool slot_blocked = config.slot_auto_enabled &&
+                                      (slot < 0 || !config.left_slots[slot]);
+            combat_ptr->on_attack({gui_state.in_menu.load(), slot_blocked});
+        });
+    }
 
     std::thread input_thr(input_thread, std::ref(config), std::ref(left_clicker),
-                          std::ref(right_clicker), std::ref(device), std::ref(gui_state));
+                          std::ref(right_clicker), std::ref(device), combat.get(),
+                          std::ref(gui_state));
 
     if (headless) {
         printf("  Running headless (Ctrl+C to quit)\n\n");
         while (g_running) {
-            printf("\r  L: %-3s %5.1f cps (%u)  |  R: %-3s %5.1f cps (%u)   ",
+            printf("\r  L: %-3s %5.1f cps (%u)  |  R: %-3s %5.1f cps (%u)  |  J: %-3s S: %-3s   ",
                    left_clicker.is_enabled() ? "ON" : "OFF",
                    left_clicker.tracker().avg_cps(), left_clicker.click_count(),
                    right_clicker.is_enabled() ? "ON" : "OFF",
-                   right_clicker.tracker().avg_cps(), right_clicker.click_count());
+                   right_clicker.tracker().avg_cps(), right_clicker.click_count(),
+                   combat ? (config.jump_reset_enabled ? "ON" : "OFF") : "--",
+                   combat ? (config.sprint_reset_enabled ? "ON" : "OFF") : "--");
             fflush(stdout);
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
         }
@@ -728,6 +883,12 @@ int main(int argc, char* argv[]) {
     right_clicker.set_enabled(false);
 
     if (input_thr.joinable()) input_thr.join();
+
+    // The clicker worker outlives this scope's GUI state, and its on_press callback reads that
+    // state. Clear it and join the worker before the destructors run.
+    left_clicker.set_on_press({});
+    left_clicker.stop();
+    right_clicker.stop();
 
     printf("\n  Stopped.\n");
     return 0;

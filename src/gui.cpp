@@ -106,6 +106,7 @@ static ActivationMode idx_to_mode(int i) { return i == 0 ? ActivationMode::TOGGL
 static const char* pause_reason_text(uint32_t mask) {
     if (mask & Clicker::PAUSE_INVENTORY) return "menu is open";
     if (mask & Clicker::PAUSE_POINTER)   return "cursor over app";
+    if (mask & Clicker::PAUSE_HELD_BED)  return "holding a bed";
     if (mask & Clicker::PAUSE_HELD_ITEM) return "held item is not a block";
     if (mask & Clicker::PAUSE_NO_TARGET) return "no mob or player in crosshair";
     if (mask & Clicker::PAUSE_NO_SWORD)  return "no sword in hand";
@@ -537,9 +538,70 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
         ImGui::TextDisabled("This mod build cannot report the held item");
     else
         ImGui::TextDisabled("Only right-clicks while holding a placeable block");
+
+    ImGui::BeginDisabled(!state.config.right_placeable_only);
+    row_check("Skip beds", &state.config.right_gate_no_bed);
+    ImGui::EndDisabled();
+    if (!state.config.right_placeable_only)
+        ImGui::TextDisabled("Beds are skipped only while the right gate is on");
+    else if (live && state.config.right_gate_no_bed && !state.mc_bed_known.load())
+        ImGui::TextDisabled("This mod build cannot report beds");
+    else
+        ImGui::TextDisabled("The right clicker stays off while a bed is held");
     end_panel();
 
     section_divider("Everything below works without Minecraft");
+
+    begin_panel("Jump reset", -1.0f, -1, OxIcon::Pulse);
+    if (!state.combat)
+        ImGui::TextDisabled("Unavailable: the virtual keyboard could not be created");
+    else
+        ImGui::TextDisabled("Presses Space shortly after your own left click");
+    row_check("Enable Jump Reset", &state.config.jump_reset_enabled);
+    keybind_row("Toggle key", state.config.key_jump_reset);
+    if (state.config.jump_reset_enabled) {
+        JumpResetProfile& j = state.config.jump_reset;
+        row_slider("Chance", &j.chance, 0.0, 1.0, "%.2f");
+        row_slider("Delay Mean (ms)", &j.delay_ms_mean, 0.0, 100.0, "%.0f");
+        row_slider("Delay StdDev (ms)", &j.delay_ms_stddev, 0.0, 50.0, "%.0f");
+        row_slider("Delay Min (ms)", &j.delay_ms_min, 0.0, 100.0, "%.0f");
+        row_slider("Delay Max (ms)", &j.delay_ms_max, 0.0, 200.0, "%.0f");
+        row_slider("Hold Mean (ms)", &j.hold_ms_mean, 10.0, 200.0, "%.0f");
+        row_slider("Hold StdDev (ms)", &j.hold_ms_stddev, 0.0, 50.0, "%.0f");
+        row_slider("Hold Min (ms)", &j.hold_ms_min, 10.0, 150.0, "%.0f");
+        row_slider("Hold Max (ms)", &j.hold_ms_max, 20.0, 300.0, "%.0f");
+        row_slider("Cooldown (ms)", &j.cooldown_ms, 0.0, 2000.0, "%.0f");
+        row_check("Only while moving forward", &j.forward_only);
+        row_check("Allow in menus", &j.allow_in_menu);
+        row_check("Respect slot filter", &j.use_slot_filter);
+    }
+    end_panel();
+
+    begin_panel("Sprint reset", -1.0f, -1, OxIcon::Keyboard);
+    if (!state.combat)
+        ImGui::TextDisabled("Unavailable: the virtual keyboard could not be created");
+    else
+        ImGui::TextDisabled("Breaks sprint for 1-3 ticks after your own left click");
+    row_check("Enable Sprint Reset", &state.config.sprint_reset_enabled);
+    keybind_row("Toggle key", state.config.key_sprint_reset);
+    if (state.config.sprint_reset_enabled) {
+        SprintResetProfile& s = state.config.sprint_reset;
+        int sm = static_cast<int>(s.mode);
+        if (row_combo("Mode", &sm, "W-Tap\0S-Tap\0Shift-Tap\0"))
+            s.mode = static_cast<SprintResetMode>(sm);
+        row_slider("Chance", &s.chance, 0.0, 1.0, "%.2f");
+        row_slider("Delay Min (ms)", &s.delay_ms_min, 0.0, 100.0, "%.0f");
+        row_slider("Delay Max (ms)", &s.delay_ms_max, 0.0, 200.0, "%.0f");
+        row_slider("Ticks Mean", &s.duration_ticks_mean, 1.0, 3.0, "%.2f");
+        row_slider("Ticks StdDev", &s.duration_ticks_stddev, 0.0, 1.0, "%.2f");
+        row_slider("Ticks Min", &s.duration_ticks_min, 1.0, 3.0, "%.0f");
+        row_slider("Ticks Max", &s.duration_ticks_max, 1.0, 3.0, "%.0f");
+        row_slider("Cooldown (ms)", &s.cooldown_ms, 0.0, 2000.0, "%.0f");
+        row_check("Only while moving forward", &s.forward_only);
+        row_check("Respect slot filter", &s.use_slot_filter);
+        ImGui::TextDisabled("W-Tap grabs the keyboard only while no key is held");
+    }
+    end_panel();
 
     begin_panel("Audio", -1.0f, -1, OxIcon::Speaker);
     row_check("Toggle Sound", &state.config.audio_enabled);

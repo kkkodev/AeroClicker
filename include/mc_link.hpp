@@ -13,12 +13,13 @@
 // writing one line to the session runtime directory, which both processes can reach:
 //
 //     slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch milliseconds>
-//     block=<0|1|-1> sword=<0|1|-1> target=<0|1|-1>
+//     block=<0|1|-1> sword=<0|1|-1> target=<0|1|-1> bed=<0|1|-1>
 //
 // `block` says whether the held item is a block (placeable), `sword` whether it is a sword,
-// and `target` whether the crosshair is on a living entity (a mob or another player). They are
-// last so a build without them still parses as a prefix, and -1 means "this mod build cannot
-// tell". Older mod builds call the last field `player`; it is read as `target` too.
+// `target` whether the crosshair is on a living entity (a mob or another player), and `bed`
+// whether the held item is a bed. They are last so a build without them still parses as a
+// prefix, and -1 means "this mod build cannot tell". Older mod builds call the target field
+// `player`; it is read as `target` too.
 // Reading is the whole contract: nothing is sent to the server and no input is touched.
 namespace McLink {
 
@@ -44,11 +45,12 @@ inline long long now_ms() {
 
 // Returns true (and fills the fields) only while the file is fresh. block is 1 when the held
 // item is a block, sword is 1 when it is a sword, target is 1 when the crosshair is on a living
-// entity (mob or player), and -1 means the running mod build does not report that field.
-inline bool poll(int& slot, bool& screen, int& block, int& sword, int& target) {
+// entity (mob or player), bed is 1 when the held item is a bed, and -1 means the running mod
+// build does not report that field.
+inline bool poll(int& slot, bool& screen, int& block, int& sword, int& target, int& bed) {
     FILE* f = fopen(path(), "r");
     if (!f) return false;
-    char line[160] = "";
+    char line[192] = "";
     const bool got = fgets(line, sizeof(line), f) != nullptr;
     fclose(f);
     if (!got) return false;
@@ -70,11 +72,15 @@ inline bool poll(int& slot, bool& screen, int& block, int& sword, int& target) {
     if (const char* p = strstr(line, " target=")) sscanf(p, " target=%d", &tgt);
     else if (const char* p = strstr(line, " player=")) sscanf(p, " player=%d", &tgt);
 
+    int bd = -1;
+    if (const char* p = strstr(line, " bed=")) sscanf(p, " bed=%d", &bd);
+
     slot = s;
     screen = sc != 0;
     block = blk;
     sword = swd;
     target = tgt;
+    bed = bd;
     return true;
 }
 

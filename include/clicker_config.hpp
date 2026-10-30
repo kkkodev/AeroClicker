@@ -7,6 +7,7 @@ enum class ActivationMode { TOGGLE, HOLD, MOUSE };
 // it had when POISSON occupied 1, so existing config files load unchanged; 1 is retired.
 enum class DistributionType { GAUSSIAN = 0, UNIFORM = 2 };
 enum class MacroAction { LEFT_CLICK, RIGHT_CLICK, DELAY, SWITCH_SLOT };
+enum class SprintResetMode { W_TAP, S_TAP, SHIFT_TAP };
 
 // The defaults are the "Jitter" preset below, so a fresh config starts on it for both
 // clickers instead of on a separate hand-tuned profile.
@@ -163,6 +164,42 @@ struct Macro {
     int key_bind = 0;
 };
 
+// Both combat modules fire from our own left clicks, real or generated. The game's own hit
+// packets are not visible from outside, so a cooldown stands in for hit confirmation.
+struct JumpResetProfile {
+    double chance = 0.85;
+    double delay_ms_mean = 15.0;
+    double delay_ms_stddev = 10.0;
+    double delay_ms_min = 5.0;
+    double delay_ms_max = 50.0;
+
+    double hold_ms_mean = 75.0;
+    double hold_ms_stddev = 15.0;
+    double hold_ms_min = 50.0;
+    double hold_ms_max = 100.0;
+
+    double cooldown_ms = 600.0;
+    bool forward_only = true;
+    bool allow_in_menu = false;
+    bool use_slot_filter = true;
+};
+
+struct SprintResetProfile {
+    SprintResetMode mode = SprintResetMode::W_TAP;
+    double chance = 1.0;
+    double delay_ms_min = 0.0;
+    double delay_ms_max = 0.0;
+
+    double duration_ticks_mean = 1.0;
+    double duration_ticks_stddev = 0.35;
+    double duration_ticks_min = 1.0;
+    double duration_ticks_max = 2.0;
+
+    double cooldown_ms = 450.0;
+    bool forward_only = true;
+    bool use_slot_filter = true;
+};
+
 struct Config {
     ClickerProfile left;
     ClickerProfile right;
@@ -172,6 +209,8 @@ struct Config {
 
     int key_left = KEY_F6;
     int key_right = KEY_F7;
+    int key_jump_reset = KEY_F9;
+    int key_sprint_reset = KEY_F10;
 
     int accent_preset = 0;   // 0 = Follow KDE (Colors:Selection), 1 Blue, 2 Red, 3 Green, 4 Purple, 5 Orange, 6 Custom
     float accent_r = 0.24f;
@@ -189,10 +228,19 @@ struct Config {
     // Right clicker: click only while the held item is a block. The bridge mod reports the
     // held item, so this is inert without it (and with an older mod build).
     bool right_placeable_only = false;
-    // Left clicker, GhostTap-style gate. Value 1 = a sword must be held, 2 = another player
+    // Beds are placeable blocks, but a right clicker holding one is usually a mistake (bed
+    // PvP, accidental placement). On by default so the right gate skips them.
+    bool right_gate_no_bed = true;
+    // Left clicker, GhostTap-style gate. Value 1 = a sword must be held, 2 = a living entity
     // must be in the crosshair, 3 = both. 0 is off. Inert without the bridge mod.
-    // Default: only click at players, which is what keeps a clicker from firing at blocks.
+    // Default: only click at targets, which is what keeps a clicker from firing at blocks.
     int left_gate = 2;
+
+    // Combat modules: off until the user turns them on. The profiles above hold their timing.
+    bool jump_reset_enabled = false;
+    bool sprint_reset_enabled = false;
+    JumpResetProfile jump_reset;
+    SprintResetProfile sprint_reset;
 
     bool audio_enabled = true;
     bool macros_enabled = false;
