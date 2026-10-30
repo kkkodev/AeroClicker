@@ -5,7 +5,7 @@
 <h1 align="center">AeroClicker</h1>
 
 <p align="center">
-  A humanized auto-clicker for Linux — Wayland and X11 — with a native KDE look.
+  A humanized auto-clicker for Linux with a custom Oxygen/KDE-inspired interface.
 </p>
 
 <p align="center">
@@ -15,14 +15,12 @@
 
 ---
 
-AeroClicker is a standalone Linux auto-clicker with deep click humanization: Gaussian and
-uniform CPS distributions, random spikes and stutters, variable hold times, rhythm drift,
-double-clicks and fatigue breaks. It runs natively on Wayland (and X11), works with any
-application, and never touches the applications themselves.
+AeroClicker is a standalone auto-clicker for Wayland and X11. It injects clicks through
+`/dev/uinput` and reads your keyboard and mouse through evdev, so it works with any application
+and never touches the applications themselves.
 
-Clicks are injected through `/dev/uinput`, and keyboard and mouse input is read through evdev.
-The interface follows your KDE colour scheme (light or dark) and uses its own Oxygen-style
-widget set: gradients, 1 px borders, hover states and themed analytics graphs.
+The interface is custom: it borrows the Oxygen/KDE look — gradients, 1 px borders, hover states
+and themed graphs — and follows your KDE colour scheme, light or dark.
 
 AeroClicker is a fork of [Aubergine-UX's Ghast Clicker](https://github.com/Aubergine-UX/Ghast-Clicker),
 which in turn ports the humanization engine from [IcySnex/GhostTap](https://github.com/IcySnex/GhostTap).
@@ -33,8 +31,8 @@ See [Credits](#credits).
 ## Contents
 
 [Features](#features) · [Requirements](#requirements) · [Install](#install) ·
-[Usage](#usage) · [Interface](#interface) · [Files](#files) ·
-[Troubleshooting](#troubleshooting) · [Development](#development) · [Credits](#credits)
+[Usage](#usage) · [Minecraft mod](#minecraft-mod) · [Interface](#interface) ·
+[Files](#files) · [Troubleshooting](#troubleshooting) · [Credits](#credits)
 
 ---
 
@@ -42,49 +40,46 @@ See [Credits](#credits).
 
 **Clicking**
 - **Two independent clickers** — separate left/right CPS, humanization, activation mode and keybind
-- **Humanization** — Gaussian and uniform timing; spike and stutter events; heavy holds; grip drift that wanders the hold time over a session; rhythm volatility and tension; MOUSE-mode start delay; fatigue breaks
+- **Humanization** — Gaussian and uniform timing, spikes and stutters, heavy holds, grip drift, rhythm volatility and tension, a start delay in Mouse mode, and fatigue breaks
 - **Presets** — Normal, Jitter (the default), Butterfly and Drag Click, ready to tweak
-- **Click styles** — optional double-clicks with a randomized delay; they add a click inside the current beat, so they never lower the average CPS
+- **Double-clicks** — optional, with a randomized delay; they land inside the current beat, so they never lower the average CPS
 
 **Control**
 - **Activation modes** — Toggle, Hold, and Mouse (arm with a key, then hold your real mouse button)
-- **Slot activation** — the Minecraft hotbar slot switches each clicker on and off, with a per-clicker set of slots (default: slot 1 left, slot 9 right); it reads the game through the [bridge mod](#minecraft-slot-and-inventory-state)
-- **Menu pause** — clicking stops while the game has any screen open (inventory, chat, chests, NPC menus) and resumes when it closes
-- **Left gate** — the left clicker can require a player in the crosshair, a sword in hand, or both, so it does not fire while you mine or build; the default is player-in-crosshair, the GhostTap-style check
-- **Right gate (placeable only)** — the right clicker can require a block in hand, so right-click actions never fire on a sword, a pearl or an empty hand; it uses the same [bridge mod](#placeable-item-gate)
-- **Macros** — optional, off by default: sequences of left clicks, right clicks, delays and hotbar slot switches, with looping and a keybind
+- **Slot activation** — a Minecraft hotbar slot switches each clicker on and off, with a per-clicker set of slots (default: slot 1 left, slot 9 right); it reads the game through the [bridge mod](#minecraft-mod)
+- **Menu pause** — clicking stops while the game has a screen open (inventory, chat, chests, NPC menus) and resumes when it closes
+- **Left gate** — the left clicker can require a player in the crosshair, a sword in hand, or both, so it does not fire while you mine or build; the default is player-in-crosshair
+- **Right gate** — the right clicker can require a placeable block in hand, so right-click actions never fire on a sword, a pearl or an empty hand
+- **Macros** — optional, off by default: sequences of left clicks, right clicks, delays and slot switches, with looping and a keybind
 - **Headless mode** — run the clicker with no window
 
 **Interface**
-- **Paused readout** — a switched-on clicker that is not clicking shows `Paused` and the reason (menu open, held item not a block, no player in the crosshair, no sword in hand, cursor over the app) with an amber dot, and its **L/R** pill turns amber, instead of a misleading green `ON`
+- **Paused readout** — a switched-on clicker that is held back shows `Paused` and the reason, with an amber dot, instead of a misleading green `ON`
 - **Live analytics** — real-time CPS graphs, session averages and peaks, optional recording and CSV export
-- **Profiles** — save and load complete configurations; the `config` profile is loaded automatically at startup
-- **Theming** — follows the KDE colour scheme and accent; accents can also be fixed to Blue, Red, Green, Purple or Orange, or a custom colour
-- **Sound feedback** — a short two-note chime when a clicker toggles, up or down (via `paplay`)
+- **Profiles** — save and load complete configurations; the `config` profile loads at startup
+- **Theming** — follows the KDE colour scheme and accent; the accent can also be fixed to Blue, Red, Green, Purple or Orange, or a custom colour
+- **Sound feedback** — a short two-note chime when a clicker toggles, via `paplay`
 
 ### Humanization defaults
 
-The Jitter preset (the default) is tuned to look human without giving up rate. Double-clicks
-are rare — 1 % of beats — and always land inside the current one, so they add clicks instead of
-lengthening the gap. Fatigue breaks are short and infrequent: 0.15–0.4 s of rest every
-40–90 s, and the break clock restarts whenever clicking is paused, so resuming never begins
-with a break. Hold times follow the rate and drift slowly around their mean, as a real hand's
-grip does, rather than being independent random draws. Every value is editable on the
-**Left**/**Right** tabs, and **Normal**, **Butterfly** and **Drag Click** raise the double-click
-chance as the click rate rises.
+The Jitter preset is tuned to look human without giving up rate. Double-clicks are rare — 1 % of
+beats — and always land inside the current one, so they add clicks instead of lengthening the gap.
+Fatigue breaks are short and infrequent: 0.15–0.4 s of rest every 40–90 s, and the break clock
+restarts whenever clicking is paused, so resuming never begins with a break. Hold times follow the
+rate and drift slowly around their mean, as a real hand's grip does, rather than being independent
+random draws. Every value is editable on the **Left**/**Right** tabs, and **Normal**, **Butterfly**
+and **Drag Click** raise the double-click chance as the click rate rises.
 
 ---
 
 ## Requirements
 
-- Linux with access to `/dev/uinput` (write) and `/dev/input/*` (read) — see [Install](#install)
+- Linux with write access to `/dev/uinput` and read access to `/dev/input/*` — see [Install](#install)
 - C++17 compiler, CMake 3.16+
-- GLFW 3 — 3.4 or newer for the native titlebar icon — and OpenGL 3
+- GLFW 3 and OpenGL 3
 - Optional: `paplay` (PipeWire/PulseAudio) for toggle sounds
 
-Dear ImGui 1.93.0 is vendored in `imgui-1.93.0/`, so no extra downloads are needed. GLFW older
-than 3.4 still builds, but then the window gets no Wayland app id and your desktop will show a
-generic titlebar icon instead of AeroClicker's.
+Dear ImGui 1.93.0 is vendored in `imgui-1.93.0/`, so no extra downloads are needed.
 
 ---
 
@@ -122,17 +117,13 @@ The binary is also left at `build/aeroclicker` if you would rather not install i
 | Path under the prefix | What it is |
 | --- | --- |
 | `bin/aeroclicker` | the binary |
-| `share/applications/aeroclicker.desktop` | menu entry; `Exec=` is rewritten to the absolute path of the installed binary, and `Icon=aeroclicker` names the icon files |
-| `share/icons/hicolor/{16,24,32,48,64,128,256,512}/apps/aeroclicker.png` | the app icon, one file per theme size |
+| `share/applications/aeroclicker.desktop` | menu entry with the absolute binary path and the icon name |
+| `share/icons/hicolor/*/apps/aeroclicker.png` | the app icon, one file per theme size |
 
 Your settings are not part of the install: they live in `~/.config/aeroclicker/` and are created
 on the first save. The udev rule below is not installed either — copy it yourself if you need it.
-CMake records what it wrote in `build/install_manifest.txt`, so
-`xargs rm -v < build/install_manifest.txt` removes an install again.
-
-The desktop entry is written with the full path of the installed binary (`Exec=$HOME/.local/bin/aeroclicker`
-for the command above, taken from the prefix actually used at install time), because a session
-launcher does not have `~/.local/bin` on its `PATH`. Reinstall after changing the prefix.
+`build/install_manifest.txt` lists what was written, so `xargs rm -v < build/install_manifest.txt`
+removes an install again.
 
 ### Permissions
 
@@ -145,13 +136,11 @@ sudo usermod -aG input "$USER"
 
 Log out and back in (a new terminal is not enough; the group list is read at login), then run
 `aeroclicker` normally. If access is still missing, startup stops with `Cannot open /dev/uinput`
-and the command to fix it, instead of crashing with an uncaught exception.
+and the command to fix it.
 
-**Do not run it as root.** `sudo` is not needed for anything the app does, and it gives a
-program that synthesizes mouse and keyboard input full system privileges, a root-owned window
-in your session, and root's environment instead of yours. The app still tolerates `sudo` (it
-keeps your real config directory and hands files back to your user), but there is no reason to
-use it. If `sudo` is the only thing that works, fix the group membership instead.
+**Do not run it as root.** `sudo` is not needed for anything the app does, and it gives a program
+that synthesizes input full system privileges, a root-owned window in your session, and root's
+environment instead of yours. The app tolerates `sudo`, but fix the group membership instead.
 
 ### Fix virtual-mouse sensitivity
 
@@ -164,16 +153,6 @@ sudo udevadm control --reload-rules
 ```
 
 Reconnect the device (or restart AeroClicker) for the rule to apply.
-
-### App icon
-
-A Wayland window has no icon of its own: the compositor resolves it from the window's app id,
-matched against an installed desktop entry. AeroClicker sets both to `aeroclicker` (the
-`GLFW_WAYLAND_APP_ID` hint in `src/gui.cpp`, and `Icon=`/`StartupWMClass=` in the desktop
-entry), so **the desktop entry and the icons must be installed** for the titlebar to show
-anything but the compositor's placeholder. Running straight from `build/aeroclicker` is fine,
-as long as they are installed. KDE picks them up immediately; if it does not, run
-`kbuildsycoca6` or log out and back in.
 
 ---
 
@@ -209,12 +188,9 @@ and mouse buttons interactively.
 | **Mouse** | Press the key to arm, then hold your real mouse button to auto-click; the real press is masked instead of reaching the application |
 
 In Mouse mode AeroClicker takes exclusive access to the physical mouse so it can forward each
-event exactly once — that is how the real press is masked. Other modes only read input
-passively, and a hotkey bound to a mouse button works in every mode.
-
-Input devices are picked up when they appear: unplugging and replugging the keyboard or the
-mouse does not need a restart. If a mouse goes away while it was driving a clicker, that
-clicker stops, since the button that was holding it can no longer be released.
+event exactly once. Other modes only read input passively, and a hotkey bound to a mouse button
+works in every mode. Devices are picked up when they appear, so replugging does not need a
+restart.
 
 ### What “Paused” means
 
@@ -223,86 +199,75 @@ and an amber dot instead of a running CPS figure:
 
 | Reason | When |
 | --- | --- |
-| `cursor over app` | the pointer is over AeroClicker's own window — the clicker stops rather than clicking the interface, and resumes when the pointer leaves |
-| `menu is open` | the game reports an open screen — the inventory, chat, a chest, or an NPC menu |
-| `held item is not a block` | the right clicker's **Right gate** (placeable only) is on and the held item cannot be placed (see [Placeable-item gate](#placeable-item-gate)) |
-| `no player in crosshair` | the left clicker's gate is set to player-in-crosshair (or sword + player) and the crosshair is not on another player |
-| `no sword in hand` | the left clicker's gate is set to sword-only (or sword + player) and the held item is not a sword |
+| `cursor over app` | the pointer is over AeroClicker's own window |
+| `menu is open` | the game reports an open screen |
+| `held item is not a block` | **Right gate** is on and the held item cannot be placed |
+| `no player in crosshair` | the left gate is set to player-in-crosshair (or sword + player) and you are not looking at a player |
+| `no sword in hand` | the left gate is set to sword-only (or sword + player) and the held item is not a sword |
 
 The on/off state is kept, so closing the menu resumes clicking on its own. To force it, press the
 clicker's hotkey (or its **L/R** pill): an explicit press un-pauses a paused clicker instead of
-switching it off and lifts the menu pause until a menu opens again. The next hotbar slot change
-re-applies the slot rules.
+switching it off and lifts the menu pause until a menu opens again.
 
-### Minecraft slot and inventory state
+---
+
+## Minecraft mod
 
 AeroClicker only sees keyboard and mouse events, which is not enough in Minecraft: the active
-hotbar slot moves with the wheel, pick-block or a rebound key, an open inventory, chat, chest or
-NPC menu looks exactly like a normal world, and the held item and the crosshair are invisible from
-outside. The companion mod in `tools/mc-bridge` publishes those facts, and the app uses them for
-slot activation, the menu pause, the left clicker's target gate and the right clicker's
-placeable-item gate. Nothing falls back to key guessing: without the mod, slot activation and the
-menu pause simply do nothing, and both gates stay inert.
+hotbar slot can move without a key you can see, an open menu looks like a normal world, and the
+held item and the crosshair are invisible from outside. The companion mod in `tools/mc-bridge`
+publishes those facts, and the app uses them for slot activation, the menu pause and both gates.
 
-The mod is read-only: every 50 ms it writes the selected slot, whether any screen is open,
-whether the held item is a block, whether it is a sword and whether the crosshair is on another
-player to `$XDG_RUNTIME_DIR/aeroclicker-mc.state` as a single line:
+Nothing falls back to key guessing: without the mod, slot activation and the menu pause do
+nothing, and both gates stay inert.
+
+The mod is read-only. Every 50 ms it writes the selected slot, whether a screen is open, whether
+the held item is a block, whether it is a sword and whether the crosshair is on another player to
+`$XDG_RUNTIME_DIR/aeroclicker-mc.state` as a single line:
 
 ```
 slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch ms> block=<0|1|-1> sword=<0|1|-1> player=<0|1|-1>
 ```
 
 `block`, `sword` and `player` are `1` for yes, `0` for no and `-1` for "this mod build cannot
-tell". They come after `ms` so an older app build still parses the prefix. That is all the mod
-does. Nothing is sent to the server and no input is changed, so it is invisible to anti-cheat in
-the same way as a HUD or scoreboard mod. When the file stops updating (the game closed or
-crashed), the app treats the game as gone after 2.5 seconds: slot activation stops and any
-clicker it switched on is switched off.
+tell". Nothing is sent to the server and no input is changed. When the file stops updating (the
+game closed or crashed), the app treats the game as gone after 2.5 seconds: slot activation stops
+and any clicker it switched on is switched off.
 
-#### Installing the mod (optional)
+### Installing the mod (optional)
 
 Skip this if you do not want slot activation, the menu pause or either gate. Nothing is installed
 automatically: AeroClicker does not copy the jar anywhere, and `cmake --install` does not touch
-your Minecraft folders. You choose the launcher and the instance, and put the jar in that
-instance's `mods` folder yourself, like any other Fabric mod:
+your Minecraft folders. Put the jar in the `mods` folder of the instance you use, like any other
+Fabric mod:
 
-| Launcher | Where to find the instance |
-| --- | --- |
-| Official launcher | `~/.minecraft`, or the game directory of the installation you use |
-| Prism Launcher / MultiMC | open the instance's folder from the launcher; the game directory and `mods` are inside it |
-| ATLauncher | the instance's own folder |
-| anything else | that launcher's instance folder |
-
-The file is `tools/mc-bridge/aeroclicker-bridge-1.0.0.jar`; create the `mods` folder if it does
-not exist yet. It covers Minecraft 26.1.2, 26.2 and 26.3 and needs Fabric Loader and Java 21 —
-Fabric API is not required. Forge and NeoForge instances cannot load it. Instances without the
-mod are unaffected: the app only reads the state file the mod writes.
+- The file is `tools/mc-bridge/aeroclicker-bridge-1.0.0.jar`.
+- Create the `mods` folder if it does not exist yet.
+- It needs Fabric Loader and Java 21; Fabric API is not required.
+- It covers Minecraft 26.1.2, 26.2 and 26.3. Forge and NeoForge cannot load it.
+- Restart Minecraft after adding or updating it.
 
 Settings → Minecraft shows `Bridge mod: live` while the game is publishing state, and highlights
-the slot the game currently has selected in the slot rows and on the Home page.
-
-A prebuilt jar ships in the repository, so installing needs no toolchain. After changing the
-mod's source, rebuild it with `./tools/mc-bridge/build.sh` (a JDK 21+ with `javac` and `jar`).
-The script finds the Fabric loader jar in the usual Prism location; elsewhere, pass it with
+the slot the game currently has selected. A prebuilt jar ships in the repository, so installing
+needs no toolchain. After changing the mod's source, rebuild it with
+`./tools/mc-bridge/build.sh` (a JDK 21+ with `javac` and `jar`); the script finds the Fabric
+loader jar in the usual Prism location, and elsewhere it can be passed with
 `FABRIC_LOADER=/path/to/fabric-loader-*.jar`.
 
 With the link live, slot activation applies as soon as the slot changes: picking a slot listed
 under a clicker switches that clicker on, any other slot switches it off, and opening a menu
 leaves it on but paused. A key or pill press still works normally and holds until the next slot
-change. Settings → Minecraft is where the per-clicker slot lists live; the defaults are slot 1
-for the left clicker and slot 9 for the right one. On the Home page the nine chips show the
-mapping at a glance: the accent fills the side that owns the slot (left edge for the left
-clicker, right edge for the right clicker) and the other side stays neutral, while a slot both
+change. On the Home page the nine chips show the mapping: the accent fills the side that owns the
+slot (left edge for the left clicker, right edge for the right clicker), while a slot both
 clickers map is accent across its full width.
 
-#### Left gate (GhostTap-style)
+### Left gate (GhostTap-style)
 
-The left clicker can be held back unless the crosshair is on another player. Settings →
-Minecraft has **Left gate** with four choices:
+Settings → Minecraft has **Left gate** with four choices:
 
 | Value | Behaviour |
 | --- | --- |
-| **Off** | no game check; the left clicker clicks wherever it is pointed |
+| **Off** | no game check |
 | **Sword only** | clicks only while a sword is held |
 | **Player in crosshair** | clicks only while another player is in the crosshair (the default) |
 | **Sword + player** | both of the above |
@@ -310,46 +275,38 @@ Minecraft has **Left gate** with four choices:
 Player-in-crosshair is the closest to GhostTap's behaviour. It also fixes the obvious problem
 with a plain left clicker in Minecraft: while you mine a block the crosshair is on the block, not
 on a player, so the gate pauses the clicker and your physical left press reaches the game
-untouched — mining, breaking and building work normally, and the clicker resumes as soon as you
-look at a player. A physical press is only taken over when the clicker would actually act on it,
-so the gate never swallows the press that is meant for the game.
+untouched. Mining, breaking and building work normally, and the clicker resumes as soon as you
+look at a player. A physical press is only taken over when the clicker would actually act on it.
 
 Sword-only is a simpler check for servers where the sword is the signal that a fight is starting.
-It does not stop mining by itself: a sword is still a sword while you dig. Use player-in-crosshair
-or sword + player if mining must never produce synthetic clicks.
+It does not stop mining by itself: a sword is still a sword while you dig. Use
+player-in-crosshair or sword + player if mining must never produce synthetic clicks.
 
-The gate is driven by the bridge mod. The state line's `sword` and `player` fields are `1` for
-yes, `0` for no and `-1` for "this build cannot tell"; a field the running mod does not report
-leaves that half of the gate inert, and the Settings panel says so instead of silently blocking
-every click.
+A `sword` or `player` field the running mod does not report leaves that half of the gate inert,
+and the Settings panel says so instead of silently blocking every click.
 
-#### Placeable-item gate
+### Right gate
 
-Settings → Minecraft has **Right gate** (the placeable-only check) for the right clicker. With it
-on, the right clicker only clicks while the held item is a block that can be placed, and pauses
-with the reason `held item is not a block` for anything else — a sword, a bucket, food, an empty
-hand. It is the right-click equivalent of only bridging when you actually hold blocks, so a right
-click never throws a pearl, starts drinking a potion or wears down a tool by accident.
+Settings → Minecraft has **Right gate** for the right clicker. With it on, the right clicker only
+clicks while the held item is a block that can be placed, and pauses with the reason
+`held item is not a block` for anything else — a sword, a bucket, food, an empty hand. It is the
+right-click equivalent of only bridging when you actually hold blocks, so a right click never
+throws a pearl, starts drinking a potion or wears down a tool by accident.
 
 The gate is driven by the same mod, so it needs a live link and a mod build that reports the held
-item. Without either it stays inert instead of blocking every right click: an app build cannot
-guess what is in your hand, and a silent no-op is safer than a clicker that never fires. The
-state line's `block` field is `1` for a block, `0` for anything else, and `-1` for "this build
-cannot tell".
+item. Without either it stays inert instead of blocking every right click. A physical right press
+is only taken over when the clicker would actually act on it; while the gate is blocking, the
+press and its release go to the game untouched.
 
-A physical right press is only taken over when the clicker would actually act on it. While the
-gate is blocking, the press and its release go to the game untouched, so you can still use a
-bow, place water or open a door by hand without switching the gate off.
-
-#### Are the gates an anti-cheat feature?
+### Are the gates an anti-cheat feature?
 
 No. They are behaviour filters, not a guarantee of being undetected. Player-in-crosshair makes a
 clicker look more like a person fighting — it stops firing at blocks and stops firing at nothing —
-but a server can still measure click timing, and AeroClicker's humanization is what actually shapes
-that. The right-click placeable gate is mostly a usability filter: it prevents accidental pearls,
-water and potions, and it does little for detection because right clicks are rarely the thing an
-anti-cheat flags. Use the gates to make the clicker behave the way you want; do not treat them as
-a way to evade a server's rules.
+but a server can still measure click timing, and the humanization is what actually shapes that.
+The right gate is mostly a usability filter: it prevents accidental pearls, water and potions,
+and it does little for detection because right clicks are rarely what an anti-cheat flags. Use
+the gates to make the clicker behave the way you want; do not treat them as a way to evade a
+server's rules.
 
 ---
 
@@ -357,17 +314,17 @@ a way to evade a server's rules.
 
 | Tab | What it does |
 | --- | --- |
-| **Home** | Both clickers at a glance, with live CPS, click counts and on/off pills, plus the slot activation readout |
-| **Settings** | A mod-only **Minecraft** panel (link status, slot activation, menu pause, left and right gates) above a divider, then audio, profiles and accent — everything below the divider works without the mod |
+| **Home** | Both clickers at a glance, with live CPS, click counts, on/off pills and the slot activation readout |
+| **Settings** | A mod-only **Minecraft** panel (link status, slot activation, menu pause, both gates) above a divider, then audio, profiles and accent — everything below the divider works without the mod |
 | **Left / Right** | Presets, speed, distribution, humanization, hold timing, spikes, breaks, hotkey and activation mode |
 | **Macros** | Build macro sequences and bind them to a key |
-| **Analytics** | Measured CPS graphs (real press timing, not the target), session statistics, recording and CSV export |
+| **Analytics** | Measured CPS graphs, session statistics, recording and CSV export |
 
 ---
 
 ## Files
 
-Everything lives in:
+Everything lives in `~/.config/aeroclicker/`:
 
 ```
 ~/.config/aeroclicker/
@@ -387,48 +344,26 @@ keybinds survive the rename.
 
 **Clicks do not happen**
 - Make sure you can open `/dev/uinput` (add yourself to the `input` group, then re-login).
-- Check that `/dev/input/event*` is readable — `groups` should list `input`; if it does not, the
-  group change has not taken effect in this session yet.
-- In Mouse mode the clicker only clicks while your real button is held after arming; with the
-  pointer over AeroClicker it says `Paused` / `cursor over app` on purpose.
+- Check that `/dev/input/event*` is readable — `groups` should list `input`.
+- In Mouse mode the clicker only clicks while your real button is held after arming.
 - A switched-on clicker showing `Paused` is being held back — see
   [What “Paused” means](#what-paused-means).
 
-**Clicking the launcher says it cannot find aeroclicker**
-- The entry predates the absolute `Exec=` path and names the binary by bare name, which a
-  launcher cannot resolve for a per-user install. Run `cmake --install build --prefix "$HOME/.local"`
-  again.
-
-**The titlebar shows a generic icon**
-- Install the desktop entry and icons (`cmake --install`), and make sure your GLFW is 3.4 or
-  newer. Then restart AeroClicker.
-
-**The virtual mouse moves differently from my real mouse**
-- Install `99-aeroclicker.rules` as shown in [Install](#install).
-
 **Slot activation does nothing in Minecraft**
-- It needs the bridge mod: without it the app cannot know the selected slot or whether a menu is
-  open, and it does not guess. Install it as described in
-  [Minecraft slot and inventory state](#minecraft-slot-and-inventory-state).
+- It needs the bridge mod; without it the app does not guess. Install it as described in
+  [Minecraft mod](#minecraft-mod), then restart Minecraft.
 
 **The right clicker stops with `held item is not a block`**
-- That is the **Right gate** doing its job: the held item cannot be placed. Hold a block, or
-  switch **Right gate** off in Settings → Minecraft. The gate also reports this reason if
-  the bridge mod is running an older build that does not export the held item; update the jar and
-  restart Minecraft, since Fabric only loads mods at startup.
+- That is the **Right gate**: the held item cannot be placed. Hold a block, or switch
+  **Right gate** off. This also appears if the mod is an older build that does not export the
+  held item; update the jar and restart Minecraft.
 
 **The left clicker stops with `no player in crosshair`**
-- The left gate is set to player-in-crosshair (the default) and you are not looking at another
-  player. That is what keeps it from clicking while you mine or build. Look at a player, or change
-  **Left gate** in Settings → Minecraft.
-
-**The left clicker stops with `no sword in hand`**
-- **Left gate** is set to sword-only or sword + player and the held item is not a sword. Switch to
-  a sword or change the gate.
+- The left gate is on its default and you are not looking at another player. Look at a player,
+  or change **Left gate** in Settings → Minecraft.
 
 **No toggle sounds**
-- Install `paplay` (PipeWire/PulseAudio). Sound is optional; AeroClicker silently skips it when
-  `paplay` is unavailable.
+- Install `paplay` (PipeWire/PulseAudio). Sound is optional and silently skipped when unavailable.
 
 **Wrong colours**
 - AeroClicker reads the colour scheme from `~/.config/kdeglobals` and falls back to its own
@@ -436,36 +371,24 @@ keybinds survive the rename.
 
 **Blurry or oversized on a HiDPI screen**
 - The UI follows the compositor's scale factor and rebuilds its font atlas when it changes.
-  If it still looks off after changing scale or moving between monitors, restart AeroClicker.
+  Restart AeroClicker if it still looks off after changing scale or moving monitors.
 
 ---
 
 ## Development
 
 A normal build and install need only a compiler, CMake, GLFW and OpenGL. Nothing in `tools/` is
-needed to build the app, and all of its output is already in the tree:
-
-| Path | What it does | Needed to build? |
-| --- | --- | --- |
-| `tools/mc-bridge/` | Fabric mod source, `build.sh` and the prebuilt jar. Needed only to rebuild the jar; users copy the jar themselves into the instance they choose. | No |
-
-So neither Python nor the icon themes are needed for a normal build or install: `cmake --install`
-copies the PNGs already in `assets/`, and the 16 px symbolic masks are committed in
-`src/gui_icons_symbolic.inc`. The generated app icons and masks are checked in, so the generators
-that produced them are not part of the repository — the PNGs are the source of truth now. Keep
-`tools/mc-bridge/` if you want to offer the Minecraft mod.
+needed to build the app: the generated app icons and the 16 px symbolic masks are committed, so
+no Python or icon tooling is required. `tools/mc-bridge/` holds the Fabric mod source, its
+`build.sh` and the prebuilt jar; keep it only if you want to offer the Minecraft mod.
 
 ---
 
 ## Credits
 
-AeroClicker would not exist without these projects and people:
-
 - **[Aubergine-UX](https://github.com/Aubergine-UX)** — created the original
-  [Ghast Clicker](https://github.com/Aubergine-UX/Ghast-Clicker) Linux/Wayland port that this
-  project is forked from. AeroClicker keeps that project's architecture, clicker engine and
-  evdev/uinput input layer as its foundation; the interface here was rebuilt as the Oxygen-style
-  KDE widget set described above.
+  [Ghast Clicker](https://github.com/Aubergine-UX/Ghast-Clicker) Linux/Wayland port this project
+  is forked from. AeroClicker keeps its architecture, clicker engine and evdev/uinput input layer.
 - **[IcySnex](https://github.com/IcySnex)** — [GhostTap](https://github.com/IcySnex/GhostTap),
   the humanization engine and variance model the click timing is based on.
 - **[b1scoito](https://github.com/b1scoito)** / Rafael Félix — [b1scoito/clicker](https://github.com/b1scoito/clicker),
@@ -474,10 +397,10 @@ AeroClicker would not exist without these projects and people:
   bundled here as version 1.93.0.
 - **[GLFW](https://www.glfw.org/)** — windowing and input for the GUI.
 
-Changes in this fork include the rename to AeroClicker, the Dear ImGui 1.93.0 upgrade, a rebuilt
-Oxygen-style interface (light and dark, live theming from KDE, new Home/Settings/Macros/Analytics
-tabs), the pause/hotkey behaviour above, and assorted fixes to the clicker and the UI. Thanks to
-everyone whose commits appear in the history.
+Changes in this fork include the rename to AeroClicker, the Dear ImGui 1.93.0 upgrade, the custom
+Oxygen/KDE-inspired interface, new Home/Settings/Macros/Analytics tabs, the pause/hotkey
+behaviour, the Minecraft bridge and gates, and assorted fixes. Thanks to everyone whose commits
+appear in the history.
 
 ---
 
