@@ -107,7 +107,7 @@ static const char* pause_reason_text(uint32_t mask) {
     if (mask & Clicker::PAUSE_INVENTORY) return "menu is open";
     if (mask & Clicker::PAUSE_POINTER)   return "cursor over app";
     if (mask & Clicker::PAUSE_HELD_ITEM) return "held item is not a block";
-    if (mask & Clicker::PAUSE_NO_TARGET) return "no player in crosshair";
+    if (mask & Clicker::PAUSE_NO_TARGET) return "no mob or player in crosshair";
     if (mask & Clicker::PAUSE_NO_SWORD)  return "no sword in hand";
     return "paused";
 }
@@ -512,17 +512,17 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
     slot_row("Right clicker", state.config.right_slots, active_slot, live);
     ImGui::EndDisabled();
 
-    // Left gate: GhostTap-style. The player-in-crosshair option also covers mining, because a
-    // block is in the crosshair instead of a player, so the click is passed through to the game.
+    // Left gate: GhostTap-style. The target-in-crosshair option also covers mining, because a
+    // block is in the crosshair instead of a mob or player, so the click is passed through.
     if (state.config.left_gate < 0) state.config.left_gate = 0;
     if (state.config.left_gate > 3) state.config.left_gate = 3;
     row_combo("Left gate", &state.config.left_gate,
-              "Off\0Sword only\0Player in crosshair\0Sword + player\0");
+              "Off\0Sword only\0Mob/player in crosshair\0Sword + mob/player\0");
     static const char* const LEFT_GATE_HINTS[] = {
         "Left-clicker runs without asking the game anything",
         "Only clicks while holding a sword",
-        "Only clicks while another player is in the crosshair",
-        "Only clicks at a player while holding a sword",
+        "Only clicks while a mob or player is in the crosshair",
+        "Only clicks at a mob or player while holding a sword",
     };
     const int gate = state.config.left_gate;
     const bool gate_known = (gate & 1 ? state.mc_sword_known.load() : true) &&

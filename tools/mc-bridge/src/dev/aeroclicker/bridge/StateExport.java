@@ -12,12 +12,13 @@ import net.fabricmc.api.ClientModInitializer;
 /**
  * Publishes the client state AeroClicker cannot observe from outside the game: the selected
  * hotbar slot, whether any screen (inventory, chat, chest, NPC dialog, ...) is open, whether the
- * held item is a block, whether it is a sword, and whether the crosshair is on another player.
- * It only ever reads; nothing is sent to the server and no input is changed.
+ * held item is a block, whether it is a sword, and whether the crosshair is on a living entity
+ * (a mob or another player). It only ever reads; nothing is sent to the server and no input is
+ * changed.
  *
  * <p>The state goes to {@code $XDG_RUNTIME_DIR/aeroclicker-mc.state} as one line:
  * {@code slot=<0-8 or -1> screen=<0|1> ms=<epoch milliseconds> block=<0|1|-1>
- * sword=<0|1|-1> player=<0|1|-1>}. The app treats a file whose timestamp is a couple of seconds
+ * sword=<0|1|-1> target=<0|1|-1>}. The app treats a file whose timestamp is a couple of seconds
  * old as absent, so a crashed game cannot leave the clicker stuck. The optional fields are last
  * so an older app build still parses the line, and -1 means this build cannot tell (the app then
  * leaves the matching gate inert).</p>
@@ -53,13 +54,13 @@ public final class StateExport implements ClientModInitializer {
                 if (binding == null) binding = new Binding();
                 Snapshot snap = snapshot(binding);
                 String state = snap.line + " block=" + snap.block
-                             + " sword=" + snap.sword + " player=" + snap.player;
+                             + " sword=" + snap.sword + " target=" + snap.target;
                 long now = System.currentTimeMillis();
                 if (!state.equals(last) || now - lastWrite >= HEARTBEAT_MS) {
                     // `ms` goes before the optional fields so an app build without them still
                     // parses slot and screen from the same line.
                     write(snap.line + " ms=" + now + " block=" + snap.block
-                          + " sword=" + snap.sword + " player=" + snap.player);
+                          + " sword=" + snap.sword + " target=" + snap.target);
                     last = state;
                     lastWrite = now;
                 }
@@ -71,7 +72,7 @@ public final class StateExport implements ClientModInitializer {
                 // reload) kill the bridge. "Unknown" reads as "pause" on the app's side.
                 try {
                     write("slot=-1 screen=1 ms=" + System.currentTimeMillis()
-                          + " block=-1 sword=-1 player=-1");
+                          + " block=-1 sword=-1 target=-1");
                     Thread.sleep(HEARTBEAT_MS);
                 } catch (Throwable ignored) {
                     return;
@@ -92,7 +93,7 @@ public final class StateExport implements ClientModInitializer {
         String line = "slot=" + (slot >= 0 && slot < 9 ? slot : -1)
                     + " screen=" + (screenOpen(b, mc) ? 1 : 0);
         return new Snapshot(line, b.blockState(inventory, slot),
-                            b.swordState(inventory, slot), b.playerState(mc));
+                            b.swordState(inventory, slot), b.targetState(mc, player));
     }
 
     /** Logical state without the timestamp: compared to decide when to rewrite the file. */
@@ -100,13 +101,13 @@ public final class StateExport implements ClientModInitializer {
         final String line;
         final int block;
         final int sword;
-        final int player;
+        final int target;
 
-        Snapshot(String line, int block, int sword, int player) {
+        Snapshot(String line, int block, int sword, int target) {
             this.line = line;
             this.block = block;
             this.sword = sword;
-            this.player = player;
+            this.target = target;
         }
     }
 
@@ -148,10 +149,11 @@ public final class StateExport implements ClientModInitializer {
         final Object itemRegistry;
         final Method registryGetKey;
         // Crosshair check: Minecraft.hitResult is either a BlockHitResult or an EntityHitResult.
+        // A living entity covers both hostile/passive mobs and other players.
         final Field hitResult;
         final Method hitEntity;
         final Class<?> entityHitClass;
-        final Class<?> playerClass;
+        final Class<?> livingClass;
 
         Binding() throws ReflectiveOperationException {
             Class<?> mc = Class.forName("net.minecraft.client.Minecraft");
@@ -205,18 +207,18 @@ public final class StateExport implements ClientModInitializer {
             // Optional: the crosshair gate reports -1 (inert) when this mapping is missing.
             Field hit = null;
             Method getEntity = null;
-            Class<?> entityHit = null, playerType = null;
+            Class<?> entityHit = null, livingType = null;
             try {
                 hit = mc.getField("hitResult");
                 entityHit = Class.forName("net.minecraft.world.phys.EntityHitResult");
                 getEntity = entityHit.getMethod("getEntity");
-                playerType = Class.forName("net.minecraft.world.entity.player.Player");
+                livingType = Class.forName("net.minecraft.world.entity.LivingEntity");
             } catch (ReflectiveOperationException | RuntimeException ignored) {
             }
             hitResult = hit;
             hitEntity = getEntity;
             entityHitClass = entityHit;
-            playerClass = playerType;
+            livingClass = livingType;
         }
 
         /** 1 = a block (placeable), 0 = anything else or an empty hand, -1 = cannot tell. */
@@ -247,14 +249,15 @@ public final class StateExport implements ClientModInitializer {
             }
         }
 
-        /** 1 = another player is in the crosshair, 0 = a block or nothing, -1 = cannot tell. */
-        int playerState(Object mc) {
-            if (hitResult == null || hitEntity == null) return -1;
+        /** 1 = a living entity (mob or player) is in the crosshair, 0 = a block or nothing,
+         *  -1 = cannot tell. */
+        int targetState(Object mc, Object self) {
+            if (hitResult == null || hitEntity == null || livingClass == null) return -1;
             try {
                 Object hit = hitResult.get(mc);
                 if (hit == null || !entityHitClass.isInstance(hit)) return 0;
                 Object entity = hitEntity.invoke(hit);
-                return entity != null && playerClass.isInstance(entity) ? 1 : 0;
+                return entity != null && entity != self && livingClass.isInstance(entity) ? 1 : 0;
             } catch (ReflectiveOperationException | RuntimeException e) {
                 return -1;
             }

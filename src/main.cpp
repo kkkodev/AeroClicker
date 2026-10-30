@@ -242,6 +242,16 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
     // the app instead of stopping the clicker, which left it clicking with nothing held.
     bool mouse_left_owned = false;
     bool mouse_right_owned = false;
+    // A gate can block the press and then open while the button is still down (look away from a
+    // player, then move the crosshair onto one). The press was forwarded to the game, so the
+    // clicker is started without taking ownership; this latch starts it once per press instead
+    // of re-arming the MOUSE start delay on every poll.
+    bool mouse_left_started = false;
+    bool mouse_right_started = false;
+    // True when this press was forwarded to the game only because a gate was blocking it, so
+    // the clicker may start later without a new press if the gate opens.
+    bool mouse_left_gate_blocked = false;
+    bool mouse_right_gate_blocked = false;
 
     // The automatic pause is derived state, recomputed every iteration so that toggling the
     // option takes effect at once instead of at the next key press. It pauses rather than
@@ -336,6 +346,8 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
             if (mouse_left_owned)  { left_clicker.set_enabled(false);  mouse_left_owned = false; }
             if (mouse_right_owned) { right_clicker.set_enabled(false); mouse_right_owned = false; }
             mouse_left_held = mouse_right_held = false;
+            mouse_left_started = mouse_right_started = false;
+            mouse_left_gate_blocked = mouse_right_gate_blocked = false;
             mouse_grabbed = false;          // the grab went with the device
             close(mouse_fd);
             mouse_fd = -1;
@@ -364,12 +376,12 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
         // pick-block, and "in menu" covers chat, chests and NPC dialogs.
         int mc_slot = -1;
         bool mc_screen = false;
-        int mc_block = -1, mc_sword = -1, mc_player = -1;
-        mc_live = McLink::poll(mc_slot, mc_screen, mc_block, mc_sword, mc_player);
+        int mc_block = -1, mc_sword = -1, mc_target = -1;
+        mc_live = McLink::poll(mc_slot, mc_screen, mc_block, mc_sword, mc_target);
         gui_state.mc_linked = mc_live;
         gui_state.mc_block_known = mc_live && mc_block >= 0;
         gui_state.mc_sword_known = mc_live && mc_sword >= 0;
-        gui_state.mc_target_known = mc_live && mc_player >= 0;
+        gui_state.mc_target_known = mc_live && mc_target >= 0;
         if (mc_live) {
             if (mc_slot >= 0) gui_state.active_slot = mc_slot;
             // Edge-triggered: an explicit press (hotkey or pill) may un-pause while a screen is
@@ -407,7 +419,25 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
         left_clicker.set_pause(Clicker::PAUSE_NO_SWORD,
                                mc_live && (left_gate & 1) && mc_sword == 0);
         left_clicker.set_pause(Clicker::PAUSE_NO_TARGET,
-                               mc_live && (left_gate & 2) && mc_player == 0);
+                               mc_live && (left_gate & 2) && mc_target == 0);
+
+        // If a gate blocked the physical press, the press itself went to the game and the
+        // clicker never started. Start it here when the gate opens while the button is still
+        // held, so moving the crosshair onto a mob or player begins clicking without a new
+        // press. Ownership stays false: the release still belongs to the game.
+        auto start_held_mouse = [&](Clicker& clicker, bool held, bool owned, bool& started,
+                                    bool gate_blocked, ActivationMode mode, bool armed) {
+            if (!held || owned || started || !gate_blocked) return;
+            if (mode != ActivationMode::MOUSE || !armed) return;
+            if (gui_state.ui_hovered.load()) return;
+            if (clicker.pause_mask() & Clicker::PAUSE_NO_TAKEOVER) return;
+            if (!clicker.is_enabled()) clicker.set_enabled_gated(true);
+            started = true;
+        };
+        start_held_mouse(left_clicker, mouse_left_held, mouse_left_owned, mouse_left_started,
+                         mouse_left_gate_blocked, config.left_mode, gui_state.left_armed);
+        start_held_mouse(right_clicker, mouse_right_held, mouse_right_owned, mouse_right_started,
+                         mouse_right_gate_blocked, config.right_mode, gui_state.right_armed);
 
         int nfds = 1;
         fds[0].fd = kb_fd;          // -1 is fine: poll() ignores negative descriptors
@@ -476,14 +506,32 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                         if (ev.code == BTN_LEFT) {
                             if (ev.value == 1) {
                                 mouse_left_held = true;
+                                mouse_left_started = false;
+                                mouse_left_gate_blocked = false;
+                                const uint32_t pauses = left_clicker.pause_mask();
                                 mouse_left_owned = !over_app &&
-                                                   !(left_clicker.pause_mask() & Clicker::PAUSE_NO_TAKEOVER) &&
+                                                   !(pauses & Clicker::PAUSE_NO_TAKEOVER) &&
                                                    config.left_mode == ActivationMode::MOUSE &&
                                                    gui_state.left_armed;
                                 if (mouse_left_owned) left_clicker.set_enabled_gated(true);
-                                else device.click(BTN_LEFT, 1);
+                                else {
+                                    device.click(BTN_LEFT, 1);
+                                    // Only a gate may be waited out. A press forwarded because a
+                                    // menu was open or the pointer was over the app must not
+                                    // begin clicking by itself later.
+                                    mouse_left_gate_blocked =
+                                        !over_app &&
+                                        config.left_mode == ActivationMode::MOUSE &&
+                                        gui_state.left_armed &&
+                                        !(pauses & (Clicker::PAUSE_INVENTORY |
+                                                    Clicker::PAUSE_POINTER)) &&
+                                        (pauses & (Clicker::PAUSE_NO_TARGET |
+                                                   Clicker::PAUSE_NO_SWORD));
+                                }
                             } else if (ev.value == 0) {
                                 mouse_left_held = false;
+                                mouse_left_started = false;
+                                mouse_left_gate_blocked = false;
                                 // A MOUSE-mode clicker can be switched on while this button is
                                 // already down (slot change or hotkey). The press was forwarded,
                                 // so the release is too, but the clicker must still stop: it has
@@ -500,14 +548,28 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                         else if (ev.code == BTN_RIGHT) {
                             if (ev.value == 1) {
                                 mouse_right_held = true;
+                                mouse_right_started = false;
+                                mouse_right_gate_blocked = false;
+                                const uint32_t pauses = right_clicker.pause_mask();
                                 mouse_right_owned = !over_app &&
-                                                    !(right_clicker.pause_mask() & Clicker::PAUSE_NO_TAKEOVER) &&
+                                                    !(pauses & Clicker::PAUSE_NO_TAKEOVER) &&
                                                     config.right_mode == ActivationMode::MOUSE &&
                                                     gui_state.right_armed;
                                 if (mouse_right_owned) right_clicker.set_enabled_gated(true);
-                                else device.click(BTN_RIGHT, 1);
+                                else {
+                                    device.click(BTN_RIGHT, 1);
+                                    mouse_right_gate_blocked =
+                                        !over_app &&
+                                        config.right_mode == ActivationMode::MOUSE &&
+                                        gui_state.right_armed &&
+                                        !(pauses & (Clicker::PAUSE_INVENTORY |
+                                                    Clicker::PAUSE_POINTER)) &&
+                                        (pauses & Clicker::PAUSE_HELD_ITEM);
+                                }
                             } else if (ev.value == 0) {
                                 mouse_right_held = false;
+                                mouse_right_started = false;
+                                mouse_right_gate_blocked = false;
                                 if (config.right_mode == ActivationMode::MOUSE)
                                     right_clicker.set_enabled(false);
                                 if (mouse_right_owned) {

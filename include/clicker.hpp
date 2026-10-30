@@ -47,7 +47,7 @@ public:
         PAUSE_INVENTORY = 1u << 1,   // the bridge mod reports an open game screen
         PAUSE_HELD_ITEM = 1u << 2,   // right clicker: the held item is not a placeable block
         PAUSE_NO_SWORD  = 1u << 3,   // left clicker: the gate wants a sword, none is held
-        PAUSE_NO_TARGET = 1u << 4,   // left clicker: the gate wants a player in the crosshair
+        PAUSE_NO_TARGET = 1u << 4,   // left clicker: the gate wants a mob or player in the crosshair
     };
     // Pauses an explicit key press may override: the user asked to run now.
     static constexpr uint32_t PAUSE_AUTO = PAUSE_INVENTORY;

@@ -48,7 +48,7 @@ See [Credits](#credits).
 - **Activation modes** — Toggle, Hold, and Mouse (arm with a key, then hold your real mouse button)
 - **Slot activation** — a Minecraft hotbar slot switches each clicker on and off, with a per-clicker set of slots (default: slot 1 left, slot 9 right); it reads the game through the [bridge mod](#minecraft-mod)
 - **Menu pause** — clicking stops while the game has a screen open (inventory, chat, chests, NPC menus) and resumes when it closes
-- **Left gate** — the left clicker can require a player in the crosshair, a sword in hand, or both, so it does not fire while you mine or build; the default is player-in-crosshair
+- **Left gate** — the left clicker can require a mob or player in the crosshair, a sword in hand, or both, so it does not fire while you mine or build; the default is target-in-crosshair
 - **Right gate** — the right clicker can require a placeable block in hand, so right-click actions never fire on a sword, a pearl or an empty hand
 - **Macros** — optional, off by default: sequences of left clicks, right clicks, delays and slot switches, with looping and a keybind
 - **Headless mode** — run the clicker with no window
@@ -202,8 +202,8 @@ and an amber dot instead of a running CPS figure:
 | `cursor over app` | the pointer is over AeroClicker's own window |
 | `menu is open` | the game reports an open screen |
 | `held item is not a block` | **Right gate** is on and the held item cannot be placed |
-| `no player in crosshair` | the left gate is set to player-in-crosshair (or sword + player) and you are not looking at a player |
-| `no sword in hand` | the left gate is set to sword-only (or sword + player) and the held item is not a sword |
+| `no mob or player in crosshair` | the left gate is set to target-in-crosshair (or sword + target) and you are not looking at a mob or player |
+| `no sword in hand` | the left gate is set to sword-only (or sword + mob/player) and the held item is not a sword |
 
 The on/off state is kept, so closing the menu resumes clicking on its own. To force it, press the
 clicker's hotkey (or its **L/R** pill): an explicit press un-pauses a paused clicker instead of
@@ -222,17 +222,18 @@ Nothing falls back to key guessing: without the mod, slot activation and the men
 nothing, and both gates stay inert.
 
 The mod is read-only. Every 50 ms it writes the selected slot, whether a screen is open, whether
-the held item is a block, whether it is a sword and whether the crosshair is on another player to
-`$XDG_RUNTIME_DIR/aeroclicker-mc.state` as a single line:
+the held item is a block, whether it is a sword and whether the crosshair is on a living entity
+(a mob or another player) to `$XDG_RUNTIME_DIR/aeroclicker-mc.state` as a single line:
 
 ```
-slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch ms> block=<0|1|-1> sword=<0|1|-1> player=<0|1|-1>
+slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch ms> block=<0|1|-1> sword=<0|1|-1> target=<0|1|-1>
 ```
 
-`block`, `sword` and `player` are `1` for yes, `0` for no and `-1` for "this mod build cannot
-tell". Nothing is sent to the server and no input is changed. When the file stops updating (the
-game closed or crashed), the app treats the game as gone after 2.5 seconds: slot activation stops
-and any clicker it switched on is switched off.
+`block`, `sword` and `target` are `1` for yes, `0` for no and `-1` for "this mod build cannot
+tell". They come after `ms` so an older app build still parses the prefix, and an older mod
+build's `player` field is read as `target`. Nothing is sent to the server and no input is
+changed. When the file stops updating (the game closed or crashed), the app treats the game as
+gone after 2.5 seconds: slot activation stops and any clicker it switched on is switched off.
 
 ### Installing the mod (optional)
 
@@ -250,9 +251,10 @@ Fabric mod:
 Settings → Minecraft shows `Bridge mod: live` while the game is publishing state, and highlights
 the slot the game currently has selected. A prebuilt jar ships in the repository, so installing
 needs no toolchain. After changing the mod's source, rebuild it with
-`./tools/mc-bridge/build.sh` (a JDK 21+ with `javac` and `jar`); the script finds the Fabric
-loader jar in the usual Prism location, and elsewhere it can be passed with
-`FABRIC_LOADER=/path/to/fabric-loader-*.jar`.
+`./tools/mc-bridge/build.sh` (a JDK 21+ with `javac` and `jar`; when a distribution ships only
+the `java` launcher, point `JAVA` at a JDK runtime and the script uses its compiler and jar
+modules); the script finds the Fabric loader jar in the usual Prism location, and elsewhere it
+can be passed with `FABRIC_LOADER=/path/to/fabric-loader-*.jar`.
 
 With the link live, slot activation applies as soon as the slot changes: picking a slot listed
 under a clicker switches that clicker on, any other slot switches it off, and opening a menu
@@ -269,20 +271,25 @@ Settings → Minecraft has **Left gate** with four choices:
 | --- | --- |
 | **Off** | no game check |
 | **Sword only** | clicks only while a sword is held |
-| **Player in crosshair** | clicks only while another player is in the crosshair (the default) |
-| **Sword + player** | both of the above |
+| **Mob/player in crosshair** | clicks only while a mob or another player is in the crosshair (the default) |
+| **Sword + mob/player** | both of the above |
 
-Player-in-crosshair is the closest to GhostTap's behaviour. It also fixes the obvious problem
+Target-in-crosshair is the closest to GhostTap's behaviour. It also fixes the obvious problem
 with a plain left clicker in Minecraft: while you mine a block the crosshair is on the block, not
-on a player, so the gate pauses the clicker and your physical left press reaches the game
+on a mob or player, so the gate pauses the clicker and your physical left press reaches the game
 untouched. Mining, breaking and building work normally, and the clicker resumes as soon as you
-look at a player. A physical press is only taken over when the clicker would actually act on it.
+look at a mob or player. A physical press is only taken over when the clicker would actually act
+on it.
+
+In Mouse mode this also works mid-press: press and hold while the crosshair is on a block, then
+move it onto a mob or player, and clicking starts without letting go of the button (the press
+went to the game, so the clicker joins in rather than taking it over). Releasing still stops it.
 
 Sword-only is a simpler check for servers where the sword is the signal that a fight is starting.
 It does not stop mining by itself: a sword is still a sword while you dig. Use
-player-in-crosshair or sword + player if mining must never produce synthetic clicks.
+target-in-crosshair or sword + mob/player if mining must never produce synthetic clicks.
 
-A `sword` or `player` field the running mod does not report leaves that half of the gate inert,
+A `sword` or `target` field the running mod does not report leaves that half of the gate inert,
 and the Settings panel says so instead of silently blocking every click.
 
 ### Right gate
@@ -300,7 +307,7 @@ press and its release go to the game untouched.
 
 ### Are the gates an anti-cheat feature?
 
-No. They are behaviour filters, not a guarantee of being undetected. Player-in-crosshair makes a
+No. They are behaviour filters, not a guarantee of being undetected. Target-in-crosshair makes a
 clicker look more like a person fighting — it stops firing at blocks and stops firing at nothing —
 but a server can still measure click timing, and the humanization is what actually shapes that.
 The right gate is mostly a usability filter: it prevents accidental pearls, water and potions,
@@ -358,9 +365,11 @@ keybinds survive the rename.
   **Right gate** off. This also appears if the mod is an older build that does not export the
   held item; update the jar and restart Minecraft.
 
-**The left clicker stops with `no player in crosshair`**
-- The left gate is on its default and you are not looking at another player. Look at a player,
-  or change **Left gate** in Settings → Minecraft.
+**The left clicker stops with `no mob or player in crosshair`**
+- The left gate is on its default and the crosshair is not on a living entity. Look at a mob or
+  another player, or change **Left gate** in Settings → Minecraft. A bridge jar built before mobs
+  were covered reports players only: aim at a player, or rebuild the jar (see
+  [Minecraft mod](#minecraft-mod)) and restart the game.
 
 **No toggle sounds**
 - Install `paplay` (PipeWire/PulseAudio). Sound is optional and silently skipped when unavailable.
