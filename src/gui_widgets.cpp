@@ -169,6 +169,29 @@ static void AddRoundedRectFilledGradV(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 
     }
 }
 
+// Four-corner variant: the fill can run horizontally as well as vertically, which is how the
+// slot chips show which side (left or right clicker) owns them.
+static void AddRoundedRectFilledGrad4(ImDrawList* dl, ImVec2 a, ImVec2 b,
+                                      ImU32 c_tl, ImU32 c_tr, ImU32 c_bl, ImU32 c_br,
+                                      float rounding) {
+    if (b.x <= a.x || b.y <= a.y) return;
+    if (rounding <= 0.0f) { dl->AddRectFilledMultiColor(a, b, c_tl, c_tr, c_br, c_bl); return; }
+    int start_vtx = dl->VtxBuffer.Size;
+    dl->AddRectFilled(a, b, IM_COL32_WHITE, rounding);
+    int end_vtx = dl->VtxBuffer.Size;
+    ImDrawVert* vtx = dl->VtxBuffer.Data + start_vtx;
+    for (int i = 0; i < end_vtx - start_vtx; i++) {
+        float tx = (vtx[i].pos.x - a.x) / (b.x - a.x);
+        float ty = (vtx[i].pos.y - a.y) / (b.y - a.y);
+        if (tx < 0.0f) tx = 0.0f; else if (tx > 1.0f) tx = 1.0f;
+        if (ty < 0.0f) ty = 0.0f; else if (ty > 1.0f) ty = 1.0f;
+        const ImU32 col = lerp_u32(lerp_u32(c_tl, c_tr, tx), lerp_u32(c_bl, c_br, tx), ty);
+        int va = (vtx[i].col >> IM_COL32_A_SHIFT) & 0xFF;
+        int al = ((col >> IM_COL32_A_SHIFT) & 0xFF) * va / 255;
+        vtx[i].col = (col & ~IM_COL32_A_MASK) | ((ImU32)al << IM_COL32_A_SHIFT);
+    }
+}
+
 static void AddRoundedRectGradCenter(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 center_col, ImU32 edge_col, float rounding, int bands = 10, float edge_bias = 0.45f) {
     if (b.x <= a.x || b.y <= a.y) return;
     float w = b.x - a.x, h = b.y - a.y;
@@ -188,14 +211,14 @@ static void AddRoundedRectGradCenter(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 c
     }
 }
 
-static void OxFrame(ImDrawList* dl, ImVec2 mn, ImVec2 mx, float R,
-                    ImU32 c_top, ImU32 c_bot, ImU32 border_col,
-                    int gloss = 100, int shadow = 60) {
+static void OxFrameGrad4(ImDrawList* dl, ImVec2 mn, ImVec2 mx, float R,
+                         ImU32 c_tl, ImU32 c_tr, ImU32 c_bl, ImU32 c_br,
+                         ImU32 border_col, int gloss = 100, int shadow = 60) {
     ImVec2 b0(crisp_lo(mn.x), crisp_lo(mn.y));
     ImVec2 b1(crisp_hi(mx.x), crisp_hi(mx.y));
     if (b1.x - b0.x < 2.0f) b1.x = b0.x + 2.0f;
     if (b1.y - b0.y < 2.0f) b1.y = b0.y + 2.0f;
-    AddRoundedRectFilledGradV(dl, b0, b1, c_top, c_bot, R);
+    AddRoundedRectFilledGrad4(dl, b0, b1, c_tl, c_tr, c_bl, c_br, R);
     ImVec2 f0(b0.x + 1.0f, b0.y + 1.0f), f1(b1.x - 1.0f, b1.y - 1.0f);
     float fr = R > 1.0f ? R - 1.0f : 0.0f;
     if (gloss > 0)
@@ -205,6 +228,12 @@ static void OxFrame(ImDrawList* dl, ImVec2 mn, ImVec2 mx, float R,
         AddRoundedRectFilledGradV(dl, ImVec2(f0.x, f0.y + (f1.y - f0.y) * 0.55f), f1,
                                   IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, shadow), fr);
     ox_outline(dl, b0, b1, R, border_col);
+}
+
+static void OxFrame(ImDrawList* dl, ImVec2 mn, ImVec2 mx, float R,
+                    ImU32 c_top, ImU32 c_bot, ImU32 border_col,
+                    int gloss = 100, int shadow = 60) {
+    OxFrameGrad4(dl, mn, mx, R, c_top, c_top, c_bot, c_bot, border_col, gloss, shadow);
 }
 
 static void glass_gloss(ImDrawList* dl, ImVec2 mn, ImVec2 mx, float rr, float botY, int aTop) {
@@ -1390,25 +1419,47 @@ bool oxygen_list_item(const char* id, const char* label, bool selected, bool sep
 
 bool ui_pointer_over_window() { return g_cursor_in_window; }
 
-void oxygen_slot_chip(ImVec2 mn, ImVec2 mx, const char* label, bool mapped, bool current) {
+// `sides` is a bitmask of the clickers that map this slot: 1 = left, 2 = right, 3 = both.
+// The accent fills the side that owns the slot and fades to the plain button face on the other
+// side, so a left-only slot reads as left-owned and a right-only one as right-owned. A slot
+// both clickers share is accent across its whole width, as before.
+void oxygen_slot_chip(ImVec2 mn, ImVec2 mx, const char* label, int sides, bool current) {
     const float R = 3.0f;
     ImDrawList* dl = ImGui::GetWindowDrawList();
     // Same face/rim language as the preset tiles: neutral button gradient when unmapped,
     // accent fill when the slot is part of a clicker's mapping. Only the selected slot gets
     // the full-strength face; the other mapped slots stay translucent so the active one wins.
+    const bool mapped = sides != 0;
     const ImVec4 face = ox_is_light() ? mulc(g_accent_color, 0.80f) : g_accent_color;
-    const ImU32 c1 = mapped ? OxCol(face, current ? 255 : 120) : ox_fill_top();
-    const ImU32 c2 = mapped ? OxCol(OxDark(face), current ? 255 : 95) : ox_fill_bot();
+    const ImU32 acc_t = OxCol(face, current ? 255 : 150);
+    const ImU32 acc_b = OxCol(OxDark(face), current ? 255 : 120);
+    const ImU32 neu_t = ox_fill_top(), neu_b = ox_fill_bot();
+
+    // The non-owning side is the plain button face, not a faint accent wash: the previous
+    // translucent tint was too close to the neutral fill to read as "left" or "right".
+    ImU32 tl, tr, bl, br;
+    if (sides == 1)      { tl = acc_t; bl = acc_b; tr = neu_t; br = neu_b; }
+    else if (sides == 2) { tl = neu_t; bl = neu_b; tr = acc_t; br = acc_b; }
+    else if (sides == 3) { tl = acc_t; bl = acc_b; tr = acc_t; br = acc_b; }
+    else                 { tl = neu_t; bl = neu_b; tr = neu_t; br = neu_b; }
+
     const ImU32 bc = current ? ox_accent_rim()
                              : (mapped ? OxCol(face, 150) : ox_rim_neutral(150));
     const int gloss = ox_is_light() ? (current ? 26 : 20) : (current ? 70 : 50);
     const int shadow = ox_is_light() ? 22 : 40;
-    OxFrame(dl, mn, mx, R, c1, c2, bc, gloss, shadow);
+    OxFrameGrad4(dl, mn, mx, R, tl, tr, bl, br, bc, gloss, shadow);
 
     ImU32 ink;
     if (mapped) {
-        ink = current ? ox_ink_on(c1) : ImGui::GetColorU32(ImGuiCol_Text);
-        if (current && ox_is_light()) ink = IM_COL32(255, 255, 255, 255);
+        // A chip both clickers map is accent across its whole width, so it needs ink picked
+        // from the accent. A one-sided chip has the button face on the other half, so normal
+        // text is the readable choice over the middle.
+        if (current && sides == 3) {
+            ink = ox_ink_on(acc_t);
+            if (ox_is_light()) ink = IM_COL32(255, 255, 255, 255);
+        } else {
+            ink = ImGui::GetColorU32(ImGuiCol_Text);
+        }
     } else {
         ink = current ? ImGui::GetColorU32(ImGuiCol_Text) : ox_text_dim();
     }

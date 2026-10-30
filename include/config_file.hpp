@@ -171,6 +171,11 @@ public:
             else if (!strcmp(key, "slot_auto_enabled")) cfg.slot_auto_enabled = (int)val != 0;
             else if (!strcmp(key, "pause_in_menu")) cfg.pause_in_menu = (int)val != 0;
             else if (!strcmp(key, "right_placeable_only")) cfg.right_placeable_only = (int)val != 0;
+            else if (!strcmp(key, "left_gate")) {
+                cfg.left_gate = (int)val;
+                if (cfg.left_gate < 0) cfg.left_gate = 0;
+                if (cfg.left_gate > 3) cfg.left_gate = 3;
+            }
             else if (!strcmp(key, "audio_enabled")) cfg.audio_enabled = (int)val != 0;
             else if (!strcmp(key, "macro_count")) { /* counted implicitly */ }
             else {
@@ -256,6 +261,7 @@ public:
         fprintf(f, "slot_auto_enabled %d\n", cfg.slot_auto_enabled ? 1 : 0);
         fprintf(f, "pause_in_menu %d\n", cfg.pause_in_menu ? 1 : 0);
         fprintf(f, "right_placeable_only %d\n", cfg.right_placeable_only ? 1 : 0);
+        fprintf(f, "left_gate %d\n", cfg.left_gate);
         for (int i = 0; i < 9; i++)
             fprintf(f, "left_slot_%d %d\nright_slot_%d %d\n",
                     i, cfg.left_slots[i] ? 1 : 0, i, cfg.right_slots[i] ? 1 : 0);

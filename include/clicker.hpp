@@ -45,13 +45,17 @@ public:
     enum Pause : uint32_t {
         PAUSE_POINTER   = 1u << 0,   // pointer is over AeroClicker's own window
         PAUSE_INVENTORY = 1u << 1,   // the bridge mod reports an open game screen
-        PAUSE_HELD_ITEM = 1u << 2,   // the bridge mod reports a non-block in hand
+        PAUSE_HELD_ITEM = 1u << 2,   // right clicker: the held item is not a placeable block
+        PAUSE_NO_SWORD  = 1u << 3,   // left clicker: the gate wants a sword, none is held
+        PAUSE_NO_TARGET = 1u << 4,   // left clicker: the gate wants a player in the crosshair
     };
     // Pauses an explicit key press may override: the user asked to run now.
     static constexpr uint32_t PAUSE_AUTO = PAUSE_INVENTORY;
     // Pauses that must keep a physical MOUSE press out of the clicker. If it would not click,
-    // the press belongs to the game, and swallowing it would break normal right-click use.
-    static constexpr uint32_t PAUSE_NO_TAKEOVER = PAUSE_INVENTORY | PAUSE_HELD_ITEM;
+    // the press belongs to the game, and swallowing it would break normal use: mining with the
+    // left button, or placing water and throwing pearls with the right one.
+    static constexpr uint32_t PAUSE_NO_TAKEOVER =
+        PAUSE_INVENTORY | PAUSE_HELD_ITEM | PAUSE_NO_SWORD | PAUSE_NO_TARGET;
 
     void set_enabled(bool v) {
         if (!v) gated_start_ = false;

@@ -11,15 +11,16 @@ import net.fabricmc.api.ClientModInitializer;
 
 /**
  * Publishes the client state AeroClicker cannot observe from outside the game: the selected
- * hotbar slot, whether any screen (inventory, chat, chest, NPC dialog, ...) is open, and whether
- * the held item is a block. It only ever reads; nothing is sent to the server and no input is
- * changed.
+ * hotbar slot, whether any screen (inventory, chat, chest, NPC dialog, ...) is open, whether the
+ * held item is a block, whether it is a sword, and whether the crosshair is on another player.
+ * It only ever reads; nothing is sent to the server and no input is changed.
  *
  * <p>The state goes to {@code $XDG_RUNTIME_DIR/aeroclicker-mc.state} as one line:
- * {@code slot=<0-8 or -1> screen=<0|1> ms=<epoch milliseconds> block=<0|1|-1>}. The app treats a
- * file whose timestamp is a couple of seconds old as absent, so a crashed game cannot leave the
- * clicker stuck. {@code block} is last so an app build without it still parses the line, and -1
- * means this build cannot tell (the app then leaves its placeable gate inert).</p>
+ * {@code slot=<0-8 or -1> screen=<0|1> ms=<epoch milliseconds> block=<0|1|-1>
+ * sword=<0|1|-1> player=<0|1|-1>}. The app treats a file whose timestamp is a couple of seconds
+ * old as absent, so a crashed game cannot leave the clicker stuck. The optional fields are last
+ * so an older app build still parses the line, and -1 means this build cannot tell (the app then
+ * leaves the matching gate inert).</p>
  *
  * <p>Everything about the game is reached through reflection on purpose: it keeps this file
  * free of Minecraft internals, so it compiles with nothing but the Fabric loader jar and keeps
@@ -51,12 +52,14 @@ public final class StateExport implements ClientModInitializer {
             try {
                 if (binding == null) binding = new Binding();
                 Snapshot snap = snapshot(binding);
-                String state = snap.line + " block=" + snap.block;
+                String state = snap.line + " block=" + snap.block
+                             + " sword=" + snap.sword + " player=" + snap.player;
                 long now = System.currentTimeMillis();
                 if (!state.equals(last) || now - lastWrite >= HEARTBEAT_MS) {
-                    // `ms` goes before `block` so an app build without the field still parses
-                    // slot and screen from the same line.
-                    write(snap.line + " ms=" + now + " block=" + snap.block);
+                    // `ms` goes before the optional fields so an app build without them still
+                    // parses slot and screen from the same line.
+                    write(snap.line + " ms=" + now + " block=" + snap.block
+                          + " sword=" + snap.sword + " player=" + snap.player);
                     last = state;
                     lastWrite = now;
                 }
@@ -67,7 +70,8 @@ public final class StateExport implements ClientModInitializer {
                 // Never let a transient client state (a level being torn down, a resource
                 // reload) kill the bridge. "Unknown" reads as "pause" on the app's side.
                 try {
-                    write("slot=-1 screen=1 ms=" + System.currentTimeMillis() + " block=-1");
+                    write("slot=-1 screen=1 ms=" + System.currentTimeMillis()
+                          + " block=-1 sword=-1 player=-1");
                     Thread.sleep(HEARTBEAT_MS);
                 } catch (Throwable ignored) {
                     return;
@@ -81,23 +85,28 @@ public final class StateExport implements ClientModInitializer {
         Object player = mc == null ? null : b.player.get(mc);
         if (player == null) {
             // Not in a world: nothing can be clicked, so report "GUI open" and no slot.
-            return new Snapshot("slot=-1 screen=1", -1);
+            return new Snapshot("slot=-1 screen=1", -1, -1, -1);
         }
         Object inventory = b.getInventory.invoke(player);
         int slot = (Integer) b.getSelectedSlot.invoke(inventory);
         String line = "slot=" + (slot >= 0 && slot < 9 ? slot : -1)
                     + " screen=" + (screenOpen(b, mc) ? 1 : 0);
-        return new Snapshot(line, b.blockState(inventory, slot));
+        return new Snapshot(line, b.blockState(inventory, slot),
+                            b.swordState(inventory, slot), b.playerState(mc));
     }
 
     /** Logical state without the timestamp: compared to decide when to rewrite the file. */
     private static final class Snapshot {
         final String line;
         final int block;
+        final int sword;
+        final int player;
 
-        Snapshot(String line, int block) {
+        Snapshot(String line, int block, int sword, int player) {
             this.line = line;
             this.block = block;
+            this.sword = sword;
+            this.player = player;
         }
     }
 
@@ -134,6 +143,15 @@ public final class StateExport implements ClientModInitializer {
         final Method stackIsEmpty;
         final Method stackItem;
         final Class<?> blockItemClass;
+        // Sword check: the registry id is the only stable test across versions (SwordItem is
+        // gone in 26.3 and modded swords are only guaranteed a name ending in "_sword").
+        final Object itemRegistry;
+        final Method registryGetKey;
+        // Crosshair check: Minecraft.hitResult is either a BlockHitResult or an EntityHitResult.
+        final Field hitResult;
+        final Method hitEntity;
+        final Class<?> entityHitClass;
+        final Class<?> playerClass;
 
         Binding() throws ReflectiveOperationException {
             Class<?> mc = Class.forName("net.minecraft.client.Minecraft");
@@ -169,6 +187,36 @@ public final class StateExport implements ClientModInitializer {
             stackIsEmpty = isEmpty;
             stackItem = getStackItem;
             blockItemClass = blockItem;
+
+            // Optional too: the sword gate reports -1 (inert) if the registry mapping is not
+            // what this version calls it.
+            Object itemReg = null;
+            Method getKey = null;
+            try {
+                itemReg = Class.forName("net.minecraft.core.registries.BuiltInRegistries")
+                              .getField("ITEM").get(null);
+                getKey = Class.forName("net.minecraft.core.Registry")
+                              .getMethod("getKey", Object.class);
+            } catch (ReflectiveOperationException | RuntimeException ignored) {
+            }
+            itemRegistry = itemReg;
+            registryGetKey = getKey;
+
+            // Optional: the crosshair gate reports -1 (inert) when this mapping is missing.
+            Field hit = null;
+            Method getEntity = null;
+            Class<?> entityHit = null, playerType = null;
+            try {
+                hit = mc.getField("hitResult");
+                entityHit = Class.forName("net.minecraft.world.phys.EntityHitResult");
+                getEntity = entityHit.getMethod("getEntity");
+                playerType = Class.forName("net.minecraft.world.entity.player.Player");
+            } catch (ReflectiveOperationException | RuntimeException ignored) {
+            }
+            hitResult = hit;
+            hitEntity = getEntity;
+            entityHitClass = entityHit;
+            playerClass = playerType;
         }
 
         /** 1 = a block (placeable), 0 = anything else or an empty hand, -1 = cannot tell. */
@@ -179,6 +227,34 @@ public final class StateExport implements ClientModInitializer {
                 if (stack == null || (Boolean) stackIsEmpty.invoke(stack)) return 0;
                 Object item = stackItem.invoke(stack);
                 return item != null && blockItemClass.isInstance(item) ? 1 : 0;
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                return -1;
+            }
+        }
+
+        /** 1 = a sword is held, 0 = anything else or an empty hand, -1 = cannot tell. */
+        int swordState(Object inventory, int slot) {
+            if (invGetItem == null || registryGetKey == null || itemRegistry == null) return -1;
+            try {
+                Object stack = invGetItem.invoke(inventory, slot);
+                if (stack == null || (Boolean) stackIsEmpty.invoke(stack)) return 0;
+                Object item = stackItem.invoke(stack);
+                if (item == null) return 0;
+                Object id = registryGetKey.invoke(itemRegistry, item);
+                return id != null && id.toString().endsWith("_sword") ? 1 : 0;
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                return -1;
+            }
+        }
+
+        /** 1 = another player is in the crosshair, 0 = a block or nothing, -1 = cannot tell. */
+        int playerState(Object mc) {
+            if (hitResult == null || hitEntity == null) return -1;
+            try {
+                Object hit = hitResult.get(mc);
+                if (hit == null || !entityHitClass.isInstance(hit)) return 0;
+                Object entity = hitEntity.invoke(hit);
+                return entity != null && playerClass.isInstance(entity) ? 1 : 0;
             } catch (ReflectiveOperationException | RuntimeException e) {
                 return -1;
             }

@@ -186,9 +186,13 @@ struct Config {
     bool right_slots[9] = {false, false, false, false, false, false, false, false, true};
     // Screens include the inventory, chat, chests and NPC menus: clicking them is never wanted.
     bool pause_in_menu = true;
-    // Right clicker only: click while the held item is a block. The bridge mod reports the
+    // Right clicker: click only while the held item is a block. The bridge mod reports the
     // held item, so this is inert without it (and with an older mod build).
     bool right_placeable_only = false;
+    // Left clicker, GhostTap-style gate. Value 1 = a sword must be held, 2 = another player
+    // must be in the crosshair, 3 = both. 0 is off. Inert without the bridge mod.
+    // Default: only click at players, which is what keeps a clicker from firing at blocks.
+    int left_gate = 2;
 
     bool audio_enabled = true;
     bool macros_enabled = false;

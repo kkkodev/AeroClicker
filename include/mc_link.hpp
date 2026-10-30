@@ -12,10 +12,12 @@
 // moved by the wheel, pick-block or another binding. The mod closes exactly that gap by
 // writing one line to the session runtime directory, which both processes can reach:
 //
-//     slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch milliseconds> block=<0|1|-1>
+//     slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch milliseconds>
+//     block=<0|1|-1> sword=<0|1|-1> player=<0|1|-1>
 //
-// `block` says whether the held item is a block (placeable). It is last so a build without it
-// still parses as a prefix, and -1 means "this mod build cannot tell".
+// `block` says whether the held item is a block (placeable), `sword` whether it is a sword,
+// and `player` whether the crosshair is on another player. They are last so a build without
+// them still parses as a prefix, and -1 means "this mod build cannot tell".
 // Reading is the whole contract: nothing is sent to the server and no input is touched.
 namespace McLink {
 
@@ -39,9 +41,10 @@ inline long long now_ms() {
         .count();
 }
 
-// Returns true (and fills slot/screen/block) only while the file is fresh. block is 1 when the
-// held item is a block, 0 when it is not, and -1 when the running mod build does not report it.
-inline bool poll(int& slot, bool& screen, int& block) {
+// Returns true (and fills the fields) only while the file is fresh. block is 1 when the held
+// item is a block, sword is 1 when it is a sword, player is 1 when the crosshair is on another
+// player, and -1 means the running mod build does not report that field.
+inline bool poll(int& slot, bool& screen, int& block, int& sword, int& player) {
     FILE* f = fopen(path(), "r");
     if (!f) return false;
     char line[160] = "";
@@ -49,12 +52,13 @@ inline bool poll(int& slot, bool& screen, int& block) {
     fclose(f);
     if (!got) return false;
 
-    int s = -1, sc = 0, blk = -1;
+    int s = -1, sc = 0, blk = -1, swd = -1, ply = -1;
     long long ms = 0;
-    // `block` is last so a state line from an older mod still matches the first three fields.
-    const int fields = sscanf(line, "slot=%d screen=%d ms=%lld block=%d", &s, &sc, &ms, &blk);
-    if (fields != 3 && fields != 4) return false;
-    if (fields == 3) blk = -1;
+    // The fields are appended in order, so an older mod's shorter line still matches its
+    // prefix: 3 fields is the original format, 4 adds block, 6 adds sword and player.
+    const int fields = sscanf(line, "slot=%d screen=%d ms=%lld block=%d sword=%d player=%d",
+                              &s, &sc, &ms, &blk, &swd, &ply);
+    if (fields < 3) return false;
     // Both directions: a wall clock that jumped forward would make an old line look current.
     const long long age = now_ms() - ms;
     if (age > STALE_MS || age < -STALE_MS) return false;
@@ -62,6 +66,8 @@ inline bool poll(int& slot, bool& screen, int& block) {
     slot = s;
     screen = sc != 0;
     block = blk;
+    sword = swd;
+    player = ply;
     return true;
 }
 

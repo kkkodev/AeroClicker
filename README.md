@@ -50,12 +50,13 @@ See [Credits](#credits).
 - **Activation modes** — Toggle, Hold, and Mouse (arm with a key, then hold your real mouse button)
 - **Slot activation** — the Minecraft hotbar slot switches each clicker on and off, with a per-clicker set of slots (default: slot 1 left, slot 9 right); it reads the game through the [bridge mod](#minecraft-slot-and-inventory-state)
 - **Menu pause** — clicking stops while the game has any screen open (inventory, chat, chests, NPC menus) and resumes when it closes
-- **Placeable-item gate** — the right clicker can require a block in hand, so right-click actions never fire on a sword, a pearl or an empty hand; it uses the same [bridge mod](#placeable-item-gate)
+- **Left gate** — the left clicker can require a player in the crosshair, a sword in hand, or both, so it does not fire while you mine or build; the default is player-in-crosshair, the GhostTap-style check
+- **Right gate (placeable only)** — the right clicker can require a block in hand, so right-click actions never fire on a sword, a pearl or an empty hand; it uses the same [bridge mod](#placeable-item-gate)
 - **Macros** — optional, off by default: sequences of left clicks, right clicks, delays and hotbar slot switches, with looping and a keybind
 - **Headless mode** — run the clicker with no window
 
 **Interface**
-- **Paused readout** — a switched-on clicker that is not clicking shows `Paused` and the reason (menu open, held item not a block, cursor over the app) with an amber dot, and its **L/R** pill turns amber, instead of a misleading green `ON`
+- **Paused readout** — a switched-on clicker that is not clicking shows `Paused` and the reason (menu open, held item not a block, no player in the crosshair, no sword in hand, cursor over the app) with an amber dot, and its **L/R** pill turns amber, instead of a misleading green `ON`
 - **Live analytics** — real-time CPS graphs, session averages and peaks, optional recording and CSV export
 - **Profiles** — save and load complete configurations; the `config` profile is loaded automatically at startup
 - **Theming** — follows the KDE colour scheme and accent; accents can also be fixed to Blue, Red, Green, Purple or Orange, or a custom colour
@@ -224,7 +225,9 @@ and an amber dot instead of a running CPS figure:
 | --- | --- |
 | `cursor over app` | the pointer is over AeroClicker's own window — the clicker stops rather than clicking the interface, and resumes when the pointer leaves |
 | `menu is open` | the game reports an open screen — the inventory, chat, a chest, or an NPC menu |
-| `held item is not a block` | the right clicker's placeable-item gate is on and the held item cannot be placed (see [Placeable-item gate](#placeable-item-gate)) |
+| `held item is not a block` | the right clicker's **Right gate** (placeable only) is on and the held item cannot be placed (see [Placeable-item gate](#placeable-item-gate)) |
+| `no player in crosshair` | the left clicker's gate is set to player-in-crosshair (or sword + player) and the crosshair is not on another player |
+| `no sword in hand` | the left clicker's gate is set to sword-only (or sword + player) and the held item is not a sword |
 
 The on/off state is kept, so closing the menu resumes clicking on its own. To force it, press the
 clicker's hotkey (or its **L/R** pill): an explicit press un-pauses a paused clicker instead of
@@ -235,30 +238,33 @@ re-applies the slot rules.
 
 AeroClicker only sees keyboard and mouse events, which is not enough in Minecraft: the active
 hotbar slot moves with the wheel, pick-block or a rebound key, an open inventory, chat, chest or
-NPC menu looks exactly like a normal world, and the held item is invisible from outside. The
-companion mod in `tools/mc-bridge` publishes those three facts, and the app uses them for slot
-activation, the menu pause and the right clicker's placeable-item gate. Nothing falls back to key
-guessing: without the mod, slot activation and the menu pause simply do nothing, and the gate
-stays inert.
+NPC menu looks exactly like a normal world, and the held item and the crosshair are invisible from
+outside. The companion mod in `tools/mc-bridge` publishes those facts, and the app uses them for
+slot activation, the menu pause, the left clicker's target gate and the right clicker's
+placeable-item gate. Nothing falls back to key guessing: without the mod, slot activation and the
+menu pause simply do nothing, and both gates stay inert.
 
-The mod is read-only: every 50 ms it writes the selected slot, whether any screen is open and
-whether the held item is a block to `$XDG_RUNTIME_DIR/aeroclicker-mc.state` as a single line:
+The mod is read-only: every 50 ms it writes the selected slot, whether any screen is open,
+whether the held item is a block, whether it is a sword and whether the crosshair is on another
+player to `$XDG_RUNTIME_DIR/aeroclicker-mc.state` as a single line:
 
 ```
-slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch ms> block=<0|1|-1>
+slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch ms> block=<0|1|-1> sword=<0|1|-1> player=<0|1|-1>
 ```
 
-That is all it does. Nothing is sent to the server and no input is changed, so it is invisible to
-anti-cheat in the same way as a HUD or scoreboard mod. When the file stops updating (the game
-closed or crashed), the app treats the game as gone after 2.5 seconds: slot activation stops and
-any clicker it switched on is switched off.
+`block`, `sword` and `player` are `1` for yes, `0` for no and `-1` for "this mod build cannot
+tell". They come after `ms` so an older app build still parses the prefix. That is all the mod
+does. Nothing is sent to the server and no input is changed, so it is invisible to anti-cheat in
+the same way as a HUD or scoreboard mod. When the file stops updating (the game closed or
+crashed), the app treats the game as gone after 2.5 seconds: slot activation stops and any
+clicker it switched on is switched off.
 
 #### Installing the mod (optional)
 
-Skip this if you do not want slot activation, the menu pause or the placeable-item gate. Nothing
-is installed automatically: AeroClicker does not copy the jar anywhere, and `cmake --install` does
-not touch your Minecraft folders. You choose the launcher and the instance, and put the jar in
-that instance's `mods` folder yourself, like any other Fabric mod:
+Skip this if you do not want slot activation, the menu pause or either gate. Nothing is installed
+automatically: AeroClicker does not copy the jar anywhere, and `cmake --install` does not touch
+your Minecraft folders. You choose the launcher and the instance, and put the jar in that
+instance's `mods` folder yourself, like any other Fabric mod:
 
 | Launcher | Where to find the instance |
 | --- | --- |
@@ -272,8 +278,8 @@ not exist yet. It covers Minecraft 26.1.2, 26.2 and 26.3 and needs Fabric Loader
 Fabric API is not required. Forge and NeoForge instances cannot load it. Instances without the
 mod are unaffected: the app only reads the state file the mod writes.
 
-Settings → Slot activation shows `Minecraft link: live` while the game is publishing state, and
-highlights the slot the game currently has selected.
+Settings → Minecraft shows `Bridge mod: live` while the game is publishing state, and highlights
+the slot the game currently has selected in the slot rows and on the Home page.
 
 A prebuilt jar ships in the repository, so installing needs no toolchain. After changing the
 mod's source, rebuild it with `./tools/mc-bridge/build.sh` (a JDK 21+ with `javac` and `jar`).
@@ -283,16 +289,47 @@ The script finds the Fabric loader jar in the usual Prism location; elsewhere, p
 With the link live, slot activation applies as soon as the slot changes: picking a slot listed
 under a clicker switches that clicker on, any other slot switches it off, and opening a menu
 leaves it on but paused. A key or pill press still works normally and holds until the next slot
-change. Settings → Slot activation is where the per-clicker slot lists live; the defaults are
-slot 1 for the left clicker and slot 9 for the right one.
+change. Settings → Minecraft is where the per-clicker slot lists live; the defaults are slot 1
+for the left clicker and slot 9 for the right one. On the Home page the nine chips show the
+mapping at a glance: the accent fills the side that owns the slot (left edge for the left
+clicker, right edge for the right clicker) and the other side stays neutral, while a slot both
+clickers map is accent across its full width.
+
+#### Left gate (GhostTap-style)
+
+The left clicker can be held back unless the crosshair is on another player. Settings →
+Minecraft has **Left gate** with four choices:
+
+| Value | Behaviour |
+| --- | --- |
+| **Off** | no game check; the left clicker clicks wherever it is pointed |
+| **Sword only** | clicks only while a sword is held |
+| **Player in crosshair** | clicks only while another player is in the crosshair (the default) |
+| **Sword + player** | both of the above |
+
+Player-in-crosshair is the closest to GhostTap's behaviour. It also fixes the obvious problem
+with a plain left clicker in Minecraft: while you mine a block the crosshair is on the block, not
+on a player, so the gate pauses the clicker and your physical left press reaches the game
+untouched — mining, breaking and building work normally, and the clicker resumes as soon as you
+look at a player. A physical press is only taken over when the clicker would actually act on it,
+so the gate never swallows the press that is meant for the game.
+
+Sword-only is a simpler check for servers where the sword is the signal that a fight is starting.
+It does not stop mining by itself: a sword is still a sword while you dig. Use player-in-crosshair
+or sword + player if mining must never produce synthetic clicks.
+
+The gate is driven by the bridge mod. The state line's `sword` and `player` fields are `1` for
+yes, `0` for no and `-1` for "this build cannot tell"; a field the running mod does not report
+leaves that half of the gate inert, and the Settings panel says so instead of silently blocking
+every click.
 
 #### Placeable-item gate
 
-The Right tab has **Placeable only**. With it on, the right clicker only clicks while
-the held item is a block that can be placed, and pauses with the reason `held item is not a
-block` for anything else — a sword, a bucket, food, an empty hand. It is the right-click
-equivalent of only bridging when you actually hold blocks, so a right click never throws a pearl,
-starts drinking a potion or wears down a tool by accident.
+Settings → Minecraft has **Right gate** (the placeable-only check) for the right clicker. With it
+on, the right clicker only clicks while the held item is a block that can be placed, and pauses
+with the reason `held item is not a block` for anything else — a sword, a bucket, food, an empty
+hand. It is the right-click equivalent of only bridging when you actually hold blocks, so a right
+click never throws a pearl, starts drinking a potion or wears down a tool by accident.
 
 The gate is driven by the same mod, so it needs a live link and a mod build that reports the held
 item. Without either it stays inert instead of blocking every right click: an app build cannot
@@ -304,6 +341,16 @@ A physical right press is only taken over when the clicker would actually act on
 gate is blocking, the press and its release go to the game untouched, so you can still use a
 bow, place water or open a door by hand without switching the gate off.
 
+#### Are the gates an anti-cheat feature?
+
+No. They are behaviour filters, not a guarantee of being undetected. Player-in-crosshair makes a
+clicker look more like a person fighting — it stops firing at blocks and stops firing at nothing —
+but a server can still measure click timing, and AeroClicker's humanization is what actually shapes
+that. The right-click placeable gate is mostly a usability filter: it prevents accidental pearls,
+water and potions, and it does little for detection because right clicks are rarely the thing an
+anti-cheat flags. Use the gates to make the clicker behave the way you want; do not treat them as
+a way to evade a server's rules.
+
 ---
 
 ## Interface
@@ -311,8 +358,8 @@ bow, place water or open a door by hand without switching the gate off.
 | Tab | What it does |
 | --- | --- |
 | **Home** | Both clickers at a glance, with live CPS, click counts and on/off pills, plus the slot activation readout |
-| **Settings** | Slot activation, menu pause, audio, profiles, accent |
-| **Left / Right** | Presets, speed, distribution, humanization, hold timing, spikes, breaks, hotkey and activation mode; the Right tab adds the placeable-item gate |
+| **Settings** | A mod-only **Minecraft** panel (link status, slot activation, menu pause, left and right gates) above a divider, then audio, profiles and accent — everything below the divider works without the mod |
+| **Left / Right** | Presets, speed, distribution, humanization, hold timing, spikes, breaks, hotkey and activation mode |
 | **Macros** | Build macro sequences and bind them to a key |
 | **Analytics** | Measured CPS graphs (real press timing, not the target), session statistics, recording and CSV export |
 
@@ -365,10 +412,19 @@ keybinds survive the rename.
   [Minecraft slot and inventory state](#minecraft-slot-and-inventory-state).
 
 **The right clicker stops with `held item is not a block`**
-- That is the placeable-item gate doing its job: the held item cannot be placed. Hold a block, or
-  switch **Placeable only** off on the Right tab. The gate also reports this reason if
+- That is the **Right gate** doing its job: the held item cannot be placed. Hold a block, or
+  switch **Right gate** off in Settings → Minecraft. The gate also reports this reason if
   the bridge mod is running an older build that does not export the held item; update the jar and
   restart Minecraft, since Fabric only loads mods at startup.
+
+**The left clicker stops with `no player in crosshair`**
+- The left gate is set to player-in-crosshair (the default) and you are not looking at another
+  player. That is what keeps it from clicking while you mine or build. Look at a player, or change
+  **Left gate** in Settings → Minecraft.
+
+**The left clicker stops with `no sword in hand`**
+- **Left gate** is set to sword-only or sword + player and the held item is not a sword. Switch to
+  a sword or change the gate.
 
 **No toggle sounds**
 - Install `paplay` (PipeWire/PulseAudio). Sound is optional; AeroClicker silently skips it when

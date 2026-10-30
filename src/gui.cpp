@@ -10,6 +10,7 @@
 #include <ctime>
 #include <chrono>
 #include <cstring>
+#include <cmath>
 #include <cstdlib>
 
 static const char* TAB_NAMES[] = { "Home", "Settings", "Left", "Right", "Macros", "Analytics" };
@@ -106,6 +107,8 @@ static const char* pause_reason_text(uint32_t mask) {
     if (mask & Clicker::PAUSE_INVENTORY) return "menu is open";
     if (mask & Clicker::PAUSE_POINTER)   return "cursor over app";
     if (mask & Clicker::PAUSE_HELD_ITEM) return "held item is not a block";
+    if (mask & Clicker::PAUSE_NO_TARGET) return "no player in crosshair";
+    if (mask & Clicker::PAUSE_NO_SWORD)  return "no sword in hand";
     return "paused";
 }
 
@@ -216,10 +219,11 @@ static void draw_slot_indicator(GuiState& state, float width) {
     for (int i = 0; i < 9; i++) {
         const ImVec2 a(p.x + (chip_w + gap) * (float)i, p.y);
         const ImVec2 b(a.x + chip_w, a.y + chip_h);
-        const bool mapped = state.config.left_slots[i] || state.config.right_slots[i];
+        const int sides = (state.config.left_slots[i] ? 1 : 0) |
+                          (state.config.right_slots[i] ? 2 : 0);
         const bool current = live && i == slot;
         char n[4]; snprintf(n, sizeof(n), "%d", i + 1);
-        oxygen_slot_chip(a, b, n, mapped, current);
+        oxygen_slot_chip(a, b, n, sides, current);
     }
     ImGui::Dummy(ImVec2(inner, chip_h));
 
@@ -273,22 +277,8 @@ static void draw_home_tab(GuiState& state) {
 
 // ---------------- Left / Right (advanced) ----------------
 
-static void draw_side_tab(GuiState& state, ClickerProfile& p, ActivationMode mode, bool right_side) {
+static void draw_side_tab(ClickerProfile& p, ActivationMode mode) {
     ImGui::Spacing();
-    if (right_side) {
-        begin_panel("Placement gate", -1.0f, -1, OxIcon::Grid);
-        // Short enough for the label column: a longer caption runs into the checkbox.
-        row_check("Placeable only", &state.config.right_placeable_only);
-        if (state.config.right_placeable_only) {
-            if (state.mc_item_known.load())
-                ImGui::TextDisabled("Right-click only while the held item is a block");
-            else if (state.mc_linked.load())
-                ImGui::TextDisabled("Bridge mod is too old to report the held item");
-            else
-                ImGui::TextDisabled("Needs the Minecraft bridge mod");
-        }
-        end_panel();
-    }
     begin_panel("Rate", -1.0f, -1, OxIcon::Gauge);
     row_slider("Speed (CPS)", &p.cps_mean, CPS_MEAN_LO, CPS_MEAN_HI, "%.1f");
     row_slider("CPS Variation", &p.cps_stddev, 0.0, 5.0, "%.2f");
@@ -483,27 +473,73 @@ static void slot_row(const char* label, bool* slots, int active_slot, bool live)
     ImGui::Dummy(ImVec2(0.0f, 0.0f));
 }
 
+// A labelled rule that splits the settings page into "needs the bridge mod" and "works on its
+// own". Without it the mod-only rows look like ordinary options that do nothing.
+static void section_divider(const char* caption) {
+    ImGui::Spacing();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const float w = ImGui::GetContentRegionAvail().x;
+    const float y = floorf(p.y) + 0.5f;
+    const float fs = ImGui::GetIO().DisplayFramebufferScale.y;
+    dl->AddLine(ImVec2(p.x, y), ImVec2(p.x + w, y),
+                ox_is_light() ? OxCol(ox_tint(g_body_color, -0.30f), 90)
+                              : OxCol(mulc(g_body_color, 2.0f), 80),
+                fs > 0.0f ? 1.0f / fs : 1.0f);
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
+    ImGui::TextDisabled("%s", caption);
+}
+
 static void draw_settings_tab(GuiState& state, std::vector<std::string>& profiles, int& selected_profile,
                               char* profile_name_buf, char* status_msg, float& status_timer) {
     ImGui::Spacing();
-    begin_panel("Slot activation", -1.0f, -1, OxIcon::Grid);
+    // Everything in this panel is fed by the bridge mod. It comes first and is captioned as a
+    // mod-only block so the options below it are clearly usable without Minecraft.
+    begin_panel("Minecraft", -1.0f, -1, OxIcon::Globe);
+    const int active_slot = state.active_slot.load();
+    const bool live = state.mc_linked.load();
+    if (live)
+        ImGui::TextColored(ok_text_color(), "Bridge mod: live (slot %d)", active_slot + 1);
+    else
+        ImGui::TextDisabled("Bridge mod: not detected - install it to use this panel");
+
     row_check("Follow hotbar slots", &state.config.slot_auto_enabled);
     ImGui::TextDisabled("Switches a clicker on while one of its slots is selected");
     row_check("Pause on menus", &state.config.pause_in_menu);
     ImGui::TextDisabled("Covers the inventory, chat, chests and NPC menus");
     ImGui::BeginDisabled(!state.config.slot_auto_enabled);
-    const int active_slot = state.active_slot.load();
-    const bool live = state.mc_linked.load();
     slot_row("Left clicker", state.config.left_slots, active_slot, live);
     slot_row("Right clicker", state.config.right_slots, active_slot, live);
     ImGui::EndDisabled();
-    // Slot activation is driven by the game itself: the bridge mod (tools/mc-bridge) is the
-    // only source for the selected slot, so there is no guessing to fall back on.
-    if (live)
-        ImGui::TextColored(ok_text_color(), "Minecraft link: live (slot %d)", active_slot + 1);
+
+    // Left gate: GhostTap-style. The player-in-crosshair option also covers mining, because a
+    // block is in the crosshair instead of a player, so the click is passed through to the game.
+    if (state.config.left_gate < 0) state.config.left_gate = 0;
+    if (state.config.left_gate > 3) state.config.left_gate = 3;
+    row_combo("Left gate", &state.config.left_gate,
+              "Off\0Sword only\0Player in crosshair\0Sword + player\0");
+    static const char* const LEFT_GATE_HINTS[] = {
+        "Left-clicker runs without asking the game anything",
+        "Only clicks while holding a sword",
+        "Only clicks while another player is in the crosshair",
+        "Only clicks at a player while holding a sword",
+    };
+    const int gate = state.config.left_gate;
+    const bool gate_known = (gate & 1 ? state.mc_sword_known.load() : true) &&
+                            (gate & 2 ? state.mc_target_known.load() : true);
+    if (live && gate != 0 && !gate_known)
+        ImGui::TextDisabled("This mod build cannot report this gate");
     else
-        ImGui::TextDisabled("Minecraft link: not detected - install the bridge mod (see README)");
+        ImGui::TextDisabled("%s", LEFT_GATE_HINTS[gate]);
+
+    row_check("Right gate", &state.config.right_placeable_only);
+    if (live && state.config.right_placeable_only && !state.mc_block_known.load())
+        ImGui::TextDisabled("This mod build cannot report the held item");
+    else
+        ImGui::TextDisabled("Only right-clicks while holding a placeable block");
     end_panel();
+
+    section_divider("Everything below works without Minecraft");
 
     begin_panel("Audio", -1.0f, -1, OxIcon::Speaker);
     row_check("Toggle Sound", &state.config.audio_enabled);
@@ -819,8 +855,8 @@ void gui_run(GuiState& state) {
             switch (current_tab) {
                 case 0: draw_home_tab(state); break;
                 case 1: draw_settings_tab(state, profiles, selected_profile, profile_name_buf, status_msg, status_timer); break;
-                case 2: draw_side_tab(state, state.config.left, state.config.left_mode, false); break;
-                case 3: draw_side_tab(state, state.config.right, state.config.right_mode, true); break;
+                case 2: draw_side_tab(state.config.left, state.config.left_mode); break;
+                case 3: draw_side_tab(state.config.right, state.config.right_mode); break;
                 case 4: draw_macros_tab(state); break;
                 case 5: draw_analytics_tab(state, status_msg, status_timer); break;
             }

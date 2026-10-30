@@ -3,7 +3,7 @@
   "id": "aeroclicker-bridge",
   "name": "AeroClicker Bridge",
   "version": "1.0.0",
-  "description": "Read-only export of the selected hotbar slot, the open-screen flag and whether the held item is a block for the AeroClicker desktop app. Sends nothing to the server.",
+  "description": "Read-only export of the selected hotbar slot, the open-screen flag, and whether the held item is a block or a sword or another player is in the crosshair, for the AeroClicker desktop app. Sends nothing to the server.",
   "authors": ["AeroClicker"],
   "license": "GPL-3.0-only",
   "environment": "client",

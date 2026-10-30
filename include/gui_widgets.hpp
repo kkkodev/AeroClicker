@@ -54,8 +54,9 @@ float panel_inner();   // usable content width inside current panel
 // --- status ---
 // Read-only Oxygen surface for the Home page's hotbar chips: neutral face when the slot is
 // not mapped, the same accent face as a selected preset when it is, and a 2px accent ring on
-// the slot the game currently has selected.
-void oxygen_slot_chip(ImVec2 mn, ImVec2 mx, const char* label, bool mapped, bool current);
+// the slot the game currently has selected. `sides` is 1 (left clicker), 2 (right), 3 (both):
+// the accent is strongest on the owning side, so the fill shows who maps the slot.
+void oxygen_slot_chip(ImVec2 mn, ImVec2 mx, const char* label, int sides, bool current);
 bool click_indicator(const char* label, bool on, bool paused = false);   // returns true when clicked
 // note: when set while `on`, the readout says "Paused" and shows this line instead of a
 // meaningless "0.0 CPS" (e.g. "cursor over app", "hold the mouse button").
