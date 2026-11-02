@@ -15,6 +15,10 @@
 // Minecraft samples input once per 50ms client tick.
 constexpr double TICK_MS = 50.0;
 
+// After a hit from behind, the resets stay quiet for this long. Sprint Reset is driven by our
+// own swing, so it only sees the backstab indirectly; the window covers a trade that follows it.
+constexpr double BACKSTAB_SUPPRESS_MS = 500.0;
+
 // Runs one delayed job at a time on its own thread. cancel() drops a pending job and wakes any
 // sleep_ms() inside the running one.
 class Scheduler {
@@ -182,6 +186,8 @@ struct CombatContext {
     bool slot_blocked;
     bool in_water;
     bool on_ground;
+    bool hit_from_behind;   // the hurt event being handled came from behind the player
+    bool backstab_recent;   // a backstab landed within BACKSTAB_SUPPRESS_MS
 };
 
 inline double combat_clamp(double v, double lo, double hi) { return std::max(lo, std::min(hi, v)); }
@@ -237,6 +243,9 @@ public:
         // or the next real hit after a menu closes or you start moving would still wait.
         if (ctx.in_menu && !p_.allow_in_menu) return;
         if (ctx.slot_blocked && p_.use_slot_filter) return;
+        // A hit from behind is not a trade, so jumping would only give the attacker a cleaner
+        // follow-up. Ignore the event before the cooldown is claimed.
+        if (ctx.hit_from_behind) return;
         if (p_.forward_only && !kb_.physical(KEY_W)) return;
         if (p_.disable_in_water && ctx.in_water) return;
         if (p_.require_on_ground && !ctx.on_ground) return;
@@ -292,6 +301,9 @@ public:
         // Filters first: see JumpReset::on_hurt.
         if (ctx.in_menu) return;
         if (ctx.slot_blocked && p_.use_slot_filter) return;
+        // Do not break sprint right after being stabbed in the back: the attacker already has
+        // the angle, and the tap would only slow the escape.
+        if (ctx.backstab_recent) return;
         bool need_w = p_.forward_only || p_.mode == SprintResetMode::W_TAP;
         if (need_w && !kb_.physical(KEY_W)) return;
         if (!gate_.claim(p_.cooldown_ms)) return;

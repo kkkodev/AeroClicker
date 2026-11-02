@@ -268,6 +268,10 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
     bool mc_counters_seeded = false;
     long long last_hurt = 0;
     long long last_hit = 0;
+    long long last_back = 0;
+    // Backstabs suppress the resets for a short window, because Sprint Reset is driven by our
+    // own swing rather than by the hit we took.
+    std::chrono::steady_clock::time_point backstab_until{};
     // Slot activation bookkeeping: the mapping is applied when the slot changes, and not again
     // in between, so a deliberate press of a clicker's key is not undone on the next poll.
     int  auto_slot = -1;
@@ -486,15 +490,28 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
             // fresh link seeds the counters: the app must not replay a hit from before it
             // started. A -1 counter means the bridge could not read the game this poll (its
             // error line), so that poll re-seeds instead of turning the recovery into a step.
-            const bool counters_known = mc.hurt >= 0 && mc.hit >= 0;
+            const bool counters_known = mc.hurt >= 0 && mc.hit >= 0 && mc.back >= 0;
             const bool had_events = mc_counters_seeded && counters_known;
             long long hurt_steps = had_events ? mc.hurt - last_hurt : 0;
             long long hit_steps  = had_events ? mc.hit - last_hit : 0;
+            long long back_steps = had_events ? mc.back - last_back : 0;
             if (hurt_steps < 0) hurt_steps = 0;   // bridge restarted: seed, do not fire
             if (hit_steps < 0) hit_steps = 0;
+            if (back_steps < 0) back_steps = 0;
             last_hurt = mc.hurt;
             last_hit = mc.hit;
+            last_back = mc.back;
             mc_counters_seeded = counters_known;
+            // A back counter step always belongs to the same poll as a hurt step. If a poll
+            // somehow carried several events and any was from behind, staying quiet for the
+            // whole poll is the safe choice.
+            const bool backstab = hurt_steps > 0 && back_steps > 0;
+            const auto now = std::chrono::steady_clock::now();
+            if (backstab) {
+                backstab_until = now + std::chrono::milliseconds(
+                    static_cast<long long>(BACKSTAB_SUPPRESS_MS));
+            }
+            const bool backstab_recent = now < backstab_until;
             if (combat && (hurt_steps > 0 || hit_steps > 0)) {
                 const int slot = mc.slot;
                 const CombatContext ctx = {
@@ -504,6 +521,8 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                     // An older mod build that cannot report the ground must not make Jump
                     // Reset permanently inert, so unknown reads as "safe to try".
                     mc.ground != 0,
+                    backstab,
+                    backstab_recent,
                 };
                 // One event per step; a frame that somehow saw two keeps each reset on its own
                 // cooldown rather than collapsing into a single action.
@@ -513,6 +532,7 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
         } else {
             mc_synced = false;   // no game: nothing drives the slot rules until it comes back
             mc_counters_seeded = false;
+            backstab_until = {};
             // Do not leave a clicker running that the slot rules switched on: the game they were
             // following is gone.
             if (auto_engaged) {

@@ -22,15 +22,17 @@ import net.fabricmc.api.ClientModInitializer;
  * <p>The state goes to {@code $XDG_RUNTIME_DIR/aeroclicker-mc.state} as one line:
  * {@code slot=<0-8 or -1> screen=<0|1> ms=<epoch milliseconds> block=<0|1|-1>
  * sword=<0|1|-1> target=<0|1|-1> bed=<0|1|-1> look=<0|1|-1> water=<0|1|-1>
- * ground=<0|1|-1> hurt=<counter> hit=<counter>}. The app treats a file whose timestamp is a
+ * ground=<0|1|-1> hurt=<counter> hit=<counter> back=<counter>}. The app treats a file whose timestamp is a
  * couple of seconds old as absent, so a crashed game cannot leave the clicker stuck. The
  * optional fields are last so an older app build still parses the line, and -1 means this build
  * cannot tell (the app then leaves the matching gate inert).</p>
  *
- * <p>The two counters make the combat resets reliable: {@code hurt} goes up when the local
+ * <p>The counters make the combat resets reliable: {@code hurt} goes up when the local
  * player's {@code hurtTime} rises (taking damage), and {@code hit} when a new swing starts while
  * the exact crosshair target is a living entity (attacking one). The app turns those into one
- * Jump Reset / Sprint Reset per counter step instead of firing on its own clicks.</p>
+ * Jump Reset / Sprint Reset per counter step instead of firing on its own clicks. {@code back}
+ * rises alongside {@code hurt} when the attacker was behind the player, so the app can leave
+ * the resets alone after a backstab.</p>
  *
  * <p>Everything about the game is reached through reflection on purpose: it keeps this file
  * free of Minecraft internals, so it compiles with nothing but the Fabric loader jar and keeps
@@ -47,11 +49,11 @@ public final class StateExport implements ClientModInitializer {
     /** Unchanged state is still rewritten this often, so the timestamp never goes stale. */
     private static final long HEARTBEAT_MS = 500;
     /**
-     * The target gate keeps looking about one block past the vanilla entity reach, so a player
-     * running in becomes a target just before they are close enough to hit. The extra block is
-     * what the app calls the target lead.
+     * The target gate keeps looking half a block past the vanilla entity reach, so a player
+     * running in becomes a target just before they are close enough to hit. The extra reach is
+     * what the app calls the target lead; it never changes the game's own reach.
      */
-    private static final double TARGET_REACH = 4.0;
+    private static final double TARGET_REACH = 3.5;
     /** Numerical slack so a ray exactly on a box edge still counts. */
     private static final double TARGET_BOX_PAD = 0.02;
 
@@ -74,7 +76,8 @@ public final class StateExport implements ClientModInitializer {
                              + " sword=" + snap.sword + " target=" + snap.target
                              + " bed=" + snap.bed + " look=" + snap.look
                              + " water=" + snap.water + " ground=" + snap.ground
-                             + " hurt=" + snap.hurt + " hit=" + snap.hit;
+                             + " hurt=" + snap.hurt + " hit=" + snap.hit
+                             + " back=" + snap.back;
                 long now = System.currentTimeMillis();
                 if (!state.equals(last) || now - lastWrite >= HEARTBEAT_MS) {
                     // `ms` goes before the optional fields so an app build without them still
@@ -83,7 +86,8 @@ public final class StateExport implements ClientModInitializer {
                           + " sword=" + snap.sword + " target=" + snap.target
                           + " bed=" + snap.bed + " look=" + snap.look
                           + " water=" + snap.water + " ground=" + snap.ground
-                          + " hurt=" + snap.hurt + " hit=" + snap.hit);
+                          + " hurt=" + snap.hurt + " hit=" + snap.hit
+                          + " back=" + snap.back);
                     last = state;
                     lastWrite = now;
                 }
@@ -96,7 +100,7 @@ public final class StateExport implements ClientModInitializer {
                 try {
                     write("slot=-1 screen=1 ms=" + System.currentTimeMillis()
                           + " block=-1 sword=-1 target=-1 bed=-1 look=-1 water=-1 ground=-1"
-                          + " hurt=-1 hit=-1");
+                          + " hurt=-1 hit=-1 back=-1");
                     Thread.sleep(HEARTBEAT_MS);
                 } catch (Throwable ignored) {
                     return;
@@ -112,7 +116,7 @@ public final class StateExport implements ClientModInitializer {
             // Not in a world: nothing can be clicked, so report "GUI open" and no slot. The
             // counters are monotonic across worlds, so the app never replays an old event.
             return new Snapshot("slot=-1 screen=1", -1, -1, -1, -1, -1, -1, -1,
-                                b.hurtCounter, b.hitCounter);
+                                b.hurtCounter, b.hitCounter, b.backCounter);
         }
         if (player != b.lastPlayer) {
             // A new world or respawn: hurtTime and the swing object belong to the old player.
@@ -129,7 +133,7 @@ public final class StateExport implements ClientModInitializer {
                             b.swordState(inventory, slot), b.targetState(mc, player),
                             b.bedState(inventory, slot), b.lookState(mc),
                             b.waterState(player), b.groundState(player),
-                            b.hurtState(player), b.hitState(mc, player));
+                            b.hurtState(player), b.hitState(mc, player), b.backCounter);
     }
 
     /** Logical state without the timestamp: compared to decide when to rewrite the file. */
@@ -144,9 +148,10 @@ public final class StateExport implements ClientModInitializer {
         final int ground;
         final long hurt;
         final long hit;
+        final long back;
 
         Snapshot(String line, int block, int sword, int target, int bed, int look, int water,
-                 int ground, long hurt, long hit) {
+                 int ground, long hurt, long hit, long back) {
             this.line = line;
             this.block = block;
             this.sword = sword;
@@ -157,6 +162,7 @@ public final class StateExport implements ClientModInitializer {
             this.ground = ground;
             this.hurt = hurt;
             this.hit = hit;
+            this.back = back;
         }
     }
 
@@ -211,12 +217,16 @@ public final class StateExport implements ClientModInitializer {
         final Method isInWater;
         final Method onGround;
         final Method getCurrentSwing;
+        final Method getLastHurtByMob;
+        final Method getLastHurtByMobTimestamp;
+        final Field tickCount;
         Object lastPlayer;
         int lastHurtTime = -1;
         Object lastSwing;
         int lastExactTarget;
         long hurtCounter;
         long hitCounter;
+        long backCounter;
         // Extended-reach check. Vanilla only puts an entity in hitResult within the normal
         // attack reach; this ray looks a little further so the gate opens as a player runs in.
         final Field level;
@@ -301,11 +311,16 @@ public final class StateExport implements ClientModInitializer {
             // mapping is missing. `hurtTime` is a public field that rises when damage lands;
             // `getCurrentSwing` changes object identity for every new swing.
             Field hurtField = null;
-            Method inWater = null, onGroundMethod = null, currentSwing = null;
+            Field tickField = null;
+            Method inWater = null, onGroundMethod = null, currentSwing = null, lastHurtBy = null;
+            Method lastHurtByAt = null;
             try {
                 Class<?> livingType2 = Class.forName("net.minecraft.world.entity.LivingEntity");
                 hurtField = livingType2.getField("hurtTime");
                 currentSwing = livingType2.getMethod("getCurrentSwing");
+                lastHurtBy = livingType2.getMethod("getLastHurtByMob");
+                lastHurtByAt = livingType2.getMethod("getLastHurtByMobTimestamp");
+                tickField = Class.forName("net.minecraft.world.entity.Entity").getField("tickCount");
             } catch (ReflectiveOperationException | RuntimeException ignored) {
             }
             try {
@@ -318,6 +333,9 @@ public final class StateExport implements ClientModInitializer {
             isInWater = inWater;
             onGround = onGroundMethod;
             getCurrentSwing = currentSwing;
+            getLastHurtByMob = lastHurtBy;
+            getLastHurtByMobTimestamp = lastHurtByAt;
+            tickCount = tickField;
 
             // Where a block hit landed, so the extended ray can stop at the wall instead of
             // reporting a player behind it.
@@ -496,6 +514,7 @@ public final class StateExport implements ClientModInitializer {
                     lastHurtTime = now;
                 } else if (now > lastHurtTime) {
                     hurtCounter++;
+                    if (hurtFromBehind(self)) backCounter++;
                     lastHurtTime = now;
                 } else {
                     lastHurtTime = now;
@@ -503,6 +522,42 @@ public final class StateExport implements ClientModInitializer {
                 return hurtCounter;
             } catch (ReflectiveOperationException | RuntimeException e) {
                 return -1;
+            }
+        }
+
+        /**
+         * True when the last attacker stands in the rear hemisphere. Only the horizontal
+         * direction matters: looking down at the ground while fighting must not turn a frontal
+         * hit into a backstab. The -0.25 margin keeps a glancing side hit from counting.
+         */
+        private boolean hurtFromBehind(Object self) {
+            if (getLastHurtByMob == null || getLastHurtByMobTimestamp == null ||
+                tickCount == null || getLookAngle == null ||
+                getX == null || getZ == null ||
+                vecX == null || vecY == null || vecZ == null) {
+                return false;
+            }
+            try {
+                // Environmental damage (fall, fire) leaves the last mob attacker in place. Only
+                // trust it when it is from this tick or the one before, so old damage cannot
+                // make a later fall look like a backstab.
+                int now = tickCount.getInt(self);
+                int stamp = (Integer) getLastHurtByMobTimestamp.invoke(self);
+                if (now - stamp > 2 || now < stamp) return false;
+                Object attacker = getLastHurtByMob.invoke(self);
+                if (attacker == null || attacker == self) return false;
+                double dx = (Double) getX.invoke(attacker) - (Double) getX.invoke(self);
+                double dz = (Double) getZ.invoke(attacker) - (Double) getZ.invoke(self);
+                double dist = Math.sqrt(dx * dx + dz * dz);
+                Object look = getLookAngle.invoke(self);
+                double lx = vecX.getDouble(look);
+                double lz = vecZ.getDouble(look);
+                double lookDist = Math.sqrt(lx * lx + lz * lz);
+                if (dist < 1.0e-4 || lookDist < 1.0e-4) return false;
+                double dot = (dx * lx + dz * lz) / (dist * lookDist);
+                return dot < -0.25;
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                return false;
             }
         }
 
@@ -527,8 +582,9 @@ public final class StateExport implements ClientModInitializer {
         }
 
         /** 1 = a living entity (mob or player) is in the crosshair, 0 = a block or nothing,
-         *  -1 = cannot tell. The ray keeps going about one block past vanilla reach, so the
-         *  gate opens as a player runs in rather than only once they are already in range. */        int targetState(Object mc, Object self) {
+         *  -1 = cannot tell. The ray keeps going half a block past vanilla reach, so the
+         *  gate opens as a player runs in rather than only once they are already in range. */
+        int targetState(Object mc, Object self) {
             if (hitResult == null || hitEntity == null || livingClass == null) return -1;
             try {
                 Object hit = hitResult.get(mc);

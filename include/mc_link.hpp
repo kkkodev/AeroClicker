@@ -15,15 +15,17 @@
 //     slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch milliseconds>
 //     block=<0|1|-1> sword=<0|1|-1> target=<0|1|-1> bed=<0|1|-1>
 //     look=<0|1|-1> water=<0|1|-1> ground=<0|1|-1> hurt=<counter> hit=<counter>
+//     back=<counter>
 //
 // `block` says whether the held item is a block (placeable), `sword` whether it is a sword,
 // `target` whether the crosshair is on a living entity (a mob or another player), and `bed`
 // whether the held item is a bed. `look` is set while the crosshair is on a block, `water`
 // while the local player is in water, and `ground` while the player stands on the ground.
 // `hurt` and `hit` are counters: hurt goes up when the local player takes damage, hit when the
-// local player attacks a living entity. They are last so a build without them still parses as
-// a prefix, and -1 means "this mod build cannot tell". Older mod builds call the target field
-// `player`; it is read as `target` too.
+// local player attacks a living entity, and `back` goes up alongside hurt when the attacker was
+// behind the player. They are last so a build without them still parses as a prefix, and -1
+// means "this mod build cannot tell". Older mod builds call the target field `player`; it is
+// read as `target` too.
 // Reading is the whole contract: nothing is sent to the server and no input is touched.
 namespace McLink {
 
@@ -61,6 +63,7 @@ struct State {
     int ground = -1;
     long long hurt = 0;
     long long hit = 0;
+    long long back = 0;
 };
 
 // Returns true only while the file is fresh, and fills `out` with that line.
@@ -114,6 +117,7 @@ inline bool poll(State& out) {
     out.ground = int_field("ground", -1);
     out.hurt = long_field("hurt");
     out.hit = long_field("hit");
+    out.back = long_field("back");
     return true;
 }
 
