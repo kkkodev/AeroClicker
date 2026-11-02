@@ -834,7 +834,7 @@ bool oxygen_field_button(const char* label, ImVec2 size_arg, bool armed) {
 
 // ---------- checkbox ----------
 
-bool oxygen_checkbox(const char* label, bool* v, bool label_clickable) {
+bool oxygen_checkbox(const char* label, bool* v, bool label_clickable, bool disabled) {
     const float sz = ImGui::GetFrameHeight();
     const float R = OXY_R;
     const char* tend = strstr(label, "##");
@@ -843,10 +843,12 @@ bool oxygen_checkbox(const char* label, bool* v, bool label_clickable) {
     ImVec2 total(sz + (ls.x > 0.0f ? ImGui::GetStyle().ItemInnerSpacing.x + ls.x : 0.0f), sz);
     bool clicked_item = ImGui::InvisibleButton(label, total);
     const bool in_box = ImGui::GetIO().MousePos.x <= mn.x + sz;
-    bool clicked = clicked_item && (label_clickable || in_box);
+    // A disabled checkbox still submits its item, so layout and IDs stay stable, but it never
+    // reacts to the mouse and never flips its value.
+    bool clicked = !disabled && clicked_item && (label_clickable || in_box);
     if (clicked) *v = !*v;
-    bool hov = ImGui::IsItemHovered() && (label_clickable || in_box);
-    bool act = ImGui::IsItemActive() && (label_clickable || in_box);
+    bool hov = !disabled && ImGui::IsItemHovered() && (label_clickable || in_box);
+    bool act = !disabled && ImGui::IsItemActive() && (label_clickable || in_box);
     ImDrawList* dl = ImGui::GetWindowDrawList();
     // Identity comes from the "##id" suffix when the label has one, so a checkbox whose visible
     // text changes with its state ("Enabled##inv" / "Disabled##inv") keeps its animation state
@@ -858,21 +860,30 @@ bool oxygen_checkbox(const char* label, bool* v, bool label_clickable) {
     ImVec2 bx1(mn.x + sz, mn.y + sz);
     ImVec2 cmn = crisp_min(mn);
     ImVec2 cbx1 = crisp_max(bx1);
-    ImU32 fill = lerp_u32(OxCol(mulc(g_body_color, 1.90f), 235),
-                          OxCol(act ? g_accent_hover : g_accent_active), t_c);
-    ImU32 rimc = lerp_u32(ox_rim_neutral(200), ox_accent_rim(), t_h > t_c ? t_h : t_c);
-    if (ox_is_light()) {
-        // Both states get a real vertical ramp: unchecked = light->shade, checked = accent
-        // light->dark, so the box has the same depth as the buttons and fields next to it.
-        ImU32 top_c = lerp_u32(OxCol(ox_tint(g_body_color, 0.96f), 245), OxCol(g_accent_hover), t_c);
-        ImU32 bot_c = lerp_u32(OxCol(ox_tint(g_body_color, 0.26f), 245), OxCol(g_accent_active), t_c);
+    if (disabled) {
+        // Muted neutral face instead of the accent: the tick stays, so the option still reads
+        // as checked, but the grey box and rim say it cannot be used right now.
+        const ImU32 top_c = OxCol(ox_tint(g_body_color, ox_is_light() ? 0.10f : 0.22f), 235);
+        const ImU32 bot_c = OxCol(ox_tint(g_body_color, ox_is_light() ? -0.07f : 0.10f), 235);
         AddRoundedRectFilledGradV(dl, cmn, cbx1, top_c, bot_c, R);
-        glass_gloss(dl, cmn, cbx1, R, cmn.y + sz * 0.58f, 46);
+        ox_outline(dl, cmn, cbx1, R, ox_rim_neutral(120));
     } else {
-        dl->AddRectFilled(cmn, cbx1, fill, R);
-        glass_gloss(dl, cmn, cbx1, R, cmn.y + sz * 0.55f, 36 + (int)(44 * t_c));
+        ImU32 fill = lerp_u32(OxCol(mulc(g_body_color, 1.90f), 235),
+                              OxCol(act ? g_accent_hover : g_accent_active), t_c);
+        ImU32 rimc = lerp_u32(ox_rim_neutral(200), ox_accent_rim(), t_h > t_c ? t_h : t_c);
+        if (ox_is_light()) {
+            // Both states get a real vertical ramp: unchecked = light->shade, checked = accent
+            // light->dark, so the box has the same depth as the buttons and fields next to it.
+            ImU32 top_c = lerp_u32(OxCol(ox_tint(g_body_color, 0.96f), 245), OxCol(g_accent_hover), t_c);
+            ImU32 bot_c = lerp_u32(OxCol(ox_tint(g_body_color, 0.26f), 245), OxCol(g_accent_active), t_c);
+            AddRoundedRectFilledGradV(dl, cmn, cbx1, top_c, bot_c, R);
+            glass_gloss(dl, cmn, cbx1, R, cmn.y + sz * 0.58f, 46);
+        } else {
+            dl->AddRectFilled(cmn, cbx1, fill, R);
+            glass_gloss(dl, cmn, cbx1, R, cmn.y + sz * 0.55f, 36 + (int)(44 * t_c));
+        }
+        ox_outline(dl, cmn, cbx1, R, rimc);
     }
-    ox_outline(dl, cmn, cbx1, R, rimc);
     if (t_c > 0.01f) {
         const float th = (sz * 0.09f < 1.4f) ? 1.4f : (sz * 0.09f);
         ImVec2 pts[3] = {
@@ -890,15 +901,19 @@ bool oxygen_checkbox(const char* label, bool* v, bool label_clickable) {
         // hard luminance threshold, so choosing from the lerped fill made the tick flip
         // white<->black part-way through the animation. Light theme uses white on the accent.
         if (tick_a > 0) {
-            const ImU32 ink = ((ox_is_light() ? IM_COL32(255, 255, 255, 0)
-                                             : ox_ink_on(OxCol(g_accent_active))) & ~IM_COL32_A_MASK)
-                              | ((ImU32)tick_a << IM_COL32_A_SHIFT);
+            const ImU32 ink = disabled
+                ? OxCol(lerp4(g_body_color, g_text_color, ox_is_light() ? 0.42f : 0.55f), tick_a)
+                : (((ox_is_light() ? IM_COL32(255, 255, 255, 0)
+                                   : ox_ink_on(OxCol(g_accent_active))) & ~IM_COL32_A_MASK)
+                   | ((ImU32)tick_a << IM_COL32_A_SHIFT));
             dl->AddPolyline(pts, 3, ink, 0, th);
         }
     }
     if (ls.x > 0.0f)
         dl->AddText(ImVec2(cbx1.x + ImGui::GetStyle().ItemInnerSpacing.x, vcenter_top(mn.y, mn.y + sz)),
-                    ImGui::GetColorU32(ImGuiCol_Text), label, tend ? tend : nullptr);
+                    disabled ? ImGui::GetColorU32(ImGuiCol_TextDisabled)
+                             : ImGui::GetColorU32(ImGuiCol_Text),
+                    label, tend ? tend : nullptr);
     return clicked;
 }
 
@@ -1131,10 +1146,10 @@ bool row_combo(const char* label, int* idx, const char* items) {
     return combo_framed(id, idx, items);
 }
 
-bool row_check(const char* label, bool* v) {
+bool row_check(const char* label, bool* v, bool disabled) {
     // Checkmark first, then the label. Keeping them together also stops a long label from
     // running into the fixed control column and being clipped in a narrow window.
-    return oxygen_checkbox(label, v);
+    return oxygen_checkbox(label, v, true, disabled);
 }
 
 bool row_color3(const char* label, float* rgb) {

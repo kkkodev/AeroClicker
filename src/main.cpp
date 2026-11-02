@@ -173,11 +173,6 @@ static void sync_key_state(int fd, VirtualKeyboard& kb) {
     kb.sync_physical(down);
 }
 
-static void beep(bool on) {
-    if (on) Audio::beep_on();
-    else Audio::beep_off();
-}
-
 static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_clicker,
                           UInputDevice& device, Combat* combat, GuiState& gui_state) {
     // A device that was opened at startup can vanish: a keyboard swapped or replugged, a mouse
@@ -299,6 +294,17 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
         clicker.set_pause(Clicker::PAUSE_INVENTORY, config.pause_in_menu && gui_state.in_menu.load());
     };
 
+    // A single key press can toggle several modules: both clickers and both resets may share
+    // one key, and every chime spawns a paplay process, so handling that press directly made
+    // four overlapping tones. Requests are collected during one poll pass and played once at
+    // the end of it; "on" wins when the press turned anything on.
+    bool chime_pending = false;
+    bool chime_on = false;
+    auto request_chime = [&](bool on) {
+        chime_pending = true;
+        chime_on = chime_on || on;
+    };
+
     // A clicker's bound key is its master control: it acts even while a game screen is open, and
     // it overrides the automatic pause. The next slot change hands control back to the slot
     // rules. Shared by the keyboard and mouse paths, since the same key can be bound on either
@@ -336,25 +342,28 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
             gui_state.in_menu = false;
             clicker.set_pause(Clicker::PAUSE_INVENTORY, false);
         }
-        if (config.audio_enabled && now != was) {
-            if (now) Audio::beep_on();
-            else Audio::beep_off();
-        }
+        if (now != was) request_chime(now);
     };
 
     // Jump/Sprint reset toggles. Shared by the keyboard and mouse paths for the same reason as
-    // the clicker keys: a mouse button can be bound as a reset toggle too.
+    // the clicker keys: a mouse button can be bound as a reset toggle too. The two resets may
+    // also share one key, exactly like the two clickers, so each side is tested separately: an
+    // else-if chain would give the key to Jump Reset and leave Sprint Reset dead.
     auto handle_reset_key = [&](int code, int value) {
         if (!combat || value != 1) return;
-        if (code == config.key_jump_reset) {
+        const bool jump_key = code == config.key_jump_reset;
+        const bool sprint_key = code == config.key_sprint_reset;
+        if (!jump_key && !sprint_key) return;
+        if (jump_key) {
             config.jump_reset_enabled = !config.jump_reset_enabled;
             combat->jump.set_enabled(config.jump_reset_enabled);
-            if (config.audio_enabled) beep(config.jump_reset_enabled);
-        } else if (code == config.key_sprint_reset) {
+        }
+        if (sprint_key) {
             config.sprint_reset_enabled = !config.sprint_reset_enabled;
             combat->sprint.set_enabled(config.sprint_reset_enabled);
-            if (config.audio_enabled) beep(config.sprint_reset_enabled);
         }
+        // Collected with any clicker chime from the same press: one sound, not four.
+        request_chime(config.jump_reset_enabled || config.sprint_reset_enabled);
     };
 
     // Slot activation: the selected slot switches a clicker on when it is one of that clicker's
@@ -559,12 +568,17 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
         const int left_gate = config.left_gate;
         left_clicker.set_pause(Clicker::PAUSE_NO_SWORD,
                                mc_live && (left_gate & 1) && mc.sword == 0);
+        // The bridge reports a bitmask: 1 = a mob/player, 2 = a fireball, 3 = both. An older jar
+        // only ever reports 1, so fireballs simply stay inert there.
+        const bool has_living = (mc.target & 1) != 0;
+        const bool has_fireball = (mc.target & 2) != 0;
+        const bool has_target = has_living || (config.left_gate_fireball && has_fireball);
         left_clicker.set_pause(Clicker::PAUSE_NO_TARGET,
-                               mc_live && (left_gate & 2) && mc.target == 0);
+                               mc_live && (left_gate & 2) && mc.target >= 0 && !has_target);
 
         // If a gate blocked the physical press, the press itself went to the game and the
         // clicker never started. Start it here when the gate opens while the button is still
-        // held, so moving the crosshair onto a mob or player begins clicking without a new
+        // held, so moving the crosshair onto a target begins clicking without a new
         // press. Ownership stays false: the release still belongs to the game.
         auto start_held_mouse = [&](Clicker& clicker, bool held, bool owned, bool& started,
                                     bool gate_blocked, ActivationMode mode, bool armed) {
@@ -751,6 +765,15 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                     if (mouse_grabbed) device.emit_raw(ev.type, ev.code, ev.value);
                 }
             }
+        }
+
+        if (chime_pending) {
+            chime_pending = false;
+            if (config.audio_enabled) {
+                if (chime_on) Audio::beep_on();
+                else Audio::beep_off();
+            }
+            chime_on = false;
         }
     }
 

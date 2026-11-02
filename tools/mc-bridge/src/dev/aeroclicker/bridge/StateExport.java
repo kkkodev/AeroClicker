@@ -584,9 +584,20 @@ public final class StateExport implements ClientModInitializer {
             }
         }
 
-        /** 1 = a living entity (mob or player) is in the crosshair, 0 = a block or nothing,
-         *  -1 = cannot tell. The ray keeps going half a block past vanilla reach, so the
-         *  gate opens as a player runs in rather than only once they are already in range. */
+        /** True for any fireball (large, small or dragon) regardless of the mapping's class
+         *  name: Yarn calls it FireballEntity, official mappings call it Fireball. */
+        private static boolean isFireball(Object e) {
+            for (Class<?> c = e.getClass(); c != null; c = c.getSuperclass()) {
+                String n = c.getName();
+                if (n.endsWith(".Fireball") || n.endsWith("FireballEntity")) return true;
+            }
+            return false;
+        }
+
+        /** Bitmask of what the gate can see: 1 = a mob/player, 2 = a fireball, 3 = both,
+         *  0 = a block or nothing, -1 = cannot tell. Keeping the two apart lets the app's
+         *  "Click at fireballs" option decide whether fireballs count. The ray keeps going
+         *  half a block past vanilla reach, so the gate opens as a target runs in. */
         int targetState(Object mc, Object self) {
             if (hitResult == null || hitEntity == null || livingClass == null) return -1;
             try {
@@ -595,8 +606,9 @@ public final class StateExport implements ClientModInitializer {
                 if (hit != null) {
                     if (entityHitClass.isInstance(hit)) {
                         Object entity = hitEntity.invoke(hit);
-                        return entity != null && entity != self && livingClass.isInstance(entity)
-                            ? 1 : 0;
+                        if (entity == null || entity == self) return 0;
+                        if (livingClass.isInstance(entity)) return 1;
+                        return isFireball(entity) ? 2 : 0;
                     }
                     if (isBlockHit(hit)) {
                         // A wall in front of the player ends the ray there: an entity behind it
@@ -635,9 +647,14 @@ public final class StateExport implements ClientModInitializer {
                 if (world == null) return 0;
                 Object ownBox = getBoundingBox.invoke(self);
                 Object search = inflate.invoke(ownBox, TARGET_REACH + 1.0);
-                Predicate<Object> notSelf = e -> e != self;
+                // Search Entity (LivingEntity's superclass) and filter here: a LivingEntity
+                // class filter would drop fireballs, which the app may or may not count.
+                Class<?> entityClass = livingClass.getSuperclass();
+                if (entityClass == null) return 0;
+                Predicate<Object> wanted = e -> e != self &&
+                    (livingClass.isInstance(e) || isFireball(e));
                 List<?> entities = (List<?>) getEntitiesOfClass.invoke(
-                    world, livingClass, search, notSelf);
+                    world, entityClass, search, wanted);
                 if (entities == null || entities.isEmpty()) return 0;
 
                 double x = (Double) getX.invoke(self);
@@ -651,13 +668,17 @@ public final class StateExport implements ClientModInitializer {
                 Object end = vec3Ctor.newInstance(x + dx * maxDist,
                                                   y + dy * maxDist,
                                                   z + dz * maxDist);
+                boolean living = false, fireball = false;
                 for (Object entity : entities) {
                     Object box = getBoundingBox.invoke(entity);
                     Object padded = inflate.invoke(box, TARGET_BOX_PAD);
                     Optional<?> hit = (Optional<?>) clip.invoke(padded, eye, end);
-                    if (hit != null && hit.isPresent()) return 1;
+                    if (hit != null && hit.isPresent()) {
+                        if (livingClass.isInstance(entity)) living = true;
+                        if (isFireball(entity)) fireball = true;
+                    }
                 }
-                return 0;
+                return (living ? 1 : 0) | (fireball ? 2 : 0);
             } catch (ReflectiveOperationException | RuntimeException e) {
                 return 0;
             }

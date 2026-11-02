@@ -25,7 +25,10 @@ bool oxygen_button(const char* label, ImVec2 size_arg = ImVec2(0, 0), ImU32 c1_o
 // Two-line choice tile (name over range) used for the preset grids: equal-width cells that
 // fill the row exactly, so a wrapped grid never looks ragged or off-centre.
 bool ox_preset_tile(const char* id, const char* title, const char* sub, ImVec2 size, bool selected);
-bool oxygen_checkbox(const char* label, bool* v, bool label_clickable = true);
+// `disabled` keeps the box and its tick visible but paints them muted and stops them reacting,
+// which is what a dependent option needs (Skip beds without the block gate). It never changes
+// the stored value: a checked option stays checked while it is unavailable.
+bool oxygen_checkbox(const char* label, bool* v, bool label_clickable = true, bool disabled = false);
 bool oxygen_list_item(const char* id, const char* label, bool selected, bool separator = false);
 bool combo_framed(const char* id, int* idx, const char* items);
 void field_background(ImDrawList* dl, ImVec2 r0, ImVec2 r1, float rounding, bool border = true, int fill_alpha = 230);
@@ -36,7 +39,7 @@ ImVec2 click_indicator_size(const char* label);
 // table-style rows (label left, control right) — for wide panels
 bool row_slider(const char* label, double* v, double lo, double hi, const char* fmt);
 bool row_combo(const char* label, int* idx, const char* items);
-bool row_check(const char* label, bool* v);
+bool row_check(const char* label, bool* v, bool disabled = false);
 bool row_color3(const char* label, float* rgb);   // themed swatch + R/G/B fields
 void keybind_row(const char* label, int& key_code);
 

@@ -170,7 +170,9 @@ struct Macro {
 // are deliberately human-paced and randomized; a jump reset 15 ms after a hit looks nothing
 // like a person reacting, while ~45 ms with a spread does.
 struct JumpResetProfile {
-    double chance = 0.90;
+    // 85 % reads as a person who sometimes misses the reaction rather than a machine that
+    // jumps on every hit. Sprint reset keeps its own default.
+    double chance = 0.85;
     double delay_ms_mean = 45.0;
     double delay_ms_stddev = 15.0;
     double delay_ms_min = 20.0;
@@ -228,25 +230,31 @@ struct Config {
 
     // Slot activation: while one of a clicker's slots is the selected hotbar slot, that clicker
     // is switched on; any other slot switches it off. The slot comes from the bridge mod, so
-    // this only acts while the game is publishing state. Defaults: slot 1 left, slot 9 right.
-    bool slot_auto_enabled = true;
+    // this only acts while the game is publishing state. The mapping defaults to slot 1 left and
+    // slot 9 right, but following the hotbar is off until the user enables it.
+    bool slot_auto_enabled = false;
     bool left_slots[9]  = {true,  false, false, false, false, false, false, false, false};
     bool right_slots[9] = {false, false, false, false, false, false, false, false, true};
     // Screens include the inventory, chat, chests and NPC menus: clicking them is never wanted.
     bool pause_in_menu = true;
-    // Right clicker: click only while the held item is a block. The bridge mod reports the
+    // Right clicker: click only while the held item is a block. On by default, so a right
+    // clicker cannot throw a pearl or drink a potion by accident. The bridge mod reports the
     // held item, so this is inert without it (and with an older mod build).
-    bool right_placeable_only = false;
+    bool right_placeable_only = true;
     // Beds are placeable blocks, but a right clicker holding one is usually a mistake (bed
     // PvP, accidental placement). On by default so the right gate skips them.
     bool right_gate_no_bed = true;
-    // Right clicker: only click while the crosshair is on a block. This is the build/bridge
-    // filter; it is separate from the held-item gate and needs a mod build that reports `look`.
-    bool right_look_block = false;
-    // Left clicker, GhostTap-style gate. Value 1 = a sword must be held, 2 = a living entity
-    // must be in the crosshair, 3 = both. 0 is off. Inert without the bridge mod.
+    // Right clicker: only click while the crosshair is on a block. On by default, so it stays
+    // quiet while aiming at air or an entity. This is the build/bridge filter; it is separate
+    // from the held-item gate and needs a mod build that reports `look`.
+    bool right_look_block = true;
+    // Left clicker, GhostTap-style gate. Value 1 = a sword must be held, 2 = a target (mob,
+    // player or fireball) must be in the crosshair, 3 = both. 0 is off. Inert without the mod.
     // Default: only click at targets, which is what keeps a clicker from firing at blocks.
     int left_gate = 2;
+    // Whether a fireball in the crosshair counts as a target for the gate above. On by default:
+    // a fireball flying at you is worth clicking at just like a player.
+    bool left_gate_fireball = true;
 
     // Combat modules: off until the user turns them on. The profiles above hold their timing.
     bool jump_reset_enabled = false;

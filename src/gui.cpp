@@ -14,10 +14,11 @@
 #include <cmath>
 #include <cstdlib>
 
-static const char* TAB_NAMES[] = { "Home", "Settings", "Left", "Right", "Macros", "Analytics" };
-static const OxIcon TAB_ICONS[] = { OxIcon::Home, OxIcon::Sliders, OxIcon::ArrowLeft,
-                                    OxIcon::ArrowRight, OxIcon::List, OxIcon::Chart };
-static const int TAB_COUNT = 6;
+static const char* TAB_NAMES[] = { "Home", "Mod", "Settings", "Left", "Right", "Macros", "Analytics" };
+static const OxIcon TAB_ICONS[] = { OxIcon::Home, OxIcon::Globe, OxIcon::Sliders,
+                                    OxIcon::ArrowLeft, OxIcon::ArrowRight, OxIcon::List,
+                                    OxIcon::Chart };
+static const int TAB_COUNT = 7;
 
 static char s_font_path[256]   = "";
 static float s_font_scale      = 0.0f;
@@ -110,7 +111,7 @@ static const char* pause_reason_text(uint32_t mask) {
     if (mask & Clicker::PAUSE_HELD_BED)  return "holding a bed";
     if (mask & Clicker::PAUSE_HELD_ITEM) return "held item is not a block";
     if (mask & Clicker::PAUSE_NO_BLOCK)  return "crosshair is not on a block";
-    if (mask & Clicker::PAUSE_NO_TARGET) return "no mob or player in crosshair";
+    if (mask & Clicker::PAUSE_NO_TARGET) return "no target in crosshair";
     if (mask & Clicker::PAUSE_NO_SWORD)  return "no sword in hand";
     return "paused";
 }
@@ -447,7 +448,7 @@ static void draw_macros_tab(GuiState& state) {
 // One clicker's row of 1-9 toggles, in its own inset so the two mappings read as a pair of
 // blocks instead of running into the switches above them. The slot the game currently has
 // selected is outlined, so the mapping can be set without counting boxes.
-static void slot_row(const char* label, bool* slots, int active_slot, bool live) {
+static void slot_row(const char* label, bool* slots, int active_slot, bool live, bool disabled) {
     const ImGuiStyle& st = ImGui::GetStyle();
     const float pad = 9.0f;
     const float label_h = ImGui::GetTextLineHeight();
@@ -461,7 +462,8 @@ static void slot_row(const char* label, bool* slots, int active_slot, bool live)
                      ox_is_light() ? 120 : 150);
 
     ImGui::SetCursorScreenPos(ImVec2(start.x + pad, start.y + pad));
-    ImGui::TextUnformatted(label);
+    if (disabled) ImGui::TextDisabled("%s", label);
+    else          ImGui::TextUnformatted(label);
 
     // Spread the nine boxes across the inset instead of leaving them bunched at the left,
     // which made each block look like an empty field with a stray row of controls.
@@ -491,7 +493,7 @@ static void slot_row(const char* label, bool* slots, int active_slot, bool live)
             dl->AddRectFilled(a, b, OxCol(g_accent_color, 32), 4.0f);
             dl->AddRect(a, b, OxCol(g_accent_color, 190), 4.0f, 0, 1.0f);
         }
-        oxygen_checkbox(slabel, &slots[i]);
+        oxygen_checkbox(slabel, &slots[i], true, disabled);
         x += widths[i] + spread;
     }
     ImGui::PopID();
@@ -501,29 +503,16 @@ static void slot_row(const char* label, bool* slots, int active_slot, bool live)
     ImGui::Dummy(ImVec2(0.0f, 0.0f));
 }
 
-// A labelled rule that splits the settings page into "needs the bridge mod" and "works on its
-// own". Without it the mod-only rows look like ordinary options that do nothing.
-static void section_divider(const char* caption) {
+// The Mod tab holds everything driven by the bridge mod: the global toggles and slot rules,
+// the per-clicker gates and the combat resets. Settings keeps only what works without the game.
+static void draw_mod_tab(GuiState& state) {
     ImGui::Spacing();
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    const ImVec2 p = ImGui::GetCursorScreenPos();
-    const float w = ImGui::GetContentRegionAvail().x;
-    const float y = floorf(p.y) + 0.5f;
-    const float fs = ImGui::GetIO().DisplayFramebufferScale.y;
-    dl->AddLine(ImVec2(p.x, y), ImVec2(p.x + w, y),
-                ox_is_light() ? OxCol(ox_tint(g_body_color, -0.30f), 90)
-                              : OxCol(mulc(g_body_color, 2.0f), 80),
-                fs > 0.0f ? 1.0f / fs : 1.0f);
-    ImGui::Dummy(ImVec2(0.0f, 6.0f));
-    ImGui::TextDisabled("%s", caption);
-}
-
-static void draw_settings_tab(GuiState& state, std::vector<std::string>& profiles, int& selected_profile,
-                              char* profile_name_buf, char* status_msg, float& status_timer) {
-    ImGui::Spacing();
-    // Everything in this panel is fed by the bridge mod. It comes first and is captioned as a
-    // mod-only block so the options below it are clearly usable without Minecraft.
-    begin_panel("Minecraft", -1.0f, -1, OxIcon::Globe);
+    // The Macros tab also has a card titled "Global", and panel heights are cached by title; a
+    // scope of its own keeps the two from showing each other's background after a tab switch.
+    ImGui::PushID("mod_tab");
+    // This card used to be called "Minecraft" and sat in Settings; it is the mod's global block
+    // now that the whole tab is about the game.
+    begin_panel("Global", -1.0f, -1, OxIcon::Globe);
     const int active_slot = state.active_slot.load();
     const bool live = state.mc_linked.load();
     if (live)
@@ -531,32 +520,39 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
     else
         ImGui::TextDisabled("Bridge mod: not detected - install it to use this panel");
 
-    row_check("Follow hotbar slots", &state.config.slot_auto_enabled);
-    ImGui::TextDisabled("Switches a clicker on while one of its slots is selected");
     row_check("Pause on menus", &state.config.pause_in_menu);
     ImGui::TextDisabled("Covers the inventory, chat, chests and NPC menus");
-    ImGui::BeginDisabled(!state.config.slot_auto_enabled);
-    slot_row("Left clicker", state.config.left_slots, active_slot, live);
-    slot_row("Right clicker", state.config.right_slots, active_slot, live);
-    ImGui::EndDisabled();
+    row_check("Follow hotbar slots", &state.config.slot_auto_enabled);
+    ImGui::TextDisabled("Switches a clicker on while one of its slots is selected");
+
+    // The slot grid only means something while following is on. It uses the same muted style
+    // as Skip beds rather than ImGui's stock disabled dimming, and keeps its stored mapping.
+    const bool slots_disabled = !state.config.slot_auto_enabled;
+    slot_row("Left clicker", state.config.left_slots, active_slot, live, slots_disabled);
+    slot_row("Right clicker", state.config.right_slots, active_slot, live, slots_disabled);
 
     end_panel();
 
-    // The gates used to be two rows inside the Minecraft panel. They are the clicker-specific
-    // rules, so each side gets its own captioned section with its own card instead.
-    section_divider("Left clicker");
-    begin_panel("Gate", -1.0f, -1, OxIcon::ArrowLeft);
+    // The gates used to be two rows inside the Minecraft panel, then a captioned section above
+    // a card titled "Gate". Both sides now get one card titled with the clicker they belong to
+    // and carrying its icon, which also keeps their cached panel heights apart: two cards with
+    // the same title shared one height and the second drew the first one's background. The
+    // PushID keeps these titles distinct from the Home tab's cards of the same name, so the
+    // cached height can never leak across tabs either.
+    ImGui::PushID("gate_cards");
+    begin_panel("Left clicker", -1.0f, -1, OxIcon::MouseLeft);
     // GhostTap-style. The target-in-crosshair option also covers mining, because a block is in
-    // the crosshair instead of a mob or player, so the click is passed through.
+    // the crosshair instead of a target, so the click is passed through. Fireballs count too:
+    // a fireball flying at you is worth clicking at just like a player.
     if (state.config.left_gate < 0) state.config.left_gate = 0;
     if (state.config.left_gate > 3) state.config.left_gate = 3;
     row_combo("Click when", &state.config.left_gate,
-              "Always\0Holding a sword\0Mob/player in crosshair\0Sword + mob/player\0");
+              "Always\0Holding a sword\0Target in crosshair\0Sword + target\0");
     static const char* const LEFT_GATE_HINTS[] = {
         "Runs without asking the game anything",
         "Only clicks while holding a sword",
-        "Only clicks while a mob or player is in the crosshair",
-        "Only clicks at a mob or player while holding a sword",
+        "Only clicks while a mob, player or fireball is in the crosshair",
+        "Only clicks at a mob, player or fireball while holding a sword",
     };
     const int gate = state.config.left_gate;
     const bool gate_known = (gate & 1 ? state.mc_sword_known.load() : true) &&
@@ -565,19 +561,29 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
         ImGui::TextDisabled("This mod build cannot report this gate");
     else
         ImGui::TextDisabled("%s", LEFT_GATE_HINTS[gate]);
+
+    // A fireball only means something when the gate actually requires a target (values 2 and 3);
+    // in the other modes the box is drawn muted instead of pretending it changes anything.
+    const bool fireball_used = (gate & 2) != 0;
+    row_check("Click at fireballs", &state.config.left_gate_fireball, !fireball_used);
+    if (!fireball_used)
+        ImGui::TextDisabled("Only used when the gate requires a target");
+    else if (!state.config.left_gate_fireball)
+        ImGui::TextDisabled("Fireballs are ignored; only mobs and players count");
+    else
+        ImGui::TextDisabled("Fireballs in the crosshair count like players");
     end_panel();
 
-    section_divider("Right clicker");
-    begin_panel("Gate", -1.0f, -1, OxIcon::ArrowRight);
+    begin_panel("Right clicker", -1.0f, -1, OxIcon::MouseRight);
     row_check("Placeable blocks only", &state.config.right_placeable_only);
     if (live && state.config.right_placeable_only && !state.mc_block_known.load())
         ImGui::TextDisabled("This mod build cannot report the held item");
     else
         ImGui::TextDisabled("Only right-clicks while holding a placeable block");
 
-    ImGui::BeginDisabled(!state.config.right_placeable_only);
-    row_check("Skip beds", &state.config.right_gate_no_bed);
-    ImGui::EndDisabled();
+    // Dependent option: without the block gate there is nothing to skip, so the box keeps its
+    // checked state but is drawn (and behaves) as disabled instead of switching itself off.
+    row_check("Skip beds", &state.config.right_gate_no_bed, !state.config.right_placeable_only);
     if (!state.config.right_placeable_only)
         ImGui::TextDisabled("Beds are skipped only while the block gate is on");
     else if (live && state.config.right_gate_no_bed && !state.mc_bed_known.load())
@@ -591,6 +597,7 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
     else
         ImGui::TextDisabled("Stops while the crosshair is on air or an entity");
     end_panel();
+    ImGui::PopID();
 
     // Both resets read game events from the bridge mod, so they belong above the
     // "works without Minecraft" divider: with no game running there is nothing to react to.
@@ -633,7 +640,7 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
     else if (!live)
         ImGui::TextDisabled("Needs the bridge mod; fires when you hit a living entity");
     else
-        ImGui::TextDisabled("Breaks sprint after the game reports a hit on a mob or player");
+        ImGui::TextDisabled("Breaks sprint after the game reports a hit on a living entity");
     row_check("Enable Sprint Reset", &state.config.sprint_reset_enabled);
     keybind_row("Toggle key", state.config.key_sprint_reset);
     if (state.config.sprint_reset_enabled) {
@@ -654,12 +661,17 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
         ImGui::TextDisabled("W-Tap grabs the keyboard only while no key is held");
     }
     end_panel();
+    ImGui::PopID();
+}
 
-    section_divider("Everything below works without Minecraft");
+// ---------------- Settings ----------------
 
+static void draw_settings_tab(GuiState& state, std::vector<std::string>& profiles, int& selected_profile,
+                              char* profile_name_buf, char* status_msg, float& status_timer) {
+    ImGui::Spacing();
     begin_panel("Audio", -1.0f, -1, OxIcon::Speaker);
     row_check("Toggle Sound", &state.config.audio_enabled);
-    ImGui::TextDisabled("Beep when a clicker toggles on or off");
+    ImGui::TextDisabled("One chime per key press, even when it toggles several modules");
     end_panel();
 
     begin_panel("Profiles", -1.0f, -1, OxIcon::Folder);
@@ -740,6 +752,16 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
         ImGui::Text("Menu paused: %s", state.in_menu ? "Yes" : "No");
         ImGui::Text("Left armed: %s", state.left_armed ? "Yes" : "No");
         ImGui::Text("Right armed: %s", state.right_armed ? "Yes" : "No");
+        // The resets are modules of their own; without this line their live state was only
+        // visible in the sections above, not in the debug readout.
+        if (state.combat) {
+            ImGui::Text("Jump reset: %s%s", state.combat->jump.is_enabled() ? "On" : "Off",
+                        state.combat->jump.busy() ? " (firing)" : "");
+            ImGui::Text("Sprint reset: %s%s", state.combat->sprint.is_enabled() ? "On" : "Off",
+                        state.combat->sprint.busy() ? " (firing)" : "");
+        } else {
+            ImGui::TextDisabled("Jump/Sprint reset: unavailable (no virtual keyboard)");
+        }
     }
     end_panel();
 }
@@ -774,6 +796,20 @@ static void draw_analytics_tab(GuiState& state, char* status_msg, float& status_
     }
     end_panel();
 
+    begin_panel("Combat resets", -1.0f, -1, OxIcon::Keyboard);
+    if (!state.combat) {
+        ImGui::TextDisabled("Unavailable: the virtual keyboard could not be created");
+    } else {
+        const uint32_t jf = state.combat->jump.fire_count();
+        const uint32_t sf = state.combat->sprint.fire_count();
+        ImGui::Text("Jump reset: %s  |  %u fired",
+                    state.combat->jump.is_enabled() ? "On" : "Off", (unsigned)jf);
+        ImGui::Text("Sprint reset: %s  |  %u fired",
+                    state.combat->sprint.is_enabled() ? "On" : "Off", (unsigned)sf);
+        ImGui::TextDisabled("Counts reset with Clear Data");
+    }
+    end_panel();
+
     begin_panel("Recording & export", -1.0f, -1, OxIcon::Record);
     bool left_rec = state.left.tracker().is_recording();
     bool right_rec = state.right.tracker().is_recording();
@@ -794,6 +830,10 @@ static void draw_analytics_tab(GuiState& state, char* status_msg, float& status_
     ImGui::SameLine();
     if (oxygen_button("Clear Data", ImVec2(120, 0), 0, 0, false, OxIcon::Trash)) {
         state.left.tracker().clear_history(); state.right.tracker().clear_history();
+        if (state.combat) {
+            state.combat->jump.reset_fire_count();
+            state.combat->sprint.reset_fire_count();
+        }
         snprintf(status_msg, 128, "Analytics data cleared"); status_timer = 3.0f;
     }
     if (status_timer > 0) ImGui::TextColored(ok_text_color(), "%s", status_msg);
@@ -970,11 +1010,12 @@ void gui_run(GuiState& state) {
             ImGui::PushClipRect(ImVec2(0.0f, content_top), ImVec2((float)win_w, (float)win_h), true);
             switch (current_tab) {
                 case 0: draw_home_tab(state); break;
-                case 1: draw_settings_tab(state, profiles, selected_profile, profile_name_buf, status_msg, status_timer); break;
-                case 2: draw_side_tab(state.config.left, state.config.left_mode); break;
-                case 3: draw_side_tab(state.config.right, state.config.right_mode); break;
-                case 4: draw_macros_tab(state); break;
-                case 5: draw_analytics_tab(state, status_msg, status_timer); break;
+                case 1: draw_mod_tab(state); break;
+                case 2: draw_settings_tab(state, profiles, selected_profile, profile_name_buf, status_msg, status_timer); break;
+                case 3: draw_side_tab(state.config.left, state.config.left_mode); break;
+                case 4: draw_side_tab(state.config.right, state.config.right_mode); break;
+                case 5: draw_macros_tab(state); break;
+                case 6: draw_analytics_tab(state, status_msg, status_timer); break;
             }
             ImGui::PopClipRect();
             oxygen_scrollbar(content_top);

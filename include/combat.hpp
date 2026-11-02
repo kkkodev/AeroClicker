@@ -220,6 +220,7 @@ class JumpReset {
     Scheduler sched_;
     AttackGate gate_;
     std::atomic<bool> enabled_{false};
+    std::atomic<uint32_t> fires_{0};
 
 public:
     JumpReset(const JumpResetProfile& p, VirtualKeyboard& kb) : p_(p), kb_(kb) {}
@@ -231,6 +232,9 @@ public:
     }
     void toggle() { set_enabled(!enabled_.load()); }
     bool busy() { return !sched_.idle(); }
+    // Analytics/Debug: how often the module actually pressed Space.
+    uint32_t fire_count() const { return fires_.load(); }
+    void reset_fire_count() { fires_ = 0; }
 
     void on_hurt(const CombatContext& ctx) {
         if (!enabled_ || !sched_.idle()) return;
@@ -263,6 +267,7 @@ private:
         double hold = std::round(combat_gaussian(p_.hold_ms_mean, p_.hold_ms_stddev,
                                                  p_.hold_ms_min, p_.hold_ms_max));
         kb_.press(KEY_SPACE);
+        fires_.fetch_add(1);
         sched_.sleep_ms(hold);
         kb_.release(KEY_SPACE);
     }
@@ -276,6 +281,7 @@ class SprintReset {
     Scheduler sched_;
     AttackGate gate_;
     std::atomic<bool> enabled_{false};
+    std::atomic<uint32_t> fires_{0};
 
 public:
     SprintReset(const SprintResetProfile& p, VirtualKeyboard& kb) : p_(p), kb_(kb) {}
@@ -287,6 +293,9 @@ public:
     }
     void toggle() { set_enabled(!enabled_.load()); }
     bool busy() { return !sched_.idle(); }
+    // Analytics/Debug: how often the module actually performed its tap.
+    uint32_t fire_count() const { return fires_.load(); }
+    void reset_fire_count() { fires_ = 0; }
 
     // W-Tap is the only mode that has to hide a key you're physically holding.
     bool needs_keyboard_grab() const { return enabled_ && p_.mode == SprintResetMode::W_TAP; }
@@ -333,12 +342,14 @@ private:
         if (mode == SprintResetMode::W_TAP) {
             if (!kb_.physical(KEY_W)) return;
             if (!kb_.mask(KEY_W)) return;
+            fires_.fetch_add(1);
             sched_.sleep_ms(ms);
             kb_.unmask(KEY_W);
         } else {
             int key = mode == SprintResetMode::S_TAP ? KEY_S : KEY_LEFTSHIFT;
             if (kb_.physical(key)) return;
             kb_.press(key);
+            fires_.fetch_add(1);
             sched_.sleep_ms(ms);
             kb_.release(key);
         }

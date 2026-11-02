@@ -200,6 +200,18 @@ public:
                near(s.cooldown_ms, 450.0);
     }
 
+    // Jump Reset as it shipped just before the chance became 85 %. A profile with every other
+    // value untouched is moved to the new default once; an edited one is left alone.
+    static bool is_previous_jump_chance_default(const JumpResetProfile& j) {
+        return near(j.chance, 0.90) &&
+               near(j.delay_ms_mean, 45.0) && near(j.delay_ms_stddev, 15.0) &&
+               near(j.delay_ms_min, 20.0) && near(j.delay_ms_max, 90.0) &&
+               near(j.hold_ms_mean, 80.0) && near(j.hold_ms_stddev, 12.0) &&
+               near(j.hold_ms_min, 55.0) && near(j.hold_ms_max, 120.0) &&
+               near(j.cooldown_ms, 500.0) && j.forward_only && !j.allow_in_menu &&
+               j.use_slot_filter && j.disable_in_water && j.require_on_ground;
+    }
+
     static bool load(Config& cfg, const std::string& filename = "config") {
         if (!valid_name(filename)) return false;
         std::string p = path() + "/" + filename;
@@ -209,6 +221,7 @@ public:
         char line[256];
         bool accent_order_seen = false;   // file was written with the current accent list
         bool combat_v2_seen = false;      // file already has the event-driven reset fields
+        bool combat_v3_seen = false;      // file was saved after the 85 % chance default
         while (fgets(line, sizeof(line), f)) {
             char key[96];
             double val;
@@ -245,7 +258,9 @@ public:
                 if (cfg.left_gate < 0) cfg.left_gate = 0;
                 if (cfg.left_gate > 3) cfg.left_gate = 3;
             }
+            else if (!strcmp(key, "left_gate_fireball")) cfg.left_gate_fireball = (int)val != 0;
             else if (!strcmp(key, "audio_enabled")) cfg.audio_enabled = (int)val != 0;
+            else if (!strcmp(key, "combat_v3_seen")) combat_v3_seen = true;
             else if (!strcmp(key, "macro_count")) { /* counted implicitly */ }
             else {
                 bool handled = false;
@@ -321,6 +336,11 @@ public:
                 cfg.sprint_reset = fresh;
             }
         }
+        // Jump Reset's default chance moved from 90 % to 85 %. An untouched profile is nudged
+        // once; the marker saved below then keeps a deliberate 0.90 from being overwritten on
+        // every later load.
+        if (!combat_v3_seen && is_previous_jump_chance_default(cfg.jump_reset))
+            cfg.jump_reset.chance = 0.85;
         fclose(f);
         return true;
     }
@@ -357,9 +377,11 @@ public:
         fprintf(f, "right_gate_no_bed %d\n", cfg.right_gate_no_bed ? 1 : 0);
         fprintf(f, "right_look_block %d\n", cfg.right_look_block ? 1 : 0);
         fprintf(f, "left_gate %d\n", cfg.left_gate);
+        fprintf(f, "left_gate_fireball %d\n", cfg.left_gate_fireball ? 1 : 0);
 
         fprintf(f, "jump_reset_enabled %d\n", cfg.jump_reset_enabled ? 1 : 0);
         fprintf(f, "sprint_reset_enabled %d\n", cfg.sprint_reset_enabled ? 1 : 0);
+        fprintf(f, "combat_v3_seen 1\n");
         const JumpResetProfile& j = cfg.jump_reset;
         fprintf(f, "jump_reset.chance %g\n", j.chance);
         fprintf(f, "jump_reset.delay_ms_mean %g\n", j.delay_ms_mean);

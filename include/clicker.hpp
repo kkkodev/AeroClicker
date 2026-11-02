@@ -52,7 +52,7 @@ public:
         PAUSE_INVENTORY = 1u << 1,   // the bridge mod reports an open game screen
         PAUSE_HELD_ITEM = 1u << 2,   // right clicker: the held item is not a placeable block
         PAUSE_NO_SWORD  = 1u << 3,   // left clicker: the gate wants a sword, none is held
-        PAUSE_NO_TARGET = 1u << 4,   // left clicker: the gate wants a mob or player in the crosshair
+        PAUSE_NO_TARGET = 1u << 4,   // left clicker: the gate wants a mob, player or fireball in the crosshair
         PAUSE_HELD_BED  = 1u << 5,   // right clicker: the held item is a bed and the gate skips beds
         PAUSE_NO_BLOCK  = 1u << 6,   // right clicker: the crosshair is not on a block
     };
