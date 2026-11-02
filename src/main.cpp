@@ -50,8 +50,7 @@ static bool is_physical_device(int fd) {
 
 // Keybinds the binding widget can produce for mouse buttons.
 static bool is_mouse_button(int code) {
-    return code == BTN_LEFT || code == BTN_RIGHT || code == BTN_MIDDLE ||
-           code == BTN_SIDE || code == BTN_EXTRA;
+    return code >= BTN_MOUSE && code <= BTN_TASK;
 }
 
 // The mouse device has to be read in two situations:
@@ -63,6 +62,7 @@ static bool mouse_read_wanted(const Config& c, bool combat_active) {
     if (combat_active) return true;
     if (c.left_mode == ActivationMode::MOUSE || c.right_mode == ActivationMode::MOUSE) return true;
     if (is_mouse_button(c.key_left) || is_mouse_button(c.key_right)) return true;
+    if (is_mouse_button(c.key_jump_reset) || is_mouse_button(c.key_sprint_reset)) return true;
     for (int m = 0; m < MAX_MACROS; m++)
         if (c.macros[m].key_bind > 0 && is_mouse_button(c.macros[m].key_bind)) return true;
     return false;
@@ -269,9 +269,6 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
     long long last_hurt = 0;
     long long last_hit = 0;
     long long last_back = 0;
-    // Backstabs suppress the resets for a short window, because Sprint Reset is driven by our
-    // own swing rather than by the hit we took.
-    std::chrono::steady_clock::time_point backstab_until{};
     // Slot activation bookkeeping: the mapping is applied when the slot changes, and not again
     // in between, so a deliberate press of a clicker's key is not undone on the next poll.
     int  auto_slot = -1;
@@ -342,6 +339,21 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
         if (config.audio_enabled && now != was) {
             if (now) Audio::beep_on();
             else Audio::beep_off();
+        }
+    };
+
+    // Jump/Sprint reset toggles. Shared by the keyboard and mouse paths for the same reason as
+    // the clicker keys: a mouse button can be bound as a reset toggle too.
+    auto handle_reset_key = [&](int code, int value) {
+        if (!combat || value != 1) return;
+        if (code == config.key_jump_reset) {
+            config.jump_reset_enabled = !config.jump_reset_enabled;
+            combat->jump.set_enabled(config.jump_reset_enabled);
+            if (config.audio_enabled) beep(config.jump_reset_enabled);
+        } else if (code == config.key_sprint_reset) {
+            config.sprint_reset_enabled = !config.sprint_reset_enabled;
+            combat->sprint.set_enabled(config.sprint_reset_enabled);
+            if (config.audio_enabled) beep(config.sprint_reset_enabled);
         }
     };
 
@@ -506,12 +518,6 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
             // somehow carried several events and any was from behind, staying quiet for the
             // whole poll is the safe choice.
             const bool backstab = hurt_steps > 0 && back_steps > 0;
-            const auto now = std::chrono::steady_clock::now();
-            if (backstab) {
-                backstab_until = now + std::chrono::milliseconds(
-                    static_cast<long long>(BACKSTAB_SUPPRESS_MS));
-            }
-            const bool backstab_recent = now < backstab_until;
             if (combat && (hurt_steps > 0 || hit_steps > 0)) {
                 const int slot = mc.slot;
                 const CombatContext ctx = {
@@ -522,7 +528,6 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                     // Reset permanently inert, so unknown reads as "safe to try".
                     mc.ground != 0,
                     backstab,
-                    backstab_recent,
                 };
                 // One event per step; a frame that somehow saw two keeps each reset on its own
                 // cooldown rather than collapsing into a single action.
@@ -532,7 +537,6 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
         } else {
             mc_synced = false;   // no game: nothing drives the slot rules until it comes back
             mc_counters_seeded = false;
-            backstab_until = {};
             // Do not leave a clicker running that the slot rules switched on: the game they were
             // following is gone.
             if (auto_engaged) {
@@ -607,17 +611,7 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                 if (right_key) handle_clicker_key(false, ev.value);
                 // Combat reset toggles. They write the config so the Settings checkbox and the
                 // next config save agree with the live state.
-                if (combat && ev.value == 1) {
-                    if (jump_key) {
-                        config.jump_reset_enabled = !config.jump_reset_enabled;
-                        combat->jump.set_enabled(config.jump_reset_enabled);
-                        if (config.audio_enabled) beep(config.jump_reset_enabled);
-                    } else if (sprint_key) {
-                        config.sprint_reset_enabled = !config.sprint_reset_enabled;
-                        combat->sprint.set_enabled(config.sprint_reset_enabled);
-                        if (config.audio_enabled) beep(config.sprint_reset_enabled);
-                    }
-                }
+                handle_reset_key(ev.code, ev.value);
                 // A key that belongs to a clicker or a combat reset is not also a macro key.
                 if (!left_key && !right_key && !jump_key && !sprint_key && ev.value == 1 &&
                     config.macros_enabled && !gui_state.in_menu) {
@@ -640,9 +634,15 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                     // button, so each side is handled independently.
                     const bool left_key  = ev.code == static_cast<unsigned>(config.key_left);
                     const bool right_key = ev.code == static_cast<unsigned>(config.key_right);
-                    const bool is_bound_toggle = left_key || right_key;
+                    const bool jump_key  = ev.code == static_cast<unsigned>(config.key_jump_reset);
+                    const bool sprint_key = ev.code == static_cast<unsigned>(config.key_sprint_reset);
+                    const bool is_bound_toggle = left_key || right_key ||
+                                                 jump_key || sprint_key;
                     if (left_key)  handle_clicker_key(true, ev.value);
                     if (right_key) handle_clicker_key(false, ev.value);
+                    // Mouse buttons can toggle the resets too, whether or not the device is
+                    // grabbed; the grab only decides forwarding below.
+                    handle_reset_key(ev.code, ev.value);
 
                     // Hotkey-only session (device not grabbed): the compositor already
                     // delivers these events, so never forward or re-inject them — doing so

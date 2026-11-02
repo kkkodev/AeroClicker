@@ -1132,12 +1132,9 @@ bool row_combo(const char* label, int* idx, const char* items) {
 }
 
 bool row_check(const char* label, bool* v) {
-    ImGui::AlignTextToFramePadding();
-    ImVec2 start = ImGui::GetCursorScreenPos();
-    ImGui::TextUnformatted(label);
-    ImGui::SetCursorScreenPos(ImVec2(ctrl_x0(), start.y));
-    char id[96]; snprintf(id, sizeof(id), "##%s", label);
-    return oxygen_checkbox(id, v);
+    // Checkmark first, then the label. Keeping them together also stops a long label from
+    // running into the fixed control column and being clipped in a narrow window.
+    return oxygen_checkbox(label, v);
 }
 
 bool row_color3(const char* label, float* rgb) {

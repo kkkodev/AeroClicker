@@ -50,7 +50,7 @@ See [Credits](#credits).
 - **Menu pause** — clicking stops while the game has a screen open (inventory, chat, chests, NPC menus) and resumes when it closes
 - **Left gate** — a captioned **Left clicker** section in Settings: the left clicker can require a mob or player in the crosshair, a sword in hand, or both, so it does not fire while you mine or build; the default is target-in-crosshair, and the target check reaches about half a block past vanilla reach so an incoming player becomes a target just before they can hit you
 - **Right gate** — a captioned **Right clicker** section: the right clicker can require a placeable block in hand, so right-click actions never fire on a sword, a pearl or an empty hand; **Skip beds** is on by default, and **Only while looking at a block** stops it when the crosshair is on air or an entity
-- **Jump reset / Sprint reset** — optional and off by default: both fire from the bridge mod's game events, not from the app's own clicks. Jump reset presses Space when the player is hurt; sprint reset breaks sprint after a hit on a living entity, with randomized chance, delay and W-/S-/Shift-tap duration. Both stay quiet after a hit from behind
+- **Jump reset / Sprint reset** — optional and off by default: both fire from the bridge mod's game events, not from the app's own clicks. Jump reset presses Space when the player is hurt; sprint reset breaks sprint after a hit on a living entity, with randomized chance, delay and W-/S-/Shift-tap duration. Jump reset stays quiet when the damage came from behind
 - **Macros** — optional, off by default: sequences of left clicks, right clicks, delays and slot switches, with looping and a keybind
 - **Headless mode** — run the clicker with no window
 
@@ -240,7 +240,7 @@ prefix, and an older mod build's `player` field is read as `target`. `hurt` goes
 player takes damage; `hit` goes up when a new swing starts while the exact crosshair target is a
 living entity; `back` goes up with `hurt` when the attacker was behind the player. The app turns
 each counter step into one Jump Reset or Sprint Reset, so an event from before it started is never
-replayed, and it uses `back` to leave the resets alone after a backstab. Nothing is sent to the
+replayed, and it uses `back` to skip a Jump Reset after a backstab. Nothing is sent to the
 server and no input is changed.
 When the file stops updating (the game closed or crashed), the app treats the game as gone after
 2.5 seconds: slot activation stops and any clicker it switched on is switched off.
@@ -353,15 +353,15 @@ the counters (the jar in `tools/mc-bridge` does).
   keyboard while no key is down and forwards every key through a virtual keyboard; S-Tap and
   Shift-Tap do not need the grab.
 
-Their toggle keys default to F9 and F10 and can be changed in the panels. The modules need
-`/dev/uinput` like the clickers do; if the virtual keyboard cannot be created, the panels say so
-and the rest of the app still works.
+Their toggle keys default to F9 and F10 and can be changed in the panels, to a keyboard key or a
+mouse button. The modules need `/dev/uinput` like the clickers do; if the virtual keyboard cannot
+be created, the panels say so and the rest of the app still works.
 
-A hit from behind suppresses both: Jump Reset ignores that damage event, and Sprint Reset ignores
-swings for 500 ms afterwards, so being stabbed in the back does not make you jump or break sprint
-into the attacker's follow-up. The bridge decides "behind" from the attacker's position relative
-to where the player is looking, using only the horizontal direction, so looking down while
-fighting does not count as turning your back.
+A hit from behind suppresses Jump Reset: that damage event is ignored rather than jumping into
+the attacker's follow-up. Sprint Reset is unaffected, because it fires from your own successful
+attack, which requires you to be looking at the target anyway. The bridge decides "behind" from
+the attacker's position relative to where the player is looking, using only the horizontal
+direction, so looking down while fighting does not count as turning your back.
 
 A bridge build that lacks `hurt`, `hit`, `back`, `water` or `ground` leaves the matching filter
 inert rather than blocking the whole module; Settings says which field is missing. Randomizing
