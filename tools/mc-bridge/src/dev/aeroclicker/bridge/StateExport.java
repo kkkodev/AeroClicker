@@ -217,9 +217,11 @@ public final class StateExport implements ClientModInitializer {
         final Method isInWater;
         final Method onGround;
         final Method getCurrentSwing;
-        final Method getLastHurtByMob;
-        final Method getLastHurtByMobTimestamp;
-        final Field tickCount;
+        // Client-side damage: handleDamageEvent stores the DamageSource (and rises hurtTime),
+        // which is the only reliable "who hit me" on the client. getLastHurtByMob is only set
+        // by the server-side hurtServer path, so it is always null out here.
+        final Method getLastDamageSource;
+        final Method damageEntity;
         Object lastPlayer;
         int lastHurtTime = -1;
         Object lastSwing;
@@ -311,16 +313,15 @@ public final class StateExport implements ClientModInitializer {
             // mapping is missing. `hurtTime` is a public field that rises when damage lands;
             // `getCurrentSwing` changes object identity for every new swing.
             Field hurtField = null;
-            Field tickField = null;
-            Method inWater = null, onGroundMethod = null, currentSwing = null, lastHurtBy = null;
-            Method lastHurtByAt = null;
+            Method inWater = null, onGroundMethod = null, currentSwing = null;
+            Method lastDamageSource = null, dmgEntity = null;
             try {
                 Class<?> livingType2 = Class.forName("net.minecraft.world.entity.LivingEntity");
                 hurtField = livingType2.getField("hurtTime");
                 currentSwing = livingType2.getMethod("getCurrentSwing");
-                lastHurtBy = livingType2.getMethod("getLastHurtByMob");
-                lastHurtByAt = livingType2.getMethod("getLastHurtByMobTimestamp");
-                tickField = Class.forName("net.minecraft.world.entity.Entity").getField("tickCount");
+                lastDamageSource = livingType2.getMethod("getLastDamageSource", int.class);
+                dmgEntity = Class.forName("net.minecraft.world.damagesource.DamageSource")
+                                 .getMethod("getEntity");
             } catch (ReflectiveOperationException | RuntimeException ignored) {
             }
             try {
@@ -333,9 +334,8 @@ public final class StateExport implements ClientModInitializer {
             isInWater = inWater;
             onGround = onGroundMethod;
             getCurrentSwing = currentSwing;
-            getLastHurtByMob = lastHurtBy;
-            getLastHurtByMobTimestamp = lastHurtByAt;
-            tickCount = tickField;
+            getLastDamageSource = lastDamageSource;
+            damageEntity = dmgEntity;
 
             // Where a block hit landed, so the extended ray can stop at the wall instead of
             // reporting a player behind it.
@@ -526,26 +526,29 @@ public final class StateExport implements ClientModInitializer {
         }
 
         /**
-         * True when the last attacker stands in the rear hemisphere. Only the horizontal
-         * direction matters: looking down at the ground while fighting must not turn a frontal
-         * hit into a backstab. The -0.25 margin keeps a glancing side hit from counting.
+         * True when the attacker stands in the rear hemisphere. Only the horizontal direction
+         * matters: looking down at the ground while fighting must not turn a frontal hit into
+         * a backstab. The -0.25 margin keeps a glancing side hit from counting.
+         *
+         * <p>Uses {@code getLastDamageSource} rather than {@code getLastHurtByMob}, because the
+         * client only fills the former when the server tells it about damage. The 5-tick limit
+         * ties the source to the hit that just raised hurtTime; fall or fire damage has no
+         * living attacker and therefore never counts.</p>
          */
         private boolean hurtFromBehind(Object self) {
-            if (getLastHurtByMob == null || getLastHurtByMobTimestamp == null ||
-                tickCount == null || getLookAngle == null ||
+            if (getLastDamageSource == null || damageEntity == null ||
+                livingClass == null || getLookAngle == null ||
                 getX == null || getZ == null ||
                 vecX == null || vecY == null || vecZ == null) {
                 return false;
             }
             try {
-                // Environmental damage (fall, fire) leaves the last mob attacker in place. Only
-                // trust it when it is from this tick or the one before, so old damage cannot
-                // make a later fall look like a backstab.
-                int now = tickCount.getInt(self);
-                int stamp = (Integer) getLastHurtByMobTimestamp.invoke(self);
-                if (now - stamp > 2 || now < stamp) return false;
-                Object attacker = getLastHurtByMob.invoke(self);
-                if (attacker == null || attacker == self) return false;
+                Object source = getLastDamageSource.invoke(self, 5);
+                if (source == null) return false;
+                Object attacker = damageEntity.invoke(source);
+                if (attacker == null || attacker == self || !livingClass.isInstance(attacker)) {
+                    return false;
+                }
                 double dx = (Double) getX.invoke(attacker) - (Double) getX.invoke(self);
                 double dz = (Double) getZ.invoke(attacker) - (Double) getZ.invoke(self);
                 double dist = Math.sqrt(dx * dx + dz * dz);
