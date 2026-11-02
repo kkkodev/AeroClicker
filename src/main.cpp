@@ -173,17 +173,6 @@ static void sync_key_state(int fd, VirtualKeyboard& kb) {
     kb.sync_physical(down);
 }
 
-// Tells the combat modules that an attack happened. A press over AeroClicker's own window is
-// an interface click, not an attack; an open game screen is passed through so the modules can
-// apply their own menu filter.
-static void notify_attack(Config& config, GuiState& gui_state, Combat* combat) {
-    if (!combat || gui_state.ui_hovered.load()) return;
-    const int slot = gui_state.active_slot.load();
-    const bool slot_blocked = config.slot_auto_enabled &&
-                              (slot < 0 || !config.left_slots[slot]);
-    combat->on_attack({gui_state.in_menu.load(), slot_blocked});
-}
-
 static void beep(bool on) {
     if (on) Audio::beep_on();
     else Audio::beep_off();
@@ -274,6 +263,11 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
     bool mc_live = false;
     bool mc_menu = false;
     bool mc_synced = false;
+    // Combat event counters. They are seeded on the first live poll and reset when the link
+    // drops, so an old hurt/hit from before the app started never fires a reset.
+    bool mc_counters_seeded = false;
+    long long last_hurt = 0;
+    long long last_hit = 0;
     // Slot activation bookkeeping: the mapping is applied when the slot changes, and not again
     // in between, so a deliberate press of a clicker's key is not undone on the next poll.
     int  auto_slot = -1;
@@ -460,34 +454,65 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
 
         // The bridge mod, when it runs, is ground truth: the slot survives the wheel and
         // pick-block, and "in menu" covers chat, chests and NPC dialogs.
-        int mc_slot = -1;
-        bool mc_screen = false;
-        int mc_block = -1, mc_sword = -1, mc_target = -1, mc_bed = -1;
-        mc_live = McLink::poll(mc_slot, mc_screen, mc_block, mc_sword, mc_target, mc_bed);
+        McLink::State mc;
+        mc_live = McLink::poll(mc);
         gui_state.mc_linked = mc_live;
-        gui_state.mc_block_known = mc_live && mc_block >= 0;
-        gui_state.mc_sword_known = mc_live && mc_sword >= 0;
-        gui_state.mc_target_known = mc_live && mc_target >= 0;
-        gui_state.mc_bed_known = mc_live && mc_bed >= 0;
+        gui_state.mc_block_known = mc_live && mc.block >= 0;
+        gui_state.mc_sword_known = mc_live && mc.sword >= 0;
+        gui_state.mc_target_known = mc_live && mc.target >= 0;
+        gui_state.mc_bed_known = mc_live && mc.bed >= 0;
+        gui_state.mc_look_known = mc_live && mc.look >= 0;
+        gui_state.mc_water_known = mc_live && mc.water >= 0;
+        gui_state.mc_ground_known = mc_live && mc.ground >= 0;
         if (mc_live) {
-            if (mc_slot >= 0) gui_state.active_slot = mc_slot;
+            if (mc.slot >= 0) gui_state.active_slot = mc.slot;
             // Edge-triggered: an explicit press (hotkey or pill) may un-pause while a screen is
             // open, and that choice must survive the next poll. Only a screen opening or
             // closing re-applies what the game says.
-            const bool menu = mc_slot < 0 || mc_screen;
+            const bool menu = mc.slot < 0 || mc.screen;
             if (!mc_synced || menu != mc_menu) {
                 mc_menu = menu;
                 mc_synced = true;
                 gui_state.in_menu = menu;
             }
             if (config.slot_auto_enabled &&
-                (!auto_engaged || mc_slot != auto_slot)) {
-                apply_slot_auto(mc_slot);
-                auto_slot = mc_slot;
+                (!auto_engaged || mc.slot != auto_slot)) {
+                apply_slot_auto(mc.slot);
+                auto_slot = mc.slot;
                 auto_engaged = true;
+            }
+
+            // Combat resets fire from the game's own events, one action per counter step. A
+            // fresh link seeds the counters: the app must not replay a hit from before it
+            // started. A -1 counter means the bridge could not read the game this poll (its
+            // error line), so that poll re-seeds instead of turning the recovery into a step.
+            const bool counters_known = mc.hurt >= 0 && mc.hit >= 0;
+            const bool had_events = mc_counters_seeded && counters_known;
+            long long hurt_steps = had_events ? mc.hurt - last_hurt : 0;
+            long long hit_steps  = had_events ? mc.hit - last_hit : 0;
+            if (hurt_steps < 0) hurt_steps = 0;   // bridge restarted: seed, do not fire
+            if (hit_steps < 0) hit_steps = 0;
+            last_hurt = mc.hurt;
+            last_hit = mc.hit;
+            mc_counters_seeded = counters_known;
+            if (combat && (hurt_steps > 0 || hit_steps > 0)) {
+                const int slot = mc.slot;
+                const CombatContext ctx = {
+                    menu,
+                    config.slot_auto_enabled && (slot < 0 || !config.left_slots[slot]),
+                    mc.water == 1,
+                    // An older mod build that cannot report the ground must not make Jump
+                    // Reset permanently inert, so unknown reads as "safe to try".
+                    mc.ground != 0,
+                };
+                // One event per step; a frame that somehow saw two keeps each reset on its own
+                // cooldown rather than collapsing into a single action.
+                if (hurt_steps > 0) combat->on_hurt(ctx);
+                if (hit_steps > 0) combat->on_hit(ctx);
             }
         } else {
             mc_synced = false;   // no game: nothing drives the slot rules until it comes back
+            mc_counters_seeded = false;
             // Do not leave a clicker running that the slot rules switched on: the game they were
             // following is gone.
             if (auto_engaged) {
@@ -501,15 +526,17 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
         // running mod build does not report (== -1) leaves that half of the gate inert rather
         // than blocking every click. With no link at all they are inert too.
         right_clicker.set_pause(Clicker::PAUSE_HELD_ITEM,
-                                config.right_placeable_only && mc_live && mc_block == 0);
+                                config.right_placeable_only && mc_live && mc.block == 0);
         right_clicker.set_pause(Clicker::PAUSE_HELD_BED,
                                 config.right_placeable_only && config.right_gate_no_bed &&
-                                mc_live && mc_bed == 1);
+                                mc_live && mc.bed == 1);
+        right_clicker.set_pause(Clicker::PAUSE_NO_BLOCK,
+                                config.right_look_block && mc_live && mc.look == 0);
         const int left_gate = config.left_gate;
         left_clicker.set_pause(Clicker::PAUSE_NO_SWORD,
-                               mc_live && (left_gate & 1) && mc_sword == 0);
+                               mc_live && (left_gate & 1) && mc.sword == 0);
         left_clicker.set_pause(Clicker::PAUSE_NO_TARGET,
-                               mc_live && (left_gate & 2) && mc_target == 0);
+                               mc_live && (left_gate & 2) && mc.target == 0);
 
         // If a gate blocked the physical press, the press itself went to the game and the
         // clicker never started. Start it here when the gate opens while the button is still
@@ -599,13 +626,8 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
 
                     // Hotkey-only session (device not grabbed): the compositor already
                     // delivers these events, so never forward or re-inject them — doing so
-                    // would double every click. They are still real attacks, though, so the
-                    // reset modules hear about them.
-                    if (!mouse_grabbed) {
-                        if (ev.code == BTN_LEFT && ev.value == 1 && !is_bound_toggle)
-                            notify_attack(config, gui_state, combat);
-                        continue;
-                    }
+                    // would double every click.
+                    if (!mouse_grabbed) continue;
 
                     if (!is_bound_toggle) {
                         // While the pointer is over AeroClicker the button belongs to the
@@ -630,9 +652,6 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                                 if (mouse_left_owned) left_clicker.set_enabled_gated(true);
                                 else {
                                     device.click(BTN_LEFT, 1);
-                                    // The press reaches the game, so it is a real attack even
-                                    // though the clicker did not take it over.
-                                    notify_attack(config, gui_state, combat);
                                     // Only a gate may be waited out. A press forwarded because a
                                     // menu was open or the pointer was over the app must not
                                     // begin clicking by itself later.
@@ -682,7 +701,8 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                                         !(pauses & (Clicker::PAUSE_INVENTORY |
                                                     Clicker::PAUSE_POINTER)) &&
                                         (pauses & (Clicker::PAUSE_HELD_ITEM |
-                                                   Clicker::PAUSE_HELD_BED));
+                                                   Clicker::PAUSE_HELD_BED |
+                                                   Clicker::PAUSE_NO_BLOCK));
                                 }
                             } else if (ev.value == 0) {
                                 mouse_right_held = false;
@@ -844,19 +864,6 @@ int main(int argc, char* argv[]) {
     GuiState gui_state(config, left_clicker, right_clicker, device);
     gui_state.combat = combat.get();
 
-    // A generated click is our attack signal. Physical presses are reported by the input
-    // thread; a press the clicker took over never reaches the game, so its generated clicks
-    // are the only attacks to report. The callback runs on the clicker thread.
-    if (combat) {
-        left_clicker.set_on_press([&config, &gui_state, combat_ptr = combat.get()] {
-            if (gui_state.ui_hovered.load()) return;
-            const int slot = gui_state.active_slot.load();
-            const bool slot_blocked = config.slot_auto_enabled &&
-                                      (slot < 0 || !config.left_slots[slot]);
-            combat_ptr->on_attack({gui_state.in_menu.load(), slot_blocked});
-        });
-    }
-
     std::thread input_thr(input_thread, std::ref(config), std::ref(left_clicker),
                           std::ref(right_clicker), std::ref(device), combat.get(),
                           std::ref(gui_state));
@@ -884,9 +891,7 @@ int main(int argc, char* argv[]) {
 
     if (input_thr.joinable()) input_thr.join();
 
-    // The clicker worker outlives this scope's GUI state, and its on_press callback reads that
-    // state. Clear it and join the worker before the destructors run.
-    left_clicker.set_on_press({});
+    // Join the clicker workers before the GUI state they read is destroyed.
     left_clicker.stop();
     right_clicker.stop();
 

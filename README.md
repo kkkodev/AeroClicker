@@ -48,9 +48,9 @@ See [Credits](#credits).
 - **Activation modes** — Toggle, Hold, and Mouse (arm with a key, then hold your real mouse button)
 - **Slot activation** — a Minecraft hotbar slot switches each clicker on and off, with a per-clicker set of slots (default: slot 1 left, slot 9 right); it reads the game through the [bridge mod](#minecraft-mod)
 - **Menu pause** — clicking stops while the game has a screen open (inventory, chat, chests, NPC menus) and resumes when it closes
-- **Left gate** — the left clicker can require a mob or player in the crosshair, a sword in hand, or both, so it does not fire while you mine or build; the default is target-in-crosshair, and the target check reaches about one block past vanilla reach so an incoming player is a target before they can hit you
-- **Right gate** — the right clicker can require a placeable block in hand, so right-click actions never fire on a sword, a pearl or an empty hand; **Skip beds** is on by default, so holding a bed keeps it off
-- **Jump reset / Sprint reset** — optional and off by default: after your own left click, press Space with humanized timing, or break sprint with a W-, S- or Shift-tap for 1–3 ticks
+- **Left gate** — a captioned **Left clicker** section in Settings: the left clicker can require a mob or player in the crosshair, a sword in hand, or both, so it does not fire while you mine or build; the default is target-in-crosshair, and the target check reaches about one block past vanilla reach so an incoming player becomes a target before they can hit you
+- **Right gate** — a captioned **Right clicker** section: the right clicker can require a placeable block in hand, so right-click actions never fire on a sword, a pearl or an empty hand; **Skip beds** is on by default, and **Only while looking at a block** stops it when the crosshair is on air or an entity
+- **Jump reset / Sprint reset** — optional and off by default: both fire from the bridge mod's game events, not from the app's own clicks. Jump reset presses Space when the player is hurt; sprint reset breaks sprint after a hit on a living entity, with randomized chance, delay and W-/S-/Shift-tap duration
 - **Macros** — optional, off by default: sequences of left clicks, right clicks, delays and slot switches, with looping and a keybind
 - **Headless mode** — run the clicker with no window
 
@@ -202,10 +202,11 @@ and an amber dot instead of a running CPS figure:
 | --- | --- |
 | `cursor over app` | the pointer is over AeroClicker's own window |
 | `menu is open` | the game reports an open screen |
-| `held item is not a block` | **Right gate** is on and the held item cannot be placed |
-| `holding a bed` | **Right gate** and **Skip beds** are on and the held item is a bed |
-| `no mob or player in crosshair` | the left gate is set to target-in-crosshair (or sword + target) and you are not looking at a mob or player |
-| `no sword in hand` | the left gate is set to sword-only (or sword + mob/player) and the held item is not a sword |
+| `held item is not a block` | **Placeable blocks only** is on and the held item cannot be placed |
+| `holding a bed` | **Placeable blocks only** and **Skip beds** are on and the held item is a bed |
+| `crosshair is not on a block` | **Only while looking at a block** is on and the crosshair is on air or an entity |
+| `no mob or player in crosshair` | the left gate is set to mob/player in crosshair (or sword + mob/player) and you are not looking at a mob or player |
+| `no sword in hand` | the left gate is set to holding a sword (or sword + mob/player) and the held item is not a sword |
 
 The on/off state is kept, so closing the menu resumes clicking on its own. To force it, press the
 clicker's hotkey (or its **L/R** pill): an explicit press un-pauses a paused clicker instead of
@@ -218,29 +219,33 @@ switching it off and lifts the menu pause until a menu opens again.
 AeroClicker only sees keyboard and mouse events, which is not enough in Minecraft: the active
 hotbar slot can move without a key you can see, an open menu looks like a normal world, and the
 held item and the crosshair are invisible from outside. The companion mod in `tools/mc-bridge`
-publishes those facts, and the app uses them for slot activation, the menu pause and both gates.
+publishes those facts, and the app uses them for slot activation, the menu pause, both gates and
+the two combat resets.
 
 Nothing falls back to key guessing: without the mod, slot activation and the menu pause do
-nothing, and both gates stay inert.
+nothing, both gates stay inert, and the combat resets cannot fire.
 
 The mod is read-only. Every 50 ms it writes the selected slot, whether a screen is open, whether
-the held item is a block, whether it is a sword or a bed, and whether the crosshair is on a
-living entity (a mob or another player) to `$XDG_RUNTIME_DIR/aeroclicker-mc.state` as a single
-line:
+the held item is a block, whether it is a sword or a bed, whether the crosshair is on a living
+entity or on a block, whether the player is in water or on the ground, and two event counters to
+`$XDG_RUNTIME_DIR/aeroclicker-mc.state` as a single line:
 
 ```
-slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch ms> block=<0|1|-1> sword=<0|1|-1> target=<0|1|-1> bed=<0|1|-1>
+slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch ms> block=<0|1|-1> sword=<0|1|-1> target=<0|1|-1> bed=<0|1|-1> look=<0|1|-1> water=<0|1|-1> ground=<0|1|-1> hurt=<counter> hit=<counter>
 ```
 
-`block`, `sword`, `target` and `bed` are `1` for yes, `0` for no and `-1` for "this mod build
-cannot tell". They come after `ms` so an older app build still parses the prefix, and an older
-mod build's `player` field is read as `target`. Nothing is sent to the server and no input is
-changed. When the file stops updating (the game closed or crashed), the app treats the game as
-gone after 2.5 seconds: slot activation stops and any clicker it switched on is switched off.
+`block`, `sword`, `target`, `bed`, `look`, `water` and `ground` are `1` for yes, `0` for no and
+`-1` for "this mod build cannot tell". They come after `ms` so an older app build still parses the
+prefix, and an older mod build's `player` field is read as `target`. `hurt` goes up when the local
+player takes damage; `hit` goes up when a new swing starts while the exact crosshair target is a
+living entity. The app turns each counter step into one Jump Reset or Sprint Reset, so an event
+from before it started is never replayed. Nothing is sent to the server and no input is changed.
+When the file stops updating (the game closed or crashed), the app treats the game as gone after
+2.5 seconds: slot activation stops and any clicker it switched on is switched off.
 
 ### Installing the mod (optional)
 
-Skip this if you do not want slot activation, the menu pause or either gate. Nothing is installed
+Skip this if you do not want slot activation, the menu pause, either gate or the combat resets. Nothing is installed
 automatically: AeroClicker does not copy the jar anywhere, and `cmake --install` does not touch
 your Minecraft folders. Put the jar in the `mods` folder of the instance you use, like any other
 Fabric mod:
@@ -268,12 +273,12 @@ clickers map is accent across its full width.
 
 ### Left gate (GhostTap-style)
 
-Settings → Minecraft has **Left gate** with four choices:
+Settings → **Left clicker** has a **Gate** card with four choices:
 
 | Value | Behaviour |
 | --- | --- |
-| **Off** | no game check |
-| **Sword only** | clicks only while a sword is held |
+| **Always** | no game check |
+| **Holding a sword** | clicks only while a sword is held |
 | **Mob/player in crosshair** | clicks only while a mob or another player is in the crosshair (the default) |
 | **Sword + mob/player** | both of the above |
 
@@ -302,8 +307,8 @@ and the Settings panel says so instead of silently blocking every click.
 
 ### Right gate
 
-Settings → Minecraft has **Right gate** for the right clicker. With it on, the right clicker only
-clicks while the held item is a block that can be placed, and pauses with the reason
+Settings → **Right clicker** has a **Gate** card. With **Placeable blocks only** on, the right
+clicker only clicks while the held item is a block that can be placed, and pauses with the reason
 `held item is not a block` for anything else — a sword, a bucket, food, an empty hand. It is the
 right-click equivalent of only bridging when you actually hold blocks, so a right click never
 throws a pearl, starts drinking a potion or wears down a tool by accident.
@@ -313,30 +318,46 @@ item. Without either it stays inert instead of blocking every right click. A phy
 is only taken over when the clicker would actually act on it; while the gate is blocking, the
 press and its release go to the game untouched.
 
-**Skip beds** sits under the right gate and is on by default. A bed is a placeable block, so
+**Skip beds** sits under the block gate and is on by default. A bed is a placeable block, so
 without it a right clicker would place the bed the moment you hold one; with it the clicker
 pauses with `holding a bed` instead. The check is separate from the placeable check, so you can
 turn it off when you actually want a bed placed. It needs a bridge build that reports `bed`; an
 older jar leaves it inert.
 
+**Only while looking at a block** is off by default. When on, the right clicker pauses with
+`crosshair is not on a block` while the crosshair is on air or on an entity, so a right clicker
+cannot keep using an item or hitting an NPC when you are not aiming at something to place on. It
+needs a bridge build that reports `look`; an older jar leaves that half inert.
+
 ### Combat resets
 
-Settings has two optional panels below the Minecraft block, both off by default. They fire from
-your own left clicks — real presses and the clicker's generated ones — because the game's hit
-packets are not visible from outside. A cooldown stands in for hit confirmation.
+Settings has two optional panels, both off by default. They are event-driven: the bridge mod
+reports when the local player is hurt and when a new swing starts on a living entity, and the app
+turns each event into at most one action. The app's own clicks are not used as a trigger, so with
+no game running the modules do nothing. They need a live bridge link, and a mod build that reports
+the counters (the jar in `tools/mc-bridge` does).
 
-- **Jump reset** presses Space shortly after an attack, with a configurable chance, delay and
-  hold. By default it only fires while you are moving forward, respects the slot filter, and
-  stays quiet while a game screen is open.
-- **Sprint reset** briefly breaks sprint after an attack so the next hit deals full sprint
-  knockback. It can use **W-Tap** (release W), **S-Tap** (tap S) or **Shift-Tap** (tap Shift)
-  for 1–3 ticks. W-Tap needs to hide a W you are still holding, so it grabs the keyboard while
-  no key is down and forwards every key through a virtual keyboard; S-Tap and Shift-Tap do not
-  need the grab.
+- **Jump reset** presses Space shortly after the game reports damage. The defaults are
+  human-paced rather than instant: 90 % chance, a 45 ms delay with 15 ms spread (clamped to
+  20–90 ms), an 80 ms hold with 12 ms spread (55–120 ms), and a 500 ms cooldown. It only fires
+  while moving forward, respects the slot filter, stays quiet while a game screen is open, and is
+  off in water (**Stop in water**, on by default, the same rule Vape uses) and in mid-air
+  (**Only on the ground**, on by default).
+- **Sprint reset** briefly breaks sprint after the game reports a hit on a mob or player so the
+  next hit deals full sprint knockback. It can use **W-Tap** (release W), **S-Tap** (tap S) or
+  **Shift-Tap** (tap Shift). Defaults: 90 % chance, a 0–20 ms delay, 1.25 ± 0.40 ticks clamped to
+  1–2 ticks, and a 400 ms cooldown. W-Tap needs to hide a W you are still holding, so it grabs the
+  keyboard while no key is down and forwards every key through a virtual keyboard; S-Tap and
+  Shift-Tap do not need the grab.
 
 Their toggle keys default to F9 and F10 and can be changed in the panels. The modules need
 `/dev/uinput` like the clickers do; if the virtual keyboard cannot be created, the panels say so
-and the rest of the app still works. Nothing here needs the bridge mod.
+and the rest of the app still works.
+
+A bridge build that lacks `hurt`, `hit`, `water` or `ground` leaves the matching filter inert
+rather than blocking the whole module; Settings says which field is missing. Randomizing chance,
+delay and hold keeps the timing from being a fixed signature, but it does not make the feature
+undetectable — see the next section.
 
 ### Are the gates an anti-cheat feature?
 
@@ -348,14 +369,21 @@ and it does little for detection because right clicks are rarely what an anti-ch
 the gates to make the clicker behave the way you want; do not treat them as a way to evade a
 server's rules.
 
+The combat resets are randomized (chance, delay, hold and tick count), and firing from real game
+events makes them far less mechanical than pressing Space on every click. They are still not
+undetectable: a server sees the resulting movement and attack timing, and can compare it against
+what a human can react to. A 45 ms jump reaction is fast; a 0 ms one would be impossible. Choose
+values you would plausibly produce yourself, and accept that using any automation can still be
+against a server's rules.
+
 ---
 
 ## Interface
 
 | Tab | What it does |
 | --- | --- |
-| **Home** | Both clickers at a glance, with live CPS, click counts, on/off pills and the slot activation readout |
-| **Settings** | A mod-only **Minecraft** panel (link status, slot activation, menu pause, both gates, bed skip) above a divider, then jump/sprint reset, audio, profiles and accent — everything below the divider works without the mod |
+| **Home** | Both clickers at a glance, with live CPS, click counts, on/off pills, Jump/Sprint reset pills and the slot activation readout |
+| **Settings** | A mod-only **Minecraft** panel (link status, slot activation, menu pause), captioned **Left clicker** and **Right clicker** gate sections, then the event-driven jump/sprint resets above a divider, followed by audio, profiles and accent — everything below the divider works without the mod |
 | **Left / Right** | Presets, speed, distribution, humanization, hold timing, spikes, breaks, hotkey and activation mode |
 | **Macros** | Build macro sequences and bind them to a key |
 | **Analytics** | Measured CPS graphs, session statistics, recording and CSV export |
@@ -394,15 +422,21 @@ keybinds survive the rename.
   [Minecraft mod](#minecraft-mod), then restart Minecraft.
 
 **The right clicker stops with `held item is not a block`**
-- That is the **Right gate**: the held item cannot be placed. Hold a block, or switch
-  **Right gate** off. This also appears if the mod is an older build that does not export the
-  held item; update the jar and restart Minecraft.
+- That is **Placeable blocks only**: the held item cannot be placed. Hold a block, or switch
+  **Placeable blocks only** off. This also appears if the mod is an older build that does not
+  export the held item; update the jar and restart Minecraft.
 
 **The left clicker stops with `no mob or player in crosshair`**
 - The left gate is on its default and the crosshair is not on a living entity. Look at a mob or
-  another player, or change **Left gate** in Settings → Minecraft. A bridge jar built before mobs
+  another player, or change **Left clicker → Gate** in Settings. A bridge jar built before mobs
   were covered reports players only: aim at a player, or rebuild the jar (see
   [Minecraft mod](#minecraft-mod)) and restart the game.
+
+**Jump/Sprint reset does nothing**
+- Both need the bridge mod and a live link; they never fire from the app's own clicks. Check that
+  Settings → Minecraft says `Bridge mod: live`, and that the mod build is the current jar (the
+  counters `hurt` and `hit` are newer fields). Jump reset also needs W held by default, the player
+  on the ground and out of water; Sprint reset's W-Tap needs W held.
 
 **No toggle sounds**
 - Install `paplay` (PipeWire/PulseAudio). Sound is optional and silently skipped when unavailable.

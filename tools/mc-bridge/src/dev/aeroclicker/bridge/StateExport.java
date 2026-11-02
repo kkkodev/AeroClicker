@@ -21,10 +21,16 @@ import net.fabricmc.api.ClientModInitializer;
  *
  * <p>The state goes to {@code $XDG_RUNTIME_DIR/aeroclicker-mc.state} as one line:
  * {@code slot=<0-8 or -1> screen=<0|1> ms=<epoch milliseconds> block=<0|1|-1>
- * sword=<0|1|-1> target=<0|1|-1> bed=<0|1|-1>}. The app treats a file whose timestamp is a
+ * sword=<0|1|-1> target=<0|1|-1> bed=<0|1|-1> look=<0|1|-1> water=<0|1|-1>
+ * ground=<0|1|-1> hurt=<counter> hit=<counter>}. The app treats a file whose timestamp is a
  * couple of seconds old as absent, so a crashed game cannot leave the clicker stuck. The
  * optional fields are last so an older app build still parses the line, and -1 means this build
  * cannot tell (the app then leaves the matching gate inert).</p>
+ *
+ * <p>The two counters make the combat resets reliable: {@code hurt} goes up when the local
+ * player's {@code hurtTime} rises (taking damage), and {@code hit} when a new swing starts while
+ * the exact crosshair target is a living entity (attacking one). The app turns those into one
+ * Jump Reset / Sprint Reset per counter step instead of firing on its own clicks.</p>
  *
  * <p>Everything about the game is reached through reflection on purpose: it keeps this file
  * free of Minecraft internals, so it compiles with nothing but the Fabric loader jar and keeps
@@ -66,14 +72,18 @@ public final class StateExport implements ClientModInitializer {
                 Snapshot snap = snapshot(binding);
                 String state = snap.line + " block=" + snap.block
                              + " sword=" + snap.sword + " target=" + snap.target
-                             + " bed=" + snap.bed;
+                             + " bed=" + snap.bed + " look=" + snap.look
+                             + " water=" + snap.water + " ground=" + snap.ground
+                             + " hurt=" + snap.hurt + " hit=" + snap.hit;
                 long now = System.currentTimeMillis();
                 if (!state.equals(last) || now - lastWrite >= HEARTBEAT_MS) {
                     // `ms` goes before the optional fields so an app build without them still
                     // parses slot and screen from the same line.
                     write(snap.line + " ms=" + now + " block=" + snap.block
                           + " sword=" + snap.sword + " target=" + snap.target
-                          + " bed=" + snap.bed);
+                          + " bed=" + snap.bed + " look=" + snap.look
+                          + " water=" + snap.water + " ground=" + snap.ground
+                          + " hurt=" + snap.hurt + " hit=" + snap.hit);
                     last = state;
                     lastWrite = now;
                 }
@@ -85,7 +95,8 @@ public final class StateExport implements ClientModInitializer {
                 // reload) kill the bridge. "Unknown" reads as "pause" on the app's side.
                 try {
                     write("slot=-1 screen=1 ms=" + System.currentTimeMillis()
-                          + " block=-1 sword=-1 target=-1 bed=-1");
+                          + " block=-1 sword=-1 target=-1 bed=-1 look=-1 water=-1 ground=-1"
+                          + " hurt=-1 hit=-1");
                     Thread.sleep(HEARTBEAT_MS);
                 } catch (Throwable ignored) {
                     return;
@@ -98,8 +109,17 @@ public final class StateExport implements ClientModInitializer {
         Object mc = b.getInstance.invoke(null);
         Object player = mc == null ? null : b.player.get(mc);
         if (player == null) {
-            // Not in a world: nothing can be clicked, so report "GUI open" and no slot.
-            return new Snapshot("slot=-1 screen=1", -1, -1, -1, -1);
+            // Not in a world: nothing can be clicked, so report "GUI open" and no slot. The
+            // counters are monotonic across worlds, so the app never replays an old event.
+            return new Snapshot("slot=-1 screen=1", -1, -1, -1, -1, -1, -1, -1,
+                                b.hurtCounter, b.hitCounter);
+        }
+        if (player != b.lastPlayer) {
+            // A new world or respawn: hurtTime and the swing object belong to the old player.
+            b.lastPlayer = player;
+            b.lastHurtTime = -1;
+            b.lastSwing = null;
+            b.lastExactTarget = 0;
         }
         Object inventory = b.getInventory.invoke(player);
         int slot = (Integer) b.getSelectedSlot.invoke(inventory);
@@ -107,7 +127,9 @@ public final class StateExport implements ClientModInitializer {
                     + " screen=" + (screenOpen(b, mc) ? 1 : 0);
         return new Snapshot(line, b.blockState(inventory, slot),
                             b.swordState(inventory, slot), b.targetState(mc, player),
-                            b.bedState(inventory, slot));
+                            b.bedState(inventory, slot), b.lookState(mc),
+                            b.waterState(player), b.groundState(player),
+                            b.hurtState(player), b.hitState(mc, player));
     }
 
     /** Logical state without the timestamp: compared to decide when to rewrite the file. */
@@ -117,13 +139,24 @@ public final class StateExport implements ClientModInitializer {
         final int sword;
         final int target;
         final int bed;
+        final int look;
+        final int water;
+        final int ground;
+        final long hurt;
+        final long hit;
 
-        Snapshot(String line, int block, int sword, int target, int bed) {
+        Snapshot(String line, int block, int sword, int target, int bed, int look, int water,
+                 int ground, long hurt, long hit) {
             this.line = line;
             this.block = block;
             this.sword = sword;
             this.target = target;
             this.bed = bed;
+            this.look = look;
+            this.water = water;
+            this.ground = ground;
+            this.hurt = hurt;
+            this.hit = hit;
         }
     }
 
@@ -169,9 +202,21 @@ public final class StateExport implements ClientModInitializer {
         final Field hitResult;
         final Method hitEntity;
         final Method hitLocation;
+        final Method hitType;
         final Class<?> entityHitClass;
         final Class<?> blockHitClass;
         final Class<?> livingClass;
+        // Local-player state for the combat resets and the right-clicker block gate.
+        final Field hurtTime;
+        final Method isInWater;
+        final Method onGround;
+        final Method getCurrentSwing;
+        Object lastPlayer;
+        int lastHurtTime = -1;
+        Object lastSwing;
+        int lastExactTarget;
+        long hurtCounter;
+        long hitCounter;
         // Extended-reach check. Vanilla only puts an entity in hitResult within the normal
         // attack reach; this ray looks a little further so the gate opens as a player runs in.
         final Field level;
@@ -181,7 +226,7 @@ public final class StateExport implements ClientModInitializer {
         final Method clip;
         final Method getLookAngle;
         final Method getX, getY, getZ, getEyeY;
-        final Method vecGetX, vecGetY, vecGetZ;
+        final Field vecX, vecY, vecZ;
         final java.lang.reflect.Constructor<?> vec3Ctor;
         final Class<?> vec3Class;
 
@@ -252,22 +297,46 @@ public final class StateExport implements ClientModInitializer {
             blockHitClass = blockHit;
             livingClass = livingType;
 
+            // Optional: the combat resets and look/water/ground gates report -1 (inert) when a
+            // mapping is missing. `hurtTime` is a public field that rises when damage lands;
+            // `getCurrentSwing` changes object identity for every new swing.
+            Field hurtField = null;
+            Method inWater = null, onGroundMethod = null, currentSwing = null;
+            try {
+                Class<?> livingType2 = Class.forName("net.minecraft.world.entity.LivingEntity");
+                hurtField = livingType2.getField("hurtTime");
+                currentSwing = livingType2.getMethod("getCurrentSwing");
+            } catch (ReflectiveOperationException | RuntimeException ignored) {
+            }
+            try {
+                Class<?> entityType = Class.forName("net.minecraft.world.entity.Entity");
+                inWater = entityType.getMethod("isInWater");
+                onGroundMethod = entityType.getMethod("onGround");
+            } catch (ReflectiveOperationException | RuntimeException ignored) {
+            }
+            hurtTime = hurtField;
+            isInWater = inWater;
+            onGround = onGroundMethod;
+            getCurrentSwing = currentSwing;
+
             // Where a block hit landed, so the extended ray can stop at the wall instead of
             // reporting a player behind it.
-            Method getLocation = null;
+            Method getLocation = null, getType = null;
             try {
-                getLocation = Class.forName("net.minecraft.world.phys.HitResult")
-                                   .getMethod("getLocation");
+                Class<?> hitBase = Class.forName("net.minecraft.world.phys.HitResult");
+                getLocation = hitBase.getMethod("getLocation");
+                getType = hitBase.getMethod("getType");
             } catch (ReflectiveOperationException | RuntimeException ignored) {
             }
             hitLocation = getLocation;
+            hitType = getType;
 
             // Optional extended reach, all null when the mapping is not what this version
             // calls it. The exact hitResult check above still works without it.
             Field lvl = null;
             Method entitiesOfClass = null, boundingBox = null, aabbInflate = null, aabbClip = null;
             Method lookAngle = null, ex = null, ey = null, ez = null, eyeY = null;
-            Method vx = null, vy = null, vz = null;
+            Field vx = null, vy = null, vz = null;
             java.lang.reflect.Constructor<?> vecCtor = null;
             Class<?> vecType = null;
             try {
@@ -285,9 +354,12 @@ public final class StateExport implements ClientModInitializer {
                 ey = entity.getMethod("getY");
                 ez = entity.getMethod("getZ");
                 eyeY = entity.getMethod("getEyeY");
-                vx = vecType.getMethod("getX");
-                vy = vecType.getMethod("getY");
-                vz = vecType.getMethod("getZ");
+                // Vec3 exposes x/y/z as public final fields in 26.x, not getters. Asking for
+                // getX() used to throw here and leave the whole extended-reach block null,
+                // which silently disabled the target lead and kept the gate at vanilla reach.
+                vx = vecType.getField("x");
+                vy = vecType.getField("y");
+                vz = vecType.getField("z");
                 vecCtor = vecType.getConstructor(double.class, double.class, double.class);
             } catch (ReflectiveOperationException | RuntimeException ignored) {
             }
@@ -301,9 +373,9 @@ public final class StateExport implements ClientModInitializer {
             getY = ey;
             getZ = ez;
             getEyeY = eyeY;
-            vecGetX = vx;
-            vecGetY = vy;
-            vecGetZ = vz;
+            vecX = vx;
+            vecY = vy;
+            vecZ = vz;
             vec3Ctor = vecCtor;
             vec3Class = vecType;
         }
@@ -351,10 +423,112 @@ public final class StateExport implements ClientModInitializer {
             }
         }
 
+        /**
+         * True only for a real block hit. Looking at the sky produces a BlockHitResult of type
+         * MISS (a convenient carrier for the ray end point), which is still an instance of the
+         * class but must not count as aiming at a block.
+         */
+        private boolean isBlockHit(Object hit) {
+            if (hit == null) return false;
+            if (hitType != null) {
+                try {
+                    Object type = hitType.invoke(hit);
+                    if (type != null) return "BLOCK".equals(type.toString());
+                } catch (ReflectiveOperationException | RuntimeException ignored) {
+                }
+            }
+            return blockHitClass != null && blockHitClass.isInstance(hit);
+        }
+
+        /** 1 = the crosshair is on a block, 0 = air or an entity, -1 = cannot tell. */
+        int lookState(Object mc) {
+            if (hitResult == null || (blockHitClass == null && hitType == null)) return -1;
+            try {
+                return isBlockHit(hitResult.get(mc)) ? 1 : 0;
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                return -1;
+            }
+        }
+
+        /** 1 = the local player is in water, 0 = not, -1 = cannot tell. */
+        int waterState(Object self) {
+            if (isInWater == null) return -1;
+            try {
+                return (Boolean) isInWater.invoke(self) ? 1 : 0;
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                return -1;
+            }
+        }
+
+        /** 1 = the local player stands on the ground, 0 = airborne, -1 = cannot tell. */
+        int groundState(Object self) {
+            if (onGround == null) return -1;
+            try {
+                return (Boolean) onGround.invoke(self) ? 1 : 0;
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                return -1;
+            }
+        }
+
+        /** 1 only for an exact crosshair hit on a living entity, 0 otherwise, -1 unknown. */
+        int exactTargetState(Object mc, Object self) {
+            if (hitResult == null || hitEntity == null || entityHitClass == null ||
+                livingClass == null) {
+                return -1;
+            }
+            try {
+                Object hit = hitResult.get(mc);
+                if (hit == null || !entityHitClass.isInstance(hit)) return 0;
+                Object entity = hitEntity.invoke(hit);
+                return entity != null && entity != self && livingClass.isInstance(entity) ? 1 : 0;
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                return -1;
+            }
+        }
+
+        /** Counter that rises once each time the local player takes damage. */
+        long hurtState(Object self) {
+            if (hurtTime == null) return -1;
+            try {
+                int now = hurtTime.getInt(self);
+                if (lastHurtTime < 0) {
+                    // First look at this player: remember the value, do not replay old damage.
+                    lastHurtTime = now;
+                } else if (now > lastHurtTime) {
+                    hurtCounter++;
+                    lastHurtTime = now;
+                } else {
+                    lastHurtTime = now;
+                }
+                return hurtCounter;
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                return -1;
+            }
+        }
+
+        /** Counter that rises once for each new swing that starts on a living entity. */
+        long hitState(Object mc, Object self) {
+            if (getCurrentSwing == null) return -1;
+            try {
+                Object swing = getCurrentSwing.invoke(self);
+                int target = exactTargetState(mc, self);
+                if (swing != null && swing != lastSwing &&
+                    (target == 1 || lastExactTarget == 1)) {
+                    // A killing blow can remove the entity from hitResult before the next
+                    // sample; the previous sample still proves the swing started on it.
+                    hitCounter++;
+                }
+                lastSwing = swing;
+                lastExactTarget = target;
+                return hitCounter;
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                return -1;
+            }
+        }
+
         /** 1 = a living entity (mob or player) is in the crosshair, 0 = a block or nothing,
          *  -1 = cannot tell. The ray keeps going about one block past vanilla reach, so the
-         *  gate opens as a player runs in rather than only once they are already in range. */
-        int targetState(Object mc, Object self) {
+         *  gate opens as a player runs in rather than only once they are already in range. */        int targetState(Object mc, Object self) {
             if (hitResult == null || hitEntity == null || livingClass == null) return -1;
             try {
                 Object hit = hitResult.get(mc);
@@ -365,19 +539,20 @@ public final class StateExport implements ClientModInitializer {
                         return entity != null && entity != self && livingClass.isInstance(entity)
                             ? 1 : 0;
                     }
-                    if (blockHitClass != null && blockHitClass.isInstance(hit)) {
+                    if (isBlockHit(hit)) {
                         // A wall in front of the player ends the ray there: an entity behind it
                         // is not a target. A player in front of the wall is still found, because
-                        // the ray only needs to reach them before the block.
-                        if (hitLocation == null || vecGetX == null || vecGetY == null ||
-                            vecGetZ == null || getX == null || getY == null || getZ == null ||
+                        // the ray only needs to reach them before the block. A MISS result is
+                        // not a wall; it must not shorten the lead ray.
+                        if (hitLocation == null || vecX == null || vecY == null ||
+                            vecZ == null || getX == null || getY == null || getZ == null ||
                             getEyeY == null) {
                             return 0;
                         }
                         Object loc = hitLocation.invoke(hit);
-                        double dx = (Double) vecGetX.invoke(loc) - (Double) getX.invoke(self);
-                        double dy = (Double) vecGetY.invoke(loc) - (Double) getEyeY.invoke(self);
-                        double dz = (Double) vecGetZ.invoke(loc) - (Double) getZ.invoke(self);
+                        double dx = vecX.getDouble(loc) - (Double) getX.invoke(self);
+                        double dy = vecY.getDouble(loc) - (Double) getEyeY.invoke(self);
+                        double dz = vecZ.getDouble(loc) - (Double) getZ.invoke(self);
                         double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
                         if (dist < maxDist) maxDist = dist;
                     }
@@ -392,7 +567,7 @@ public final class StateExport implements ClientModInitializer {
             if (level == null || getEntitiesOfClass == null || getBoundingBox == null ||
                 inflate == null || clip == null || getLookAngle == null ||
                 getX == null || getY == null || getZ == null || getEyeY == null ||
-                vecGetX == null || vecGetY == null || vecGetZ == null ||
+                vecX == null || vecY == null || vecZ == null ||
                 vec3Ctor == null || vec3Class == null || maxDist <= 0.1) {
                 return 0;
             }
@@ -410,9 +585,9 @@ public final class StateExport implements ClientModInitializer {
                 double y = (Double) getEyeY.invoke(self);
                 double z = (Double) getZ.invoke(self);
                 Object look = getLookAngle.invoke(self);
-                double dx = (Double) vecGetX.invoke(look);
-                double dy = (Double) vecGetY.invoke(look);
-                double dz = (Double) vecGetZ.invoke(look);
+                double dx = vecX.getDouble(look);
+                double dy = vecY.getDouble(look);
+                double dz = vecZ.getDouble(look);
                 Object eye = vec3Ctor.newInstance(x, y, z);
                 Object end = vec3Ctor.newInstance(x + dx * maxDist,
                                                   y + dy * maxDist,

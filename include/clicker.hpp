@@ -5,8 +5,6 @@
 #include "uinput_device.hpp"
 #include <atomic>
 #include <chrono>
-#include <functional>
-#include <mutex>
 #include <thread>
 
 class Clicker {
@@ -14,11 +12,6 @@ class Clicker {
     const UInputDevice& device_;
     std::atomic<bool> enabled_{false};
     std::atomic<bool> running_{true};
-    // Fired after every generated press (including the second half of a double click). The
-    // combat modules use it as their attack signal: the game's hit packets are not visible
-    // from outside, so an attack we produced ourselves is the closest reliable trigger.
-    std::mutex on_press_mu_;
-    std::function<void()> on_press_;
     // Set when the pending start is a MOUSE-mode press, which is the only place the start
     // delay applies (hold the button that long before the train begins, like GhostTap).
     std::atomic<bool> gated_start_{false};
@@ -43,8 +36,7 @@ public:
         stop();
     }
 
-    // Stops the worker and waits for it. Called before the callback's captured state (the GUI)
-    // goes away, so a press in flight cannot call into a destroyed object.
+    // Stops the worker and waits for it before the surrounding state goes away.
     void stop() {
         running_ = false;
         pause_mask_ = 0;
@@ -55,11 +47,6 @@ public:
     Clicker(const Clicker&) = delete;
     Clicker& operator=(const Clicker&) = delete;
 
-    void set_on_press(std::function<void()> fn) {
-        std::lock_guard<std::mutex> lock(on_press_mu_);
-        on_press_ = std::move(fn);
-    }
-
     enum Pause : uint32_t {
         PAUSE_POINTER   = 1u << 0,   // pointer is over AeroClicker's own window
         PAUSE_INVENTORY = 1u << 1,   // the bridge mod reports an open game screen
@@ -67,6 +54,7 @@ public:
         PAUSE_NO_SWORD  = 1u << 3,   // left clicker: the gate wants a sword, none is held
         PAUSE_NO_TARGET = 1u << 4,   // left clicker: the gate wants a mob or player in the crosshair
         PAUSE_HELD_BED  = 1u << 5,   // right clicker: the held item is a bed and the gate skips beds
+        PAUSE_NO_BLOCK  = 1u << 6,   // right clicker: the crosshair is not on a block
     };
     // Pauses an explicit key press may override: the user asked to run now.
     static constexpr uint32_t PAUSE_AUTO = PAUSE_INVENTORY;
@@ -74,7 +62,8 @@ public:
     // the press belongs to the game, and swallowing it would break normal use: mining with the
     // left button, or placing water and throwing pearls with the right one.
     static constexpr uint32_t PAUSE_NO_TAKEOVER =
-        PAUSE_INVENTORY | PAUSE_HELD_ITEM | PAUSE_NO_SWORD | PAUSE_NO_TARGET | PAUSE_HELD_BED;
+        PAUSE_INVENTORY | PAUSE_HELD_ITEM | PAUSE_NO_SWORD | PAUSE_NO_TARGET |
+        PAUSE_HELD_BED | PAUSE_NO_BLOCK;
 
     void set_enabled(bool v) {
         if (!v) gated_start_ = false;
@@ -103,15 +92,6 @@ public:
     Tracker& tracker() { return tracker_; }
 
 private:
-    void fire_on_press() {
-        std::function<void()> fn;
-        {
-            std::lock_guard<std::mutex> lock(on_press_mu_);
-            fn = on_press_;
-        }
-        if (fn) fn();
-    }
-
     void run() {
         using clock = std::chrono::steady_clock;
 
@@ -196,7 +176,6 @@ private:
                 const auto press_at = clock::now();
                 next_press = press_at + std::chrono::nanoseconds(interval_ns);
                 click_count_++;
-                fire_on_press();
                 wait_ns(hold_ns);
                 device_.click(profile_.mouse_button, 0);
 
@@ -225,7 +204,6 @@ private:
                         device_.click(profile_.mouse_button, 1);
                         last_press = clock::now();
                         click_count_++;
-                        fire_on_press();
                         wait_ns(dbl_hold);
                         device_.click(profile_.mouse_button, 0);
                         // The second click starts its own cycle, so it does not turn the next

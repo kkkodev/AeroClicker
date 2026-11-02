@@ -14,11 +14,15 @@
 //
 //     slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch milliseconds>
 //     block=<0|1|-1> sword=<0|1|-1> target=<0|1|-1> bed=<0|1|-1>
+//     look=<0|1|-1> water=<0|1|-1> ground=<0|1|-1> hurt=<counter> hit=<counter>
 //
 // `block` says whether the held item is a block (placeable), `sword` whether it is a sword,
 // `target` whether the crosshair is on a living entity (a mob or another player), and `bed`
-// whether the held item is a bed. They are last so a build without them still parses as a
-// prefix, and -1 means "this mod build cannot tell". Older mod builds call the target field
+// whether the held item is a bed. `look` is set while the crosshair is on a block, `water`
+// while the local player is in water, and `ground` while the player stands on the ground.
+// `hurt` and `hit` are counters: hurt goes up when the local player takes damage, hit when the
+// local player attacks a living entity. They are last so a build without them still parses as
+// a prefix, and -1 means "this mod build cannot tell". Older mod builds call the target field
 // `player`; it is read as `target` too.
 // Reading is the whole contract: nothing is sent to the server and no input is touched.
 namespace McLink {
@@ -43,14 +47,27 @@ inline long long now_ms() {
         .count();
 }
 
-// Returns true (and fills the fields) only while the file is fresh. block is 1 when the held
-// item is a block, sword is 1 when it is a sword, target is 1 when the crosshair is on a living
-// entity (mob or player), bed is 1 when the held item is a bed, and -1 means the running mod
-// build does not report that field.
-inline bool poll(int& slot, bool& screen, int& block, int& sword, int& target, int& bed) {
+// One poll of the bridge mod. Anything the running build cannot report stays at -1; the event
+// counters stay at their previous value, so a mod that predates them never fires a reset.
+struct State {
+    int slot = -1;
+    bool screen = false;
+    int block = -1;
+    int sword = -1;
+    int target = -1;
+    int bed = -1;
+    int look = -1;
+    int water = -1;
+    int ground = -1;
+    long long hurt = 0;
+    long long hit = 0;
+};
+
+// Returns true only while the file is fresh, and fills `out` with that line.
+inline bool poll(State& out) {
     FILE* f = fopen(path(), "r");
     if (!f) return false;
-    char line[192] = "";
+    char line[320] = "";
     const bool got = fgets(line, sizeof(line), f) != nullptr;
     fclose(f);
     if (!got) return false;
@@ -66,21 +83,37 @@ inline bool poll(int& slot, bool& screen, int& block, int& sword, int& target, i
     const long long age = now_ms() - ms;
     if (age > STALE_MS || age < -STALE_MS) return false;
 
-    // The target field was called `player` before it started covering mobs. Read either name,
-    // and leave it at -1 when the running mod predates both.
-    int tgt = -1;
-    if (const char* p = strstr(line, " target=")) sscanf(p, " target=%d", &tgt);
-    else if (const char* p = strstr(line, " player=")) sscanf(p, " player=%d", &tgt);
+    auto int_field = [&](const char* name, int fallback) {
+        const std::string needle = std::string(" ") + name + "=";
+        if (const char* p = strstr(line, needle.c_str())) {
+            int v = fallback;
+            if (sscanf(p, (needle + "%d").c_str(), &v) == 1) return v;
+        }
+        return fallback;
+    };
+    auto long_field = [&](const char* name) {
+        const std::string needle = std::string(" ") + name + "=";
+        if (const char* p = strstr(line, needle.c_str())) {
+            long long v = 0;
+            if (sscanf(p, (needle + "%lld").c_str(), &v) == 1) return v;
+        }
+        return 0LL;
+    };
 
-    int bd = -1;
-    if (const char* p = strstr(line, " bed=")) sscanf(p, " bed=%d", &bd);
-
-    slot = s;
-    screen = sc != 0;
-    block = blk;
-    sword = swd;
-    target = tgt;
-    bed = bd;
+    out.slot = s;
+    out.screen = sc != 0;
+    out.block = blk;
+    out.sword = swd;
+    // The target field was called `player` before it started covering mobs.
+    out.target = -1;
+    if (const char* p = strstr(line, " target=")) sscanf(p, " target=%d", &out.target);
+    else if (const char* p = strstr(line, " player=")) sscanf(p, " player=%d", &out.target);
+    out.bed = int_field("bed", -1);
+    out.look = int_field("look", -1);
+    out.water = int_field("water", -1);
+    out.ground = int_field("ground", -1);
+    out.hurt = long_field("hurt");
+    out.hit = long_field("hit");
     return true;
 }
 

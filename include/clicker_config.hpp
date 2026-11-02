@@ -164,38 +164,47 @@ struct Macro {
     int key_bind = 0;
 };
 
-// Both combat modules fire from our own left clicks, real or generated. The game's own hit
-// packets are not visible from outside, so a cooldown stands in for hit confirmation.
+// Both combat modules are driven by the bridge mod, not by our own clicks: Jump Reset fires
+// when the game reports that the local player took damage, Sprint Reset when it reports that
+// the player attacked a living entity. That keeps them quiet outside real combat. The defaults
+// are deliberately human-paced and randomized; a jump reset 15 ms after a hit looks nothing
+// like a person reacting, while ~45 ms with a spread does.
 struct JumpResetProfile {
-    double chance = 0.85;
-    double delay_ms_mean = 15.0;
-    double delay_ms_stddev = 10.0;
-    double delay_ms_min = 5.0;
-    double delay_ms_max = 50.0;
+    double chance = 0.90;
+    double delay_ms_mean = 45.0;
+    double delay_ms_stddev = 15.0;
+    double delay_ms_min = 20.0;
+    double delay_ms_max = 90.0;
 
-    double hold_ms_mean = 75.0;
-    double hold_ms_stddev = 15.0;
-    double hold_ms_min = 50.0;
-    double hold_ms_max = 100.0;
+    double hold_ms_mean = 80.0;
+    double hold_ms_stddev = 12.0;
+    double hold_ms_min = 55.0;
+    double hold_ms_max = 120.0;
 
-    double cooldown_ms = 600.0;
+    double cooldown_ms = 500.0;
     bool forward_only = true;
     bool allow_in_menu = false;
     bool use_slot_filter = true;
+    // Pressing Space in water makes the player swim upward, which is both useless and a clear
+    // tell, so Vape-style clients stop the reset while in water. On by default.
+    bool disable_in_water = true;
+    // A jump only does anything from the ground; pressing it mid-air just leaks the module.
+    bool require_on_ground = true;
 };
 
 struct SprintResetProfile {
     SprintResetMode mode = SprintResetMode::W_TAP;
-    double chance = 1.0;
+    double chance = 0.90;
+    // A small random delay keeps the tap from landing on the exact tick of every hit.
     double delay_ms_min = 0.0;
-    double delay_ms_max = 0.0;
+    double delay_ms_max = 20.0;
 
-    double duration_ticks_mean = 1.0;
-    double duration_ticks_stddev = 0.35;
+    double duration_ticks_mean = 1.25;
+    double duration_ticks_stddev = 0.40;
     double duration_ticks_min = 1.0;
     double duration_ticks_max = 2.0;
 
-    double cooldown_ms = 450.0;
+    double cooldown_ms = 400.0;
     bool forward_only = true;
     bool use_slot_filter = true;
 };
@@ -231,6 +240,9 @@ struct Config {
     // Beds are placeable blocks, but a right clicker holding one is usually a mistake (bed
     // PvP, accidental placement). On by default so the right gate skips them.
     bool right_gate_no_bed = true;
+    // Right clicker: only click while the crosshair is on a block. This is the build/bridge
+    // filter; it is separate from the held-item gate and needs a mod build that reports `look`.
+    bool right_look_block = false;
     // Left clicker, GhostTap-style gate. Value 1 = a sword must be held, 2 = a living entity
     // must be in the crosshair, 3 = both. 0 is off. Inert without the bridge mod.
     // Default: only click at targets, which is what keeps a clicker from firing at blocks.

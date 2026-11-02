@@ -176,10 +176,12 @@ public:
     }
 };
 
-// What the caller knows about the game at the moment of the attack.
-struct AttackContext {
+// What the caller knows about the game when the bridge mod reports an event.
+struct CombatContext {
     bool in_menu;
     bool slot_blocked;
+    bool in_water;
+    bool on_ground;
 };
 
 inline double combat_clamp(double v, double lo, double hi) { return std::max(lo, std::min(hi, v)); }
@@ -209,8 +211,8 @@ public:
     }
 };
 
-// Presses Space shortly after your attack so the jump lines up with the knockback you take in a
-// trade.
+// Presses Space shortly after the game reports that you took damage, so the jump lines up with
+// the knockback you take in a trade.
 class JumpReset {
     const JumpResetProfile& p_;
     VirtualKeyboard& kb_;
@@ -229,13 +231,15 @@ public:
     void toggle() { set_enabled(!enabled_.load()); }
     bool busy() { return !sched_.idle(); }
 
-    void on_attack(const AttackContext& ctx) {
+    void on_hurt(const CombatContext& ctx) {
         if (!enabled_ || !sched_.idle()) return;
-        // Filters first: an attack the module would ignore must not burn its cooldown window,
+        // Filters first: an event the module would ignore must not burn its cooldown window,
         // or the next real hit after a menu closes or you start moving would still wait.
         if (ctx.in_menu && !p_.allow_in_menu) return;
         if (ctx.slot_blocked && p_.use_slot_filter) return;
         if (p_.forward_only && !kb_.physical(KEY_W)) return;
+        if (p_.disable_in_water && ctx.in_water) return;
+        if (p_.require_on_ground && !ctx.on_ground) return;
         if (!gate_.claim(p_.cooldown_ms)) return;
 
         double probability = combat_clamp(p_.chance, 0, 1);
@@ -260,8 +264,8 @@ private:
     }
 };
 
-// Briefly breaks sprint after your attack (W release, S press or Shift press) for whole 50ms
-// ticks, so your next hit deals full sprint knockback.
+// Briefly breaks sprint after the game reports that you hit a living entity (W release, S press
+// or Shift press) for whole 50ms ticks, so your next hit deals full sprint knockback.
 class SprintReset {
     const SprintResetProfile& p_;
     VirtualKeyboard& kb_;
@@ -283,9 +287,9 @@ public:
     // W-Tap is the only mode that has to hide a key you're physically holding.
     bool needs_keyboard_grab() const { return enabled_ && p_.mode == SprintResetMode::W_TAP; }
 
-    void on_attack(const AttackContext& ctx) {
+    void on_hit(const CombatContext& ctx) {
         if (!enabled_ || !sched_.idle()) return;
-        // Filters first: see JumpReset::on_attack.
+        // Filters first: see JumpReset::on_hurt.
         if (ctx.in_menu) return;
         if (ctx.slot_blocked && p_.use_slot_filter) return;
         bool need_w = p_.forward_only || p_.mode == SprintResetMode::W_TAP;
@@ -350,8 +354,9 @@ public:
 
     bool any_enabled() const { return jump.is_enabled() || sprint.is_enabled(); }
 
-    void on_attack(const AttackContext& ctx) {
-        jump.on_attack(ctx);
-        sprint.on_attack(ctx);
-    }
+    // Two separate entry points, because the game reports the two events separately: a hurt
+    // event may arrive without an attack (you got hit) and an attack without a hurt (you hit
+    // someone else).
+    void on_hurt(const CombatContext& ctx) { jump.on_hurt(ctx); }
+    void on_hit(const CombatContext& ctx)  { sprint.on_hit(ctx); }
 };

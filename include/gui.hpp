@@ -36,6 +36,9 @@ struct GuiState {
     std::atomic<bool> mc_sword_known{false};
     std::atomic<bool> mc_target_known{false};
     std::atomic<bool> mc_bed_known{false};
+    std::atomic<bool> mc_look_known{false};
+    std::atomic<bool> mc_water_known{false};
+    std::atomic<bool> mc_ground_known{false};
     // Written by the UI thread, read by the input thread: while the pointer is over the app,
     // physical button presses belong to the interface, not to the clicker's MOUSE arming.
     std::atomic<bool> ui_hovered{false};

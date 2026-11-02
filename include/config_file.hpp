@@ -159,6 +159,8 @@ public:
         else if (!strcmp(key, "jump_reset.forward_only")) j.forward_only = (int)val != 0;
         else if (!strcmp(key, "jump_reset.allow_in_menu")) j.allow_in_menu = (int)val != 0;
         else if (!strcmp(key, "jump_reset.use_slot_filter")) j.use_slot_filter = (int)val != 0;
+        else if (!strcmp(key, "jump_reset.disable_in_water")) j.disable_in_water = (int)val != 0;
+        else if (!strcmp(key, "jump_reset.require_on_ground")) j.require_on_ground = (int)val != 0;
         else if (!strcmp(key, "sprint_reset.mode")) s.mode = static_cast<SprintResetMode>((int)val);
         else if (!strcmp(key, "sprint_reset.chance")) s.chance = val;
         else if (!strcmp(key, "sprint_reset.delay_ms_min")) s.delay_ms_min = val;
@@ -174,6 +176,30 @@ public:
         return true;
     }
 
+    static bool near(double a, double b) {
+        const double d = a - b;
+        return d < 1e-6 && d > -1e-6;
+    }
+
+    // The combat resets used to fire from the app's own clicks and shipped with a near-instant
+    // jump. A profile that still holds every old default is upgraded once to the event-driven,
+    // human-paced defaults; a profile with any edited value is left alone.
+    static bool is_old_jump_defaults(const JumpResetProfile& j) {
+        return near(j.chance, 0.85) &&
+               near(j.delay_ms_mean, 15.0) && near(j.delay_ms_stddev, 10.0) &&
+               near(j.delay_ms_min, 5.0) && near(j.delay_ms_max, 50.0) &&
+               near(j.hold_ms_mean, 75.0) && near(j.hold_ms_stddev, 15.0) &&
+               near(j.hold_ms_min, 50.0) && near(j.hold_ms_max, 100.0) &&
+               near(j.cooldown_ms, 600.0);
+    }
+    static bool is_old_sprint_defaults(const SprintResetProfile& s) {
+        return near(s.chance, 1.0) &&
+               near(s.delay_ms_min, 0.0) && near(s.delay_ms_max, 0.0) &&
+               near(s.duration_ticks_mean, 1.0) && near(s.duration_ticks_stddev, 0.35) &&
+               near(s.duration_ticks_min, 1.0) && near(s.duration_ticks_max, 2.0) &&
+               near(s.cooldown_ms, 450.0);
+    }
+
     static bool load(Config& cfg, const std::string& filename = "config") {
         if (!valid_name(filename)) return false;
         std::string p = path() + "/" + filename;
@@ -182,11 +208,16 @@ public:
 
         char line[256];
         bool accent_order_seen = false;   // file was written with the current accent list
+        bool combat_v2_seen = false;      // file already has the event-driven reset fields
         while (fgets(line, sizeof(line), f)) {
             char key[96];
             double val;
             if (sscanf(line, "%95s %lf", key, &val) != 2) continue;
-
+            if (!strcmp(key, "jump_reset.disable_in_water") ||
+                !strcmp(key, "jump_reset.require_on_ground") ||
+                !strcmp(key, "right_look_block")) {
+                combat_v2_seen = true;
+            }
             read_profile_key(key, val, "left", cfg.left);
             read_profile_key(key, val, "right", cfg.right);
 
@@ -203,6 +234,7 @@ public:
             else if (!strcmp(key, "pause_in_menu")) cfg.pause_in_menu = (int)val != 0;
             else if (!strcmp(key, "right_placeable_only")) cfg.right_placeable_only = (int)val != 0;
             else if (!strcmp(key, "right_gate_no_bed")) cfg.right_gate_no_bed = (int)val != 0;
+            else if (!strcmp(key, "right_look_block")) cfg.right_look_block = (int)val != 0;
             else if (!strcmp(key, "key_jump_reset")) cfg.key_jump_reset = (int)val;
             else if (!strcmp(key, "key_sprint_reset")) cfg.key_sprint_reset = (int)val;
             else if (!strcmp(key, "jump_reset_enabled")) cfg.jump_reset_enabled = (int)val != 0;
@@ -271,6 +303,24 @@ public:
         int sm = static_cast<int>(cfg.sprint_reset.mode);
         if (sm < 0 || sm > 2) sm = 0;
         cfg.sprint_reset.mode = static_cast<SprintResetMode>(sm);
+        // One-time upgrade for configs written before the resets became event-driven. The
+        // marker keeps a deliberate old-style tune from being overwritten on every load.
+        if (!combat_v2_seen) {
+            if (is_old_jump_defaults(cfg.jump_reset)) {
+                JumpResetProfile fresh;
+                fresh.forward_only = cfg.jump_reset.forward_only;
+                fresh.allow_in_menu = cfg.jump_reset.allow_in_menu;
+                fresh.use_slot_filter = cfg.jump_reset.use_slot_filter;
+                cfg.jump_reset = fresh;
+            }
+            if (is_old_sprint_defaults(cfg.sprint_reset)) {
+                SprintResetProfile fresh;
+                fresh.mode = cfg.sprint_reset.mode;
+                fresh.forward_only = cfg.sprint_reset.forward_only;
+                fresh.use_slot_filter = cfg.sprint_reset.use_slot_filter;
+                cfg.sprint_reset = fresh;
+            }
+        }
         fclose(f);
         return true;
     }
@@ -305,6 +355,7 @@ public:
         fprintf(f, "pause_in_menu %d\n", cfg.pause_in_menu ? 1 : 0);
         fprintf(f, "right_placeable_only %d\n", cfg.right_placeable_only ? 1 : 0);
         fprintf(f, "right_gate_no_bed %d\n", cfg.right_gate_no_bed ? 1 : 0);
+        fprintf(f, "right_look_block %d\n", cfg.right_look_block ? 1 : 0);
         fprintf(f, "left_gate %d\n", cfg.left_gate);
 
         fprintf(f, "jump_reset_enabled %d\n", cfg.jump_reset_enabled ? 1 : 0);
@@ -323,6 +374,8 @@ public:
         fprintf(f, "jump_reset.forward_only %d\n", j.forward_only ? 1 : 0);
         fprintf(f, "jump_reset.allow_in_menu %d\n", j.allow_in_menu ? 1 : 0);
         fprintf(f, "jump_reset.use_slot_filter %d\n", j.use_slot_filter ? 1 : 0);
+        fprintf(f, "jump_reset.disable_in_water %d\n", j.disable_in_water ? 1 : 0);
+        fprintf(f, "jump_reset.require_on_ground %d\n", j.require_on_ground ? 1 : 0);
         const SprintResetProfile& s = cfg.sprint_reset;
         fprintf(f, "sprint_reset.mode %d\n", static_cast<int>(s.mode));
         fprintf(f, "sprint_reset.chance %g\n", s.chance);

@@ -2,6 +2,7 @@
 #include "gui_theme.hpp"
 #include "gui_widgets.hpp"
 #include "audio.hpp"
+#include "combat.hpp"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -108,6 +109,7 @@ static const char* pause_reason_text(uint32_t mask) {
     if (mask & Clicker::PAUSE_POINTER)   return "cursor over app";
     if (mask & Clicker::PAUSE_HELD_BED)  return "holding a bed";
     if (mask & Clicker::PAUSE_HELD_ITEM) return "held item is not a block";
+    if (mask & Clicker::PAUSE_NO_BLOCK)  return "crosshair is not on a block";
     if (mask & Clicker::PAUSE_NO_TARGET) return "no mob or player in crosshair";
     if (mask & Clicker::PAUSE_NO_SWORD)  return "no sword in hand";
     return "paused";
@@ -144,6 +146,20 @@ static void toggle_clicker_pill(GuiState& state, bool left_side) {
     }
     if (state.config.audio_enabled && now != was) {
         if (now) Audio::beep_on();
+        else Audio::beep_off();
+    }
+}
+
+// The Home combat pills are live switches like L/R: they toggle the reset and mirror the state
+// into the config so the Settings checkbox and the hotkey agree.
+static void toggle_combat_pill(GuiState& state, bool jump_reset) {
+    if (!state.combat) return;
+    bool& flag = jump_reset ? state.config.jump_reset_enabled : state.config.sprint_reset_enabled;
+    flag = !flag;
+    if (jump_reset) state.combat->jump.set_enabled(flag);
+    else            state.combat->sprint.set_enabled(flag);
+    if (state.config.audio_enabled) {
+        if (flag) Audio::beep_on();
         else Audio::beep_off();
     }
 }
@@ -268,6 +284,17 @@ static void draw_home_tab(GuiState& state) {
         draw_slot_indicator(state, full_w);
         y = ImGui::GetCursorScreenPos().y;
     }
+
+    // Combat resets: the same ON/off pills as the clickers, driven by the bridge mod's hurt
+    // and attack events. They stay off (and inert) when the mod is not running.
+    ImGui::SetCursorScreenPos(ImVec2(c0.x, y));
+    const bool jump_on = state.combat && state.combat->jump.is_enabled();
+    const bool sprint_on = state.combat && state.combat->sprint.is_enabled();
+    if (click_indicator("Jump reset", jump_on)) toggle_combat_pill(state, true);
+    ImGui::SameLine(0, 8.0f);
+    if (click_indicator("Sprint reset", sprint_on)) toggle_combat_pill(state, false);
+    y = ImGui::GetCursorScreenPos().y;
+
     const char* tip = "Tip: press the toggle key anywhere in-game to start or stop clicking.";
     ImVec2 ts = ImGui::CalcTextSize(tip, nullptr, true);
     float x = c0.x + (full_w - ts.x) * 0.5f;
@@ -513,14 +540,20 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
     slot_row("Right clicker", state.config.right_slots, active_slot, live);
     ImGui::EndDisabled();
 
-    // Left gate: GhostTap-style. The target-in-crosshair option also covers mining, because a
-    // block is in the crosshair instead of a mob or player, so the click is passed through.
+    end_panel();
+
+    // The gates used to be two rows inside the Minecraft panel. They are the clicker-specific
+    // rules, so each side gets its own captioned section with its own card instead.
+    section_divider("Left clicker");
+    begin_panel("Gate", -1.0f, -1, OxIcon::ArrowLeft);
+    // GhostTap-style. The target-in-crosshair option also covers mining, because a block is in
+    // the crosshair instead of a mob or player, so the click is passed through.
     if (state.config.left_gate < 0) state.config.left_gate = 0;
     if (state.config.left_gate > 3) state.config.left_gate = 3;
-    row_combo("Left gate", &state.config.left_gate,
-              "Off\0Sword only\0Mob/player in crosshair\0Sword + mob/player\0");
+    row_combo("Click when", &state.config.left_gate,
+              "Always\0Holding a sword\0Mob/player in crosshair\0Sword + mob/player\0");
     static const char* const LEFT_GATE_HINTS[] = {
-        "Left-clicker runs without asking the game anything",
+        "Runs without asking the game anything",
         "Only clicks while holding a sword",
         "Only clicks while a mob or player is in the crosshair",
         "Only clicks at a mob or player while holding a sword",
@@ -532,8 +565,11 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
         ImGui::TextDisabled("This mod build cannot report this gate");
     else
         ImGui::TextDisabled("%s", LEFT_GATE_HINTS[gate]);
+    end_panel();
 
-    row_check("Right gate", &state.config.right_placeable_only);
+    section_divider("Right clicker");
+    begin_panel("Gate", -1.0f, -1, OxIcon::ArrowRight);
+    row_check("Placeable blocks only", &state.config.right_placeable_only);
     if (live && state.config.right_placeable_only && !state.mc_block_known.load())
         ImGui::TextDisabled("This mod build cannot report the held item");
     else
@@ -543,20 +579,28 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
     row_check("Skip beds", &state.config.right_gate_no_bed);
     ImGui::EndDisabled();
     if (!state.config.right_placeable_only)
-        ImGui::TextDisabled("Beds are skipped only while the right gate is on");
+        ImGui::TextDisabled("Beds are skipped only while the block gate is on");
     else if (live && state.config.right_gate_no_bed && !state.mc_bed_known.load())
         ImGui::TextDisabled("This mod build cannot report beds");
     else
         ImGui::TextDisabled("The right clicker stays off while a bed is held");
+
+    row_check("Only while looking at a block", &state.config.right_look_block);
+    if (live && state.config.right_look_block && !state.mc_look_known.load())
+        ImGui::TextDisabled("This mod build cannot report the crosshair");
+    else
+        ImGui::TextDisabled("Stops while the crosshair is on air or an entity");
     end_panel();
 
-    section_divider("Everything below works without Minecraft");
-
+    // Both resets read game events from the bridge mod, so they belong above the
+    // "works without Minecraft" divider: with no game running there is nothing to react to.
     begin_panel("Jump reset", -1.0f, -1, OxIcon::Pulse);
     if (!state.combat)
         ImGui::TextDisabled("Unavailable: the virtual keyboard could not be created");
+    else if (!live)
+        ImGui::TextDisabled("Needs the bridge mod; fires when the game reports damage");
     else
-        ImGui::TextDisabled("Presses Space shortly after your own left click");
+        ImGui::TextDisabled("Presses Space shortly after the game reports you were hurt");
     row_check("Enable Jump Reset", &state.config.jump_reset_enabled);
     keybind_row("Toggle key", state.config.key_jump_reset);
     if (state.config.jump_reset_enabled) {
@@ -574,14 +618,22 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
         row_check("Only while moving forward", &j.forward_only);
         row_check("Allow in menus", &j.allow_in_menu);
         row_check("Respect slot filter", &j.use_slot_filter);
+        row_check("Stop in water", &j.disable_in_water);
+        row_check("Only on the ground", &j.require_on_ground);
+        if (live && !state.mc_water_known.load())
+            ImGui::TextDisabled("This mod build cannot report water");
+        else if (live && !state.mc_ground_known.load())
+            ImGui::TextDisabled("This mod build cannot report the ground");
     }
     end_panel();
 
     begin_panel("Sprint reset", -1.0f, -1, OxIcon::Keyboard);
     if (!state.combat)
         ImGui::TextDisabled("Unavailable: the virtual keyboard could not be created");
+    else if (!live)
+        ImGui::TextDisabled("Needs the bridge mod; fires when you hit a living entity");
     else
-        ImGui::TextDisabled("Breaks sprint for 1-3 ticks after your own left click");
+        ImGui::TextDisabled("Breaks sprint after the game reports a hit on a mob or player");
     row_check("Enable Sprint Reset", &state.config.sprint_reset_enabled);
     keybind_row("Toggle key", state.config.key_sprint_reset);
     if (state.config.sprint_reset_enabled) {
@@ -602,6 +654,8 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
         ImGui::TextDisabled("W-Tap grabs the keyboard only while no key is held");
     }
     end_panel();
+
+    section_divider("Everything below works without Minecraft");
 
     begin_panel("Audio", -1.0f, -1, OxIcon::Speaker);
     row_check("Toggle Sound", &state.config.audio_enabled);
