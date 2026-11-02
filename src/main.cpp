@@ -841,6 +841,7 @@ int main(int argc, char* argv[]) {
             headless = true;
         }
         else if (strcmp(argv[i], "--save") == 0) {
+            ConfigFile::sanitize(config);
             ConfigFile::save(config);
             printf("  Config saved to %s/config\n", ConfigFile::path().c_str());
             return 0;
@@ -865,6 +866,10 @@ int main(int argc, char* argv[]) {
             return 0;
         }
     }
+
+    // A hand-edited config and the command-line overrides go through the same clamps, so no
+    // value can reach the timing math out of range.
+    ConfigFile::sanitize(config);
 
     printf("\n  AeroClicker - Humanized Auto-Clicker\n");
     printf("  ────────────────────────────────────\n");

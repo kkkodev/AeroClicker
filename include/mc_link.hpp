@@ -18,9 +18,11 @@
 //     back=<counter>
 //
 // `block` says whether the held item is a block (placeable), `sword` whether it is a sword,
-// `target` whether the crosshair is on a living entity (a mob or another player), and `bed`
-// whether the held item is a bed. `look` is set while the crosshair is on a block, `water`
-// while the local player is in water, and `ground` while the player stands on the ground.
+// `target` is a bitmask of what the crosshair ray found (1 = a mob or player, 2 = a fireball,
+// 3 = both), and `bed` says whether the held item is a bed. The app decides whether fireballs
+// count; an older mod that only reports 0/1 simply leaves that option inert. `look` is set
+// while the crosshair is on a block, `water` while the local player is in water, and `ground`
+// while the player stands on the ground.
 // `hurt` and `hit` are counters: hurt goes up when the local player takes damage, hit when the
 // local player attacks a living entity, and `back` goes up alongside hurt when the attacker was
 // behind the player. They are last so a build without them still parses as a prefix, and -1
@@ -103,7 +105,9 @@ inline bool poll(State& out) {
         return 0LL;
     };
 
-    out.slot = s;
+    // The line is not trusted to stay in range: a corrupted, foreign or hand-written file must
+    // not index the nine-slot maps out of bounds. Anything outside 0-8 means "no slot".
+    out.slot = (s >= 0 && s < 9) ? s : -1;
     out.screen = sc != 0;
     out.block = blk;
     out.sword = swd;

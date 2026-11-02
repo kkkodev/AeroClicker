@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <chrono>
@@ -20,6 +21,11 @@ class Tracker {
     static constexpr int MAX_HISTORY = 2000;
     static constexpr int GRAPH_SIZE = 120;
 
+    // The clicker thread records into every member below while the UI thread reads them for
+    // the readouts and the graph, so all of it sits behind mu_. The old version locked only
+    // the CSV history, which left the averages and the graph ring as unchecked races.
+    mutable std::mutex mu_;
+
     double cps_samples_[WINDOW] = {};
     double hold_samples_[WINDOW] = {};
     int pos_ = 0;
@@ -31,8 +37,7 @@ class Tracker {
     int graph_count_ = 0;
 
     std::deque<ClickData> history_;
-    mutable std::mutex mu_;
-    bool recording_ = false;
+    std::atomic<bool> recording_{false};
 
     static int64_t now_ms() {
         return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -44,6 +49,7 @@ public:
     // real press-to-press time, so the readout and the CSV show what actually happened.
     void record(double target_cps, double actual_cps, double hold_ns, double interval_ns,
                 double trend) {
+        std::lock_guard<std::mutex> lock(mu_);
         cps_samples_[pos_] = actual_cps;
         hold_samples_[pos_] = hold_ns / 1'000'000.0;
         pos_ = (pos_ + 1) % WINDOW;
@@ -55,7 +61,6 @@ public:
         if (graph_count_ < GRAPH_SIZE) graph_count_++;
 
         if (recording_) {
-            std::lock_guard<std::mutex> lock(mu_);
             if (history_.size() >= MAX_HISTORY)
                 history_.pop_front();
             history_.push_back({now_ms(), target_cps, actual_cps, static_cast<int64_t>(hold_ns),
@@ -64,6 +69,7 @@ public:
     }
 
     double avg_cps() const {
+        std::lock_guard<std::mutex> lock(mu_);
         if (count_ == 0) return 0;
         double sum = 0;
         for (int i = 0; i < count_; i++) sum += cps_samples_[i];
@@ -71,17 +77,26 @@ public:
     }
 
     double avg_hold_ms() const {
+        std::lock_guard<std::mutex> lock(mu_);
         if (count_ == 0) return 0;
         double sum = 0;
         for (int i = 0; i < count_; i++) sum += hold_samples_[i];
         return sum / count_;
     }
 
-    uint64_t total() const { return total_clicks_; }
+    uint64_t total() const {
+        std::lock_guard<std::mutex> lock(mu_);
+        return total_clicks_;
+    }
 
-    const float* graph_data() const { return cps_graph_; }
-    int graph_offset() const { return graph_pos_; }
-    int graph_count() const { return graph_count_; }
+    // Copies the ring so the caller can draw it without holding the lock (returning a pointer
+    // to the live buffer, as the old accessor did, made the draw another race).
+    void graph_copy(float* out, int& offset) const {
+        std::lock_guard<std::mutex> lock(mu_);
+        for (int i = 0; i < GRAPH_SIZE; i++) out[i] = cps_graph_[i];
+        offset = graph_pos_;
+    }
+
     static constexpr int graph_size() { return GRAPH_SIZE; }
 
     void set_recording(bool v) { recording_ = v; }
@@ -113,9 +128,13 @@ public:
     }
 
     void reset() {
+        std::lock_guard<std::mutex> lock(mu_);
         pos_ = 0;
         count_ = 0;
         total_clicks_ = 0;
-        clear_history();
+        graph_pos_ = 0;
+        graph_count_ = 0;
+        for (float& v : cps_graph_) v = 0.0f;
+        history_.clear();
     }
 };

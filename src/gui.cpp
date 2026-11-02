@@ -260,6 +260,62 @@ static void draw_slot_indicator(GuiState& state, float width) {
     end_panel();
 }
 
+// A Home card for one combat module, in the same panel language as the clicker cards above
+// it: title, state dot, a live on/off switch, a one-line summary of what it reacts to, and
+// its toggle key. The full timing controls stay on the Mod tab; this is the at-a-glance card
+// plus the one setting people change most often.
+static void draw_combat_card(GuiState& state, bool jump_reset, float card_w) {
+    // Unique per module: the pill and the panel height are cached by ID in this window, and
+    // the Mod tab draws panels with these same titles.
+    ImGui::PushID(jump_reset ? "home_jump" : "home_sprint");
+    const bool present = state.combat != nullptr;
+    const bool on = present && (jump_reset ? state.combat->jump.is_enabled()
+                                           : state.combat->sprint.is_enabled());
+    begin_panel(jump_reset ? "Jump reset" : "Sprint reset", card_w, on ? 1 : 0,
+                jump_reset ? OxIcon::Pulse : OxIcon::Keyboard);
+    const float inner = panel_inner();
+
+    // Without a virtual keyboard the switch would flip a checkbox that nothing reads, so it
+    // is drawn disabled rather than lying about being usable.
+    ImGui::BeginDisabled(!present);
+    if (click_indicator("Enabled", on)) toggle_combat_pill(state, jump_reset);
+    ImGui::EndDisabled();
+
+    if (jump_reset)
+        ImGui::TextDisabled("Presses Space shortly after you take damage");
+    else
+        ImGui::TextDisabled("Breaks sprint after you hit a living entity");
+
+    // Read-only summary of the timings the module will use; the sliders live on the Mod tab.
+    if (jump_reset) {
+        const JumpResetProfile& j = state.config.jump_reset;
+        ImGui::TextDisabled("%.0f%% chance - %.0f +/- %.0f ms", j.chance * 100.0,
+                            j.delay_ms_mean, j.delay_ms_stddev);
+    } else {
+        const SprintResetProfile& s = state.config.sprint_reset;
+        static const char* const MODES[] = { "W-Tap", "S-Tap", "Shift-Tap" };
+        const int mode = (int)s.mode;
+        ImGui::TextDisabled("%s - %.0f%% - %.0f-%.0f ms",
+                            MODES[mode >= 0 && mode < 3 ? mode : 0], s.chance * 100.0,
+                            s.delay_ms_min, s.delay_ms_max);
+    }
+
+    if (!present)
+        ImGui::TextDisabled("No virtual keyboard available");
+    else if (!state.mc_linked.load())
+        ImGui::TextDisabled("Waiting for the bridge mod");
+    else
+        ImGui::Text("%u presses this session",
+                    (unsigned)(jump_reset ? state.combat->jump.fire_count()
+                                          : state.combat->sprint.fire_count()));
+
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
+    stacked_keybind("Toggle key", jump_reset ? state.config.key_jump_reset
+                                             : state.config.key_sprint_reset, inner);
+    end_panel();
+    ImGui::PopID();
+}
+
 static void draw_home_tab(GuiState& state) {
     ImGui::Spacing();
     const float gap = 12.0f;
@@ -286,15 +342,15 @@ static void draw_home_tab(GuiState& state) {
         y = ImGui::GetCursorScreenPos().y;
     }
 
-    // Combat resets: the same ON/off pills as the clickers, driven by the bridge mod's hurt
-    // and attack events. They stay off (and inert) when the mod is not running.
+    // Combat resets get their own row of cards, matching the clickers. They are driven by the
+    // bridge mod's hurt and attack events, so they stay off (and inert) when it is not running.
     ImGui::SetCursorScreenPos(ImVec2(c0.x, y));
-    const bool jump_on = state.combat && state.combat->jump.is_enabled();
-    const bool sprint_on = state.combat && state.combat->sprint.is_enabled();
-    if (click_indicator("Jump reset", jump_on)) toggle_combat_pill(state, true);
-    ImGui::SameLine(0, 8.0f);
-    if (click_indicator("Sprint reset", sprint_on)) toggle_combat_pill(state, false);
-    y = ImGui::GetCursorScreenPos().y;
+    draw_combat_card(state, true, card_w);
+    float y_jump = ImGui::GetCursorScreenPos().y;
+    ImGui::SetCursorScreenPos(ImVec2(c0.x + card_w + gap, y));
+    draw_combat_card(state, false, card_w);
+    float y_sprint = ImGui::GetCursorScreenPos().y;
+    y = y_jump > y_sprint ? y_jump : y_sprint;
 
     const char* tip = "Tip: press the toggle key anywhere in-game to start or stop clicking.";
     ImVec2 ts = ImGui::CalcTextSize(tip, nullptr, true);
@@ -773,10 +829,12 @@ static void draw_analytics_tab(GuiState& state, char* status_msg, float& status_
     begin_panel("Live", -1.0f, -1, OxIcon::Pulse);
     ImGui::TextDisabled("Left CPS");
     { const auto& t = state.left.tracker(); char ov[32]; snprintf(ov, sizeof(ov), "%.1f CPS", t.avg_cps());
-      ox_plot_lines("##lcps", t.graph_data(), t.graph_size(), t.graph_offset(), ov, 0.0f, 35.0f, ImVec2(panel_inner(), 60)); }
+      float g[Tracker::graph_size()]; int goff = 0; t.graph_copy(g, goff);
+      ox_plot_lines("##lcps", g, Tracker::graph_size(), goff, ov, 0.0f, 35.0f, ImVec2(panel_inner(), 60)); }
     ImGui::TextDisabled("Right CPS");
     { const auto& t = state.right.tracker(); char ov[32]; snprintf(ov, sizeof(ov), "%.1f CPS", t.avg_cps());
-      ox_plot_lines("##rcps", t.graph_data(), t.graph_size(), t.graph_offset(), ov, 0.0f, 35.0f, ImVec2(panel_inner(), 60)); }
+      float g[Tracker::graph_size()]; int goff = 0; t.graph_copy(g, goff);
+      ox_plot_lines("##rcps", g, Tracker::graph_size(), goff, ov, 0.0f, 35.0f, ImVec2(panel_inner(), 60)); }
     end_panel();
 
     begin_panel("Session", -1.0f, -1, OxIcon::Clock);
@@ -1008,6 +1066,10 @@ void gui_run(GuiState& state) {
             // Clip the scrolling body so it slides under the bar instead of over it; items
             // fully above the edge are culled, so they cannot be clicked through the bar.
             ImGui::PushClipRect(ImVec2(0.0f, content_top), ImVec2((float)win_w, (float)win_h), true);
+            // Publish the edited profiles to the clicker threads, which read an immutable copy:
+            // a slider drag can no longer race with the interval math.
+            state.left.set_profile(state.config.left);
+            state.right.set_profile(state.config.right);
             switch (current_tab) {
                 case 0: draw_home_tab(state); break;
                 case 1: draw_mod_tab(state); break;

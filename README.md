@@ -65,7 +65,7 @@ See [Credits](#credits).
 
 The Jitter preset is tuned to look human without giving up rate. Double-clicks are rare — 1 % of
 beats — and always land inside the current one, so they add clicks instead of lengthening the gap.
-Fatigue breaks are short and infrequent: 0.15–0.4 s of rest every 40–90 s, and the break clock
+Fatigue breaks are short and infrequent: 0.25–0.6 s of rest every 30–75 s, and the break clock
 restarts whenever clicking is paused, so resuming never begins with a break. Hold times follow the
 rate and drift slowly around their mean, as a real hand's grip does, rather than being independent
 random draws. Every value is editable on the **Left**/**Right** tabs, and **Normal**, **Butterfly**
@@ -227,15 +227,16 @@ nothing, both gates stay inert, and the combat resets cannot fire.
 
 The mod is read-only. Every 50 ms it writes the selected slot, whether a screen is open, whether
 the held item is a block, whether it is a sword or a bed, whether the crosshair is on a living
-entity or on a block, whether the player is in water or on the ground, and three event counters to
+entity, a fireball or a block, whether the player is in water or on the ground, and three event counters to
 `$XDG_RUNTIME_DIR/aeroclicker-mc.state` as a single line:
 
 ```
-slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch ms> block=<0|1|-1> sword=<0|1|-1> target=<0|1|-1> bed=<0|1|-1> look=<0|1|-1> water=<0|1|-1> ground=<0|1|-1> hurt=<counter> hit=<counter> back=<counter>
+slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch ms> block=<0|1|-1> sword=<0|1|-1> target=<0-3|-1> bed=<0|1|-1> look=<0|1|-1> water=<0|1|-1> ground=<0|1|-1> hurt=<counter> hit=<counter> back=<counter>
 ```
 
-`block`, `sword`, `target`, `bed`, `look`, `water` and `ground` are `1` for yes, `0` for no and
-`-1` for "this mod build cannot tell". They come after `ms` so an older app build still parses the
+`block`, `sword`, `bed`, `look`, `water` and `ground` are `1` for yes, `0` for no and `-1` for
+"this mod build cannot tell". `target` is a bitmask: `1` for a mob or player, `2` for a fireball,
+`3` for both, `0` for neither and `-1` for unknown. They come after `ms` so an older app build still parses the
 prefix, and an older mod build's `player` field is read as `target`. `hurt` goes up when the local
 player takes damage; `hit` goes up when a new swing starts while the exact crosshair target is a
 living entity; `back` goes up with `hurt` when the attacker was behind the player. The app turns
@@ -347,14 +348,14 @@ no game running the modules do nothing. They need a live bridge link, and a mod 
 the counters (the jar in `tools/mc-bridge` does).
 
 - **Jump reset** presses Space shortly after the game reports damage. The defaults are
-  human-paced rather than instant: 85 % chance, a 45 ms delay with 15 ms spread (clamped to
-  20–90 ms), an 80 ms hold with 12 ms spread (55–120 ms), and a 500 ms cooldown. It only fires
+  human-paced rather than instant: 85 % chance, a 90 ms delay with 30 ms spread (clamped to
+  45–170 ms), an 80 ms hold with 12 ms spread (55–120 ms), and a 500 ms cooldown. It only fires
   while moving forward, respects the slot filter, stays quiet while a game screen is open, and is
   off in water (**Stop in water**, on by default, the same rule Vape uses) and in mid-air
   (**Only on the ground**, on by default).
 - **Sprint reset** briefly breaks sprint after the game reports a hit on a mob or player so the
   next hit deals full sprint knockback. It can use **W-Tap** (release W), **S-Tap** (tap S) or
-  **Shift-Tap** (tap Shift). Defaults: 90 % chance, a 0–20 ms delay, 1.25 ± 0.40 ticks clamped to
+  **Shift-Tap** (tap Shift). Defaults: 90 % chance, a 15–65 ms delay, 1.25 ± 0.40 ticks clamped to
   1–2 ticks, and a 400 ms cooldown. W-Tap needs to hide a W you are still holding, so it grabs the
   keyboard while no key is down and forwards every key through a virtual keyboard; S-Tap and
   Shift-Tap do not need the grab.
@@ -388,7 +389,7 @@ server's rules.
 The combat resets are randomized (chance, delay, hold and tick count), and firing from real game
 events makes them far less mechanical than pressing Space on every click. They are still not
 undetectable: a server sees the resulting movement and attack timing, and can compare it against
-what a human can react to. A 45 ms jump reaction is fast; a 0 ms one would be impossible. Choose
+what a human can react to. A 90 ms jump reaction is already faster than most people react; a 20 ms one would be impossible. Choose
 values you would plausibly produce yourself, and accept that using any automation can still be
 against a server's rules.
 
@@ -398,7 +399,7 @@ against a server's rules.
 
 | Tab | What it does |
 | --- | --- |
-| **Home** | Both clickers at a glance, with live CPS, click counts, on/off pills, Jump/Sprint reset pills and the slot activation readout |
+| **Home** | Both clickers at a glance, with live CPS, click counts, on/off switches, Jump/Sprint reset cards with their toggle keys, and the slot activation readout |
 | **Mod** | Bridge link status, the **Global** card (hotbar slots, menu pause), the **Left clicker** and **Right clicker** gates, and the jump/sprint resets — everything that needs the game |
 | **Settings** | Audio, profiles and accent — everything that works without the mod |
 | **Left / Right** | Presets, speed, distribution, humanization, hold timing, spikes, breaks, hotkey and activation mode |
@@ -443,7 +444,7 @@ keybinds survive the rename.
   **Placeable blocks only** off. This also appears if the mod is an older build that does not
   export the held item; update the jar and restart Minecraft.
 
-**The left clicker stops with `no mob or player in crosshair`**
+**The left clicker stops with `no target in crosshair`**
 - The left gate is on its default and the crosshair is not on a target. Look at a mob, another
   player or a fireball, or change **Left clicker** on the Mod tab. A bridge jar built before mobs
   were covered reports players only: aim at a player, or rebuild the jar (see

@@ -4,6 +4,9 @@
 class Variance {
 public:
     static double gaussian(double mean, double stddev) {
+        // std::normal_distribution requires a positive standard deviation. A UI slider at 0 or
+        // a hand-edited negative value used to violate that precondition.
+        if (stddev <= 0.0) return mean;
         thread_local std::mt19937 rng{std::random_device{}()};
         std::normal_distribution<double> dist(mean, stddev);
         return dist(rng);

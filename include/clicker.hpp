@@ -5,11 +5,19 @@
 #include "uinput_device.hpp"
 #include <atomic>
 #include <chrono>
+#include <memory>
+#include <mutex>
 #include <thread>
 
 class Clicker {
+    // The UI edits this directly through profile(); the worker never reads it. Instead the
+    // worker reads an immutable snapshot published by set_profile(), because reading the
+    // profile's doubles from another thread while a slider writes them is a data race (and a
+    // torn or NaN value would go straight into the interval math).
     ClickerProfile& profile_;
     const UInputDevice& device_;
+    std::shared_ptr<const ClickerProfile> snap_;
+    mutable std::mutex snap_mu_;
     std::atomic<bool> enabled_{false};
     std::atomic<bool> running_{true};
     // Set when the pending start is a MOUSE-mode press, which is the only place the start
@@ -28,8 +36,17 @@ class Clicker {
 
 public:
     Clicker(ClickerProfile& profile, const UInputDevice& device)
-    : profile_(profile), device_(device) {
+    : profile_(profile), device_(device),
+      snap_(std::make_shared<const ClickerProfile>(profile)) {
         thread_ = std::thread(&Clicker::run, this);
+    }
+
+    // Publishes a copy of the edited profile to the clicker thread. Cheap enough to call once
+    // per UI frame.
+    void set_profile(const ClickerProfile& p) {
+        auto next = std::make_shared<const ClickerProfile>(p);
+        std::lock_guard<std::mutex> lock(snap_mu_);
+        snap_ = std::move(next);
     }
 
     ~Clicker() {
@@ -87,11 +104,17 @@ public:
     void set_paused(bool v) { set_pause(PAUSE_POINTER, v); }
     void toggle() { set_enabled(!enabled_.load()); }
     uint32_t click_count() const { return click_count_.load(); }
+    // The live profile the UI edits. Only hand it to set_profile(); the worker does not read it.
     ClickerProfile& profile() { return profile_; }
     const Tracker& tracker() const { return tracker_; }
     Tracker& tracker() { return tracker_; }
 
 private:
+    std::shared_ptr<const ClickerProfile> snapshot() const {
+        std::lock_guard<std::mutex> lock(snap_mu_);
+        return snap_;
+    }
+
     void run() {
         using clock = std::chrono::steady_clock;
 
@@ -104,9 +127,10 @@ private:
             // Start delay, MOUSE starts only. Sliced rather than slept in one go so that
             // switching off or pausing cancels it instead of leaving the thread stuck for up
             // to half a second.
-            if (gated_start_.exchange(false) && profile_.start_delay_ms > 0.0) {
+            auto cfg = snapshot();
+            if (gated_start_.exchange(false) && cfg->start_delay_ms > 0.0) {
                 const auto deadline = clock::now() + std::chrono::microseconds(
-                    static_cast<int64_t>(profile_.start_delay_ms * 1000.0));
+                    static_cast<int64_t>(cfg->start_delay_ms * 1000.0));
                 while (enabled_ && running_ && clock::now() < deadline)
                     std::this_thread::sleep_for(std::chrono::milliseconds(2));
                 if (!enabled_ || !running_) continue;
@@ -118,8 +142,8 @@ private:
             clock::time_point prev_press{};
 
             auto next_break = clock::now();
-            if (profile_.breaks_enabled) {
-                double secs = Variance::range(profile_.break_interval_min, profile_.break_interval_max);
+            if (cfg->breaks_enabled) {
+                double secs = Variance::range(cfg->break_interval_min, cfg->break_interval_max);
                 next_break += std::chrono::milliseconds(static_cast<int64_t>(secs * 1000));
             }
 
@@ -129,13 +153,16 @@ private:
             auto next_press = clock::now();
 
             while (enabled_ && running_) {
+                // Re-read once per beat, so a setting edited in the UI applies from the next
+                // click instead of waiting for a restart.
+                cfg = snapshot();
                 if (pause_mask_.load() != 0) {
                     // Resuming must not start with a fatigue break, and a long pause must not
                     // let the break clock expire while nothing is clicking, so the break
                     // timer restarts for as long as the pause lasts.
-                    if (profile_.breaks_enabled) {
-                        double secs = Variance::range(profile_.break_interval_min,
-                                                      profile_.break_interval_max);
+                    if (cfg->breaks_enabled) {
+                        double secs = Variance::range(cfg->break_interval_min,
+                                                      cfg->break_interval_max);
                         next_break = clock::now() + std::chrono::milliseconds(
                             static_cast<int64_t>(secs * 1000));
                     }
@@ -146,20 +173,20 @@ private:
                     have_prev_press = false;
                     continue;
                 }
-                if (profile_.breaks_enabled && clock::now() >= next_break) {
-                    double dur = Variance::range(profile_.break_duration_min, profile_.break_duration_max);
+                if (cfg->breaks_enabled && clock::now() >= next_break) {
+                    double dur = Variance::range(cfg->break_duration_min, cfg->break_duration_max);
                     int64_t dur_ms = static_cast<int64_t>(dur * 1000);
                     auto end = clock::now() + std::chrono::milliseconds(dur_ms);
                     while (enabled_ && running_ && clock::now() < end)
                         std::this_thread::sleep_for(std::chrono::milliseconds(5));
-                    double secs = Variance::range(profile_.break_interval_min, profile_.break_interval_max);
+                    double secs = Variance::range(cfg->break_interval_min, cfg->break_interval_max);
                     next_break = clock::now() + std::chrono::milliseconds(static_cast<int64_t>(secs * 1000));
                     next_press = clock::now();
                     have_prev_press = false;
                 }
 
-                const int64_t interval_ns = calculate_interval_ns();
-                const int64_t hold_ns = calculate_hold_ns(interval_ns);
+                const int64_t interval_ns = calculate_interval_ns(*cfg);
+                const int64_t hold_ns = calculate_hold_ns(*cfg, interval_ns);
 
                 // Wait for the scheduled press, checking often enough that switching off
                 // stays responsive even on a long (low CPS) interval.
@@ -172,7 +199,7 @@ private:
                 // Switched off during the wait: do not emit a press that nothing will release.
                 if (!enabled_ || !running_) break;
 
-                device_.click(profile_.mouse_button, 1);
+                device_.click(cfg->mouse_button, 1);
                 const auto press_at = clock::now();
                 next_press = press_at + std::chrono::nanoseconds(interval_ns);
                 click_count_++;
@@ -189,8 +216,8 @@ private:
                 }
                 auto last_press = press_at;
 
-                if (profile_.double_click_chance > 0 && Variance::chance(profile_.double_click_chance)) {
-                    double delay_ms = Variance::range(profile_.double_click_delay_min, profile_.double_click_delay_max);
+                if (cfg->double_click_chance > 0 && Variance::chance(cfg->double_click_chance)) {
+                    double delay_ms = Variance::range(cfg->double_click_delay_min, cfg->double_click_delay_max);
                     // The next beat is re-anchored from the second press, so a doublet costs
                     // hold + delay. Capping the delay at interval - hold keeps two clicks
                     // inside at most two intervals, which is exactly the condition for the
@@ -200,8 +227,8 @@ private:
                     if (delay_ms > cap_ms) delay_ms = cap_ms;
                     if (delay_ms >= 5.0) {
                         wait_ns(static_cast<int64_t>(delay_ms * 1'000'000));
-                        int64_t dbl_hold = calculate_hold_ns(interval_ns);
-                        device_.click(profile_.mouse_button, 1);
+                        int64_t dbl_hold = calculate_hold_ns(*cfg, interval_ns);
+                        device_.click(cfg->mouse_button, 1);
                         last_press = clock::now();
                         click_count_++;
                         wait_ns(dbl_hold);
@@ -223,35 +250,35 @@ private:
         }
     }
 
-    int64_t calculate_interval_ns() {
-        current_trend_ = Variance::trend(current_trend_, profile_.rhythm_volatility, profile_.rhythm_tension);
+    int64_t calculate_interval_ns(const ClickerProfile& p) {
+        current_trend_ = Variance::trend(current_trend_, p.rhythm_volatility, p.rhythm_tension);
 
         double cps;
-        switch (profile_.distribution) {
+        switch (p.distribution) {
             case DistributionType::UNIFORM:
-                cps = Variance::range(profile_.cps_min, profile_.cps_max) + current_trend_;
+                cps = Variance::range(p.cps_min, p.cps_max) + current_trend_;
                 break;
             default:
-                cps = Variance::gaussian(profile_.cps_mean + current_trend_, profile_.cps_stddev);
+                cps = Variance::gaussian(p.cps_mean + current_trend_, p.cps_stddev);
                 break;
         }
 
-        if (Variance::chance(profile_.spike_chance))
-            cps += Variance::range(profile_.spike_min, profile_.spike_max);
+        if (Variance::chance(p.spike_chance))
+            cps += Variance::range(p.spike_min, p.spike_max);
 
-        if (Variance::chance(profile_.stutter_chance))
-            cps -= Variance::range(profile_.stutter_min, profile_.stutter_max);
+        if (Variance::chance(p.stutter_chance))
+            cps -= Variance::range(p.stutter_min, p.stutter_max);
 
-        if (cps > profile_.cps_max)
-            cps = profile_.cps_max + Variance::range(-profile_.cps_minmax_fallout, profile_.cps_minmax_fallout);
-        if (cps < profile_.cps_min)
-            cps = profile_.cps_min + Variance::range(-profile_.cps_minmax_fallout, profile_.cps_minmax_fallout);
+        if (cps > p.cps_max)
+            cps = p.cps_max + Variance::range(-p.cps_minmax_fallout, p.cps_minmax_fallout);
+        if (cps < p.cps_min)
+            cps = p.cps_min + Variance::range(-p.cps_minmax_fallout, p.cps_minmax_fallout);
         if (cps < 0.5) cps = 0.5;
 
         return static_cast<int64_t>(1'000'000'000.0 / cps);
     }
 
-    int64_t calculate_hold_ns(int64_t interval_ns) {
+    int64_t calculate_hold_ns(const ClickerProfile& p, int64_t interval_ns) {
         const double cps = 1'000'000'000.0 / static_cast<double>(interval_ns);
         // Holds shorten as the rate rises (fingers move faster), but never below 80% of the
         // mean. The old form, max(0.8, 1 - cps/25), was below 0.8 for every rate above 5 CPS,
@@ -261,16 +288,15 @@ private:
 
         // Slow grip/tension drift, so consecutive holds are correlated instead of being
         // independent draws around a fixed mean.
-        hold_trend_ = Variance::trend(hold_trend_, profile_.hold_drift_ms,
-                                      profile_.hold_drift_tension);
-        const double adjusted_mean = profile_.hold_ms_mean * speed_factor + hold_trend_;
+        hold_trend_ = Variance::trend(hold_trend_, p.hold_drift_ms, p.hold_drift_tension);
+        const double adjusted_mean = p.hold_ms_mean * speed_factor + hold_trend_;
 
-        double hold = Variance::gaussian(adjusted_mean, profile_.hold_ms_stddev);
+        double hold = Variance::gaussian(adjusted_mean, p.hold_ms_stddev);
 
-        if (Variance::chance(profile_.hold_ms_heavy_chance))
-            hold += Variance::range(profile_.hold_ms_heavy_min, profile_.hold_ms_heavy_max);
+        if (Variance::chance(p.hold_ms_heavy_chance))
+            hold += Variance::range(p.hold_ms_heavy_min, p.hold_ms_heavy_max);
 
-        hold = std::max(profile_.hold_ms_min, std::min(profile_.hold_ms_max, hold));
+        hold = std::max(p.hold_ms_min, std::min(p.hold_ms_max, hold));
 
         int64_t hold_ns = static_cast<int64_t>(hold * 1'000'000);
         int64_t max_hold = static_cast<int64_t>(interval_ns * 0.85);

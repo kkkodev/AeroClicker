@@ -26,16 +26,20 @@ struct ClickerProfile {
     double stutter_min = 3.0;
     double stutter_max = 6.0;
 
-    double hold_ms_mean = 32.0;
-    double hold_ms_stddev = 5.0;
-    double hold_ms_min = 15.0;
-    double hold_ms_max = 60.0;
+    // A mouse button is usually held longer than the bare minimum, and a hand's grip is less
+    // consistent than a fixed ±5 ms; 29 ms / σ 6.7 read as too crisp at 14 CPS.
+    double hold_ms_mean = 40.0;
+    double hold_ms_stddev = 8.0;
+    double hold_ms_min = 20.0;
+    double hold_ms_max = 65.0;
 
     double hold_ms_heavy_chance = 0.02;
     double hold_ms_heavy_min = 12.0;
     double hold_ms_heavy_max = 30.0;
 
-    double rhythm_volatility = 0.7;
+    // Slow drift on top of the per-click draw: the rate wanders over a session instead of
+    // hovering tightly around one mean, which is the strongest timing tell of a simple script.
+    double rhythm_volatility = 1.0;
     double rhythm_tension = 0.05;
 
     double start_delay_ms = 0.0;
@@ -43,16 +47,16 @@ struct ClickerProfile {
     // A doublet adds a click instead of stealing rate (the next press is re-anchored from the
     // second click), so a low chance raises the effective CPS slightly rather than weakening it.
     double double_click_chance = 0.01;
-    double double_click_delay_min = 20.0;
-    double double_click_delay_max = 55.0;
+    double double_click_delay_min = 25.0;
+    double double_click_delay_max = 70.0;
 
-    // Rare and short by default: roughly half a second of rest every minute or so, not a
-    // pause that reads as "the clicker stopped".
+    // Long enough to read as a hand reset (reposition, shake out the wrist), short enough not
+    // to look like the clicker turned itself off. A full second was too long for that.
     bool breaks_enabled = true;
-    double break_interval_min = 40.0;
-    double break_interval_max = 90.0;
-    double break_duration_min = 0.15;
-    double break_duration_max = 0.4;
+    double break_interval_min = 30.0;
+    double break_interval_max = 75.0;
+    double break_duration_min = 0.25;
+    double break_duration_max = 0.6;
 
     int mouse_button = BTN_LEFT;
     DistributionType distribution = DistributionType::GAUSSIAN;
@@ -79,33 +83,33 @@ inline const ClickerPreset LEFT_PRESETS[] = {
         9.0, 0.8, 7.0, 11.0, 0.5,
         0.02, 0.5, 1.5,
         0.02, 2.0, 4.0,
-        45.0, 8.0, 25.0, 85.0,
+        45.0, 9.0, 22.0, 88.0,
         0.01, 10.0, 25.0,
-        0.3, 0.03, 0.0, 0.01, 20.0, 55.0, true, 50.0, 120.0, 0.15, 0.4, BTN_LEFT
+        0.6, 0.03, 0.0, 0.01, 25.0, 70.0, true, 40.0, 95.0, 0.25, 0.6, BTN_LEFT
     }},
     {"Jitter (12-16 CPS)", {
         14.0, 1.8, 10.0, 18.0, 1.0,
         0.06, 1.5, 4.0,
         0.05, 3.0, 6.0,
-        32.0, 5.0, 15.0, 60.0,
+        40.0, 8.0, 20.0, 65.0,
         0.02, 12.0, 30.0,
-        0.7, 0.05, 0.0, 0.01, 20.0, 55.0, true, 40.0, 90.0, 0.15, 0.4, BTN_LEFT
+        1.0, 0.05, 0.0, 0.01, 25.0, 70.0, true, 30.0, 75.0, 0.25, 0.6, BTN_LEFT
     }},
     {"Butterfly (16-22 CPS)", {
         19.0, 2.2, 14.0, 24.0, 1.2,
         0.08, 2.0, 5.0,
         0.04, 5.0, 8.0,
-        22.0, 4.0, 10.0, 45.0,
+        26.0, 6.0, 12.0, 50.0,
         0.02, 8.0, 20.0,
-        1.0, 0.06, 0.0, 0.03, 15.0, 45.0, true, 30.0, 70.0, 0.15, 0.35, BTN_LEFT
+        1.2, 0.06, 0.0, 0.03, 20.0, 55.0, true, 30.0, 70.0, 0.25, 0.6, BTN_LEFT
     }},
     {"Drag Click (25+ CPS)", {
         28.0, 3.0, 22.0, 35.0, 1.5,
         0.10, 3.0, 6.0,
         0.03, 4.0, 7.0,
-        15.0, 3.0, 8.0, 30.0,
+        17.0, 4.0, 9.0, 33.0,
         0.01, 5.0, 15.0,
-        1.2, 0.08, 0.0, 0.05, 12.0, 35.0, true, 25.0, 60.0, 0.12, 0.3, BTN_LEFT
+        1.4, 0.08, 0.0, 0.05, 16.0, 45.0, true, 25.0, 60.0, 0.2, 0.5, BTN_LEFT
     }},
 };
 
@@ -114,33 +118,33 @@ inline const ClickerPreset RIGHT_PRESETS[] = {
         9.0, 0.8, 7.0, 11.0, 0.5,
         0.02, 0.5, 1.5,
         0.02, 2.0, 4.0,
-        45.0, 8.0, 25.0, 85.0,
+        45.0, 9.0, 22.0, 88.0,
         0.01, 10.0, 25.0,
-        0.3, 0.03, 0.0, 0.01, 20.0, 55.0, true, 50.0, 120.0, 0.15, 0.4, BTN_RIGHT
+        0.6, 0.03, 0.0, 0.01, 25.0, 70.0, true, 40.0, 95.0, 0.25, 0.6, BTN_RIGHT
     }},
     {"Jitter (12-16 CPS)", {
         14.0, 1.8, 10.0, 18.0, 1.0,
         0.06, 1.5, 4.0,
         0.05, 3.0, 6.0,
-        32.0, 5.0, 15.0, 60.0,
+        40.0, 8.0, 20.0, 65.0,
         0.02, 12.0, 30.0,
-        0.7, 0.05, 0.0, 0.01, 20.0, 55.0, true, 40.0, 90.0, 0.15, 0.4, BTN_RIGHT
+        1.0, 0.05, 0.0, 0.01, 25.0, 70.0, true, 30.0, 75.0, 0.25, 0.6, BTN_RIGHT
     }},
     {"Butterfly (16-22 CPS)", {
         19.0, 2.2, 14.0, 24.0, 1.2,
         0.08, 2.0, 5.0,
         0.04, 5.0, 8.0,
-        22.0, 4.0, 10.0, 45.0,
+        26.0, 6.0, 12.0, 50.0,
         0.02, 8.0, 20.0,
-        1.0, 0.06, 0.0, 0.03, 15.0, 45.0, true, 30.0, 70.0, 0.15, 0.35, BTN_RIGHT
+        1.2, 0.06, 0.0, 0.03, 20.0, 55.0, true, 30.0, 70.0, 0.25, 0.6, BTN_RIGHT
     }},
     {"Drag Click (25+ CPS)", {
         28.0, 3.0, 22.0, 35.0, 1.5,
         0.10, 3.0, 6.0,
         0.03, 4.0, 7.0,
-        15.0, 3.0, 8.0, 30.0,
+        17.0, 4.0, 9.0, 33.0,
         0.01, 5.0, 15.0,
-        1.2, 0.08, 0.0, 0.05, 12.0, 35.0, true, 25.0, 60.0, 0.12, 0.3, BTN_RIGHT
+        1.4, 0.08, 0.0, 0.05, 16.0, 45.0, true, 25.0, 60.0, 0.2, 0.5, BTN_RIGHT
     }},
 };
 
@@ -168,15 +172,17 @@ struct Macro {
 // when the game reports that the local player took damage, Sprint Reset when it reports that
 // the player attacked a living entity. That keeps them quiet outside real combat. The defaults
 // are deliberately human-paced and randomized; a jump reset 15 ms after a hit looks nothing
-// like a person reacting, while ~45 ms with a spread does.
+// like a person reacting, while ~90 ms with a broad spread reads as a fast reaction.
 struct JumpResetProfile {
     // 85 % reads as a person who sometimes misses the reaction rather than a machine that
     // jumps on every hit. Sprint reset keeps its own default.
     double chance = 0.85;
-    double delay_ms_mean = 45.0;
-    double delay_ms_stddev = 15.0;
-    double delay_ms_min = 20.0;
-    double delay_ms_max = 90.0;
+    // A jump within 100 ms of every hit is faster than a visual reaction; 90 ms ± 30 (clamped
+    // to 45-170) is still fast enough to cut knockback but no longer machine-perfect.
+    double delay_ms_mean = 90.0;
+    double delay_ms_stddev = 30.0;
+    double delay_ms_min = 45.0;
+    double delay_ms_max = 170.0;
 
     double hold_ms_mean = 80.0;
     double hold_ms_stddev = 12.0;
@@ -197,9 +203,10 @@ struct JumpResetProfile {
 struct SprintResetProfile {
     SprintResetMode mode = SprintResetMode::W_TAP;
     double chance = 0.90;
-    // A small random delay keeps the tap from landing on the exact tick of every hit.
-    double delay_ms_min = 0.0;
-    double delay_ms_max = 20.0;
+    // A random delay keeps the tap from landing on the exact tick of every hit; 15-65 ms still
+    // breaks sprint before the next swing without looking frame-perfect.
+    double delay_ms_min = 15.0;
+    double delay_ms_max = 65.0;
 
     double duration_ticks_mean = 1.25;
     double duration_ticks_stddev = 0.40;

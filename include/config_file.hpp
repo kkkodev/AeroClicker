@@ -1,5 +1,6 @@
 #pragma once
 #include "clicker_config.hpp"
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -212,6 +213,100 @@ public:
                j.use_slot_filter && j.disable_in_water && j.require_on_ground;
     }
 
+    // Values from disk and from the command line are untrusted. A hand-edited profile could
+    // hold a negative stddev (undefined for std::normal_distribution), a break window that
+    // never ends, or a key code outside the keyboard; clamp everything that reaches the model.
+    static void sanitize(Config& cfg) {
+        auto clamp = [](double v, double lo, double hi) {
+            return v < lo ? lo : (v > hi ? hi : v);
+        };
+        auto clean = [&](ClickerProfile& p) {
+            p.cps_mean = clamp(p.cps_mean, CPS_MEAN_LO, CPS_MEAN_HI);
+            p.cps_stddev = clamp(p.cps_stddev, 0.0, 10.0);
+            p.cps_min = clamp(p.cps_min, 0.5, CPS_MIN_HI);
+            p.cps_max = clamp(p.cps_max, p.cps_min, CPS_MAX_HI);
+            p.cps_minmax_fallout = clamp(p.cps_minmax_fallout, 0.0, 10.0);
+            p.spike_chance = clamp(p.spike_chance, 0.0, 1.0);
+            p.spike_min = clamp(p.spike_min, 0.0, 40.0);
+            p.spike_max = clamp(p.spike_max, p.spike_min, 40.0);
+            p.stutter_chance = clamp(p.stutter_chance, 0.0, 1.0);
+            p.stutter_min = clamp(p.stutter_min, 0.0, 40.0);
+            p.stutter_max = clamp(p.stutter_max, p.stutter_min, 40.0);
+            p.hold_ms_mean = clamp(p.hold_ms_mean, 1.0, 400.0);
+            p.hold_ms_stddev = clamp(p.hold_ms_stddev, 0.0, 100.0);
+            p.hold_ms_min = clamp(p.hold_ms_min, 0.5, 400.0);
+            p.hold_ms_max = clamp(p.hold_ms_max, p.hold_ms_min, 400.0);
+            p.hold_ms_heavy_chance = clamp(p.hold_ms_heavy_chance, 0.0, 1.0);
+            p.hold_ms_heavy_min = clamp(p.hold_ms_heavy_min, 0.0, 400.0);
+            p.hold_ms_heavy_max = clamp(p.hold_ms_heavy_max, p.hold_ms_heavy_min, 400.0);
+            p.rhythm_volatility = clamp(p.rhythm_volatility, 0.0, 10.0);
+            p.rhythm_tension = clamp(p.rhythm_tension, 0.0, 1.0);
+            p.start_delay_ms = clamp(p.start_delay_ms, 0.0, 10000.0);
+            p.double_click_chance = clamp(p.double_click_chance, 0.0, 1.0);
+            p.double_click_delay_min = clamp(p.double_click_delay_min, 0.0, 1000.0);
+            p.double_click_delay_max = clamp(p.double_click_delay_max, p.double_click_delay_min, 1000.0);
+            p.break_interval_min = clamp(p.break_interval_min, 1.0, 3600.0);
+            p.break_interval_max = clamp(p.break_interval_max, p.break_interval_min, 3600.0);
+            p.break_duration_min = clamp(p.break_duration_min, 0.0, 60.0);
+            p.break_duration_max = clamp(p.break_duration_max, p.break_duration_min, 60.0);
+            p.hold_drift_ms = clamp(p.hold_drift_ms, 0.0, 50.0);
+            p.hold_drift_tension = clamp(p.hold_drift_tension, 0.0, 1.0);
+        };
+        clean(cfg.left);
+        clean(cfg.right);
+
+        auto key = [](int& k, int fallback) {
+            if (k < 0 || k > KEY_MAX) k = fallback;
+        };
+        key(cfg.key_left, KEY_F6);
+        key(cfg.key_right, KEY_F7);
+        key(cfg.key_jump_reset, KEY_F9);
+        key(cfg.key_sprint_reset, KEY_F10);
+
+        JumpResetProfile& j = cfg.jump_reset;
+        j.chance = clamp(j.chance, 0.0, 1.0);
+        j.delay_ms_mean = clamp(j.delay_ms_mean, 0.0, 5000.0);
+        j.delay_ms_stddev = clamp(j.delay_ms_stddev, 0.0, 5000.0);
+        j.delay_ms_min = clamp(j.delay_ms_min, 0.0, 5000.0);
+        j.delay_ms_max = clamp(j.delay_ms_max, j.delay_ms_min, 5000.0);
+        j.hold_ms_mean = clamp(j.hold_ms_mean, 0.0, 5000.0);
+        j.hold_ms_stddev = clamp(j.hold_ms_stddev, 0.0, 5000.0);
+        j.hold_ms_min = clamp(j.hold_ms_min, 0.0, 5000.0);
+        j.hold_ms_max = clamp(j.hold_ms_max, j.hold_ms_min, 5000.0);
+        j.cooldown_ms = clamp(j.cooldown_ms, 0.0, 60000.0);
+
+        SprintResetProfile& s = cfg.sprint_reset;
+        s.chance = clamp(s.chance, 0.0, 1.0);
+        s.delay_ms_min = clamp(s.delay_ms_min, 0.0, 5000.0);
+        s.delay_ms_max = clamp(s.delay_ms_max, s.delay_ms_min, 5000.0);
+        s.duration_ticks_mean = clamp(s.duration_ticks_mean, 1.0, 10.0);
+        s.duration_ticks_stddev = clamp(s.duration_ticks_stddev, 0.0, 10.0);
+        s.duration_ticks_min = clamp(s.duration_ticks_min, 1.0, 10.0);
+        s.duration_ticks_max = clamp(s.duration_ticks_max, s.duration_ticks_min, 10.0);
+        s.cooldown_ms = clamp(s.cooldown_ms, 0.0, 60000.0);
+
+        if (cfg.left_gate < 0) cfg.left_gate = 0;
+        if (cfg.left_gate > 3) cfg.left_gate = 3;
+        if (cfg.accent_preset < 0 || cfg.accent_preset > 6) cfg.accent_preset = 0;
+        cfg.accent_r = static_cast<float>(clamp(cfg.accent_r, 0.0, 1.0));
+        cfg.accent_g = static_cast<float>(clamp(cfg.accent_g, 0.0, 1.0));
+        cfg.accent_b = static_cast<float>(clamp(cfg.accent_b, 0.0, 1.0));
+
+        for (Macro& m : cfg.macros) {
+            key(m.key_bind, 0);   // 0 means unbound
+            m.step_count = std::max(0, std::min(m.step_count, MAX_MACRO_STEPS));
+            for (int i = 0; i < m.step_count; i++) {
+                MacroStep& st = m.steps[i];
+                if (static_cast<int>(st.action) < 0 || static_cast<int>(st.action) > 3)
+                    st.action = MacroAction::LEFT_CLICK;
+                st.count = std::max(0, std::min(st.count, 1000));
+                st.delay_ms = clamp(st.delay_ms, 0.0, 600000.0);
+                if (st.slot < 0) st.slot = 0;
+                if (st.slot > 8) st.slot = 8;
+            }
+        }
+    }
+
     static bool load(Config& cfg, const std::string& filename = "config") {
         if (!valid_name(filename)) return false;
         std::string p = path() + "/" + filename;
@@ -342,6 +437,7 @@ public:
         if (!combat_v3_seen && is_previous_jump_chance_default(cfg.jump_reset))
             cfg.jump_reset.chance = 0.85;
         fclose(f);
+        sanitize(cfg);
         return true;
     }
 
