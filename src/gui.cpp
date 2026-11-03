@@ -379,10 +379,10 @@ static void draw_side_tab(ClickerProfile& p, ActivationMode mode) {
 
     begin_panel("Humanization", -1.0f, -1, OxIcon::Person);
     row_slider("Spike Chance", &p.spike_chance, 0.0, 0.2, "%.3f");
-    if (p.spike_chance > 0) { row_slider("Spike Min", &p.spike_min, 0.0, 5.0, "%.1f"); row_slider("Spike Max", &p.spike_max, 0.0, 8.0, "%.1f"); }
+    if (p.spike_chance > 0) { row_slider("Spike Min (CPS)", &p.spike_min, 0.0, 5.0, "%.1f"); row_slider("Spike Max (CPS)", &p.spike_max, 0.0, 8.0, "%.1f"); }
     row_slider("Stutter Chance", &p.stutter_chance, 0.0, 0.2, "%.3f");
-    if (p.stutter_chance > 0) { row_slider("Stutter Min", &p.stutter_min, 0.0, 8.0, "%.1f"); row_slider("Stutter Max", &p.stutter_max, 0.0, 10.0, "%.1f"); }
-    row_slider("Rhythm Volatility", &p.rhythm_volatility, 0.0, 2.0, "%.2f");
+    if (p.stutter_chance > 0) { row_slider("Stutter Min (CPS)", &p.stutter_min, 0.0, 8.0, "%.1f"); row_slider("Stutter Max (CPS)", &p.stutter_max, 0.0, 10.0, "%.1f"); }
+    row_slider("Rhythm Vol. (CPS)", &p.rhythm_volatility, 0.0, 2.0, "%.2f");
     row_slider("Rhythm Tension", &p.rhythm_tension, 0.0, 0.2, "%.3f");
     row_slider("CPS Fallout", &p.cps_minmax_fallout, 0.0, 3.0, "%.2f");
     end_panel();
@@ -393,7 +393,7 @@ static void draw_side_tab(ClickerProfile& p, ActivationMode mode) {
     row_slider("Hold Min (ms)", &p.hold_ms_min, 5.0, 50.0, "%.1f");
     row_slider("Hold Max (ms)", &p.hold_ms_max, 20.0, 150.0, "%.1f");
     row_slider("Heavy Hold Chance", &p.hold_ms_heavy_chance, 0.0, 0.1, "%.3f");
-    if (p.hold_ms_heavy_chance > 0) { row_slider("Heavy Hold Min", &p.hold_ms_heavy_min, 5.0, 50.0, "%.1f"); row_slider("Heavy Hold Max", &p.hold_ms_heavy_max, 10.0, 80.0, "%.1f"); }
+    if (p.hold_ms_heavy_chance > 0) { row_slider("Heavy Min (ms)", &p.hold_ms_heavy_min, 5.0, 50.0, "%.1f"); row_slider("Heavy Max (ms)", &p.hold_ms_heavy_max, 10.0, 80.0, "%.1f"); }
     row_slider("Hold Drift (ms)", &p.hold_drift_ms, 0.0, 10.0, "%.1f");
     if (p.hold_drift_ms > 0) row_slider("Drift Tension", &p.hold_drift_tension, 0.0, 0.2, "%.3f");
     end_panel();
