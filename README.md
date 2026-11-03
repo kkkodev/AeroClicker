@@ -361,9 +361,13 @@ reports the counters (the jar in `tools/mc-bridge` does).
   next hit deals full sprint knockback. It can use **W-Tap** (release W), **S-Tap** (tap S) or
   **Shift-Tap** (tap Shift). Defaults: 90 % chance, a 15–65 ms delay, 1.25 ± 0.40 ticks clamped to
   1–2 ticks, a 12 ms per-tap jitter so the key is not held for exactly 50 or 100 ms every time,
-  and a 400 ms cooldown. W-Tap needs to hide a W you are still holding, so it grabs the keyboard
-  while no key is down and forwards every key through a virtual keyboard; S-Tap and Shift-Tap do
-  not need the grab.
+  and a 400 ms cooldown. W-Tap fires while W is held, like every other mode: the "no key held"
+  rule is only about the one-time moment the app takes the keyboard over. Hiding a W you are
+  holding means forwarding every key through a virtual keyboard, and a key held across that
+  switch would never deliver its release (the game would keep it stuck down), so the grab waits
+  for a moment when nothing is pressed. Until then the panel says **Release every key once so
+  W-Tap can take over the keyboard**; after that it taps while you keep W held. S-Tap and
+  Shift-Tap never need the grab.
 
 Their toggle keys default to F9 and F10 and can be changed in the panels, to a keyboard key or a
 mouse button. Both may share one key, just like the two clickers: one press then toggles both
@@ -461,7 +465,9 @@ keybinds survive the rename.
 - Both need the bridge mod and a live link; they never fire from the app's own clicks. Check that
   Mod → Global says `Bridge mod: live`, and that the mod build is the current jar (the
   counters `hurt`, `hit` and `back` are newer fields). Jump reset also needs the player moving
-  with WASD by default, on the ground and out of water; Sprint reset's W-Tap needs W held.
+  with WASD by default, on the ground and out of water; Sprint reset's W-Tap needs W held and
+  its panel must say **W-Tap is active** (release every key once after enabling it, so the app
+  can take the keyboard over).
 
 **No toggle sounds**
 - Install `paplay` (PipeWire/PulseAudio). Sound is optional and silently skipped when unavailable.

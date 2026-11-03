@@ -711,7 +711,20 @@ static void draw_mod_tab(GuiState& state) {
         row_slider("Cooldown (ms)", &s.cooldown_ms, 0.0, 2000.0, "%.0f");
         row_check("Only while moving forward", &s.forward_only);
         row_check("Respect the slot filter", &s.use_slot_filter);
-        ImGui::TextDisabled("W-Tap grabs the keyboard only while no key is held");
+        // W-Tap has to hide the W you keep holding, and it can only take the keyboard over at a
+        // moment when nothing is down: a key held across the grab would never deliver its
+        // release, so the game would keep it pressed. That is a property of the grab, not of the
+        // trigger - the tap itself runs while W stays held. Say which state applies so the
+        // module never looks like it is silently doing nothing.
+        if (!state.combat) {
+            // The lines above already say the module cannot run.
+        } else if (s.mode != SprintResetMode::W_TAP) {
+            ImGui::TextDisabled("S-Tap and Shift-Tap do not need the keyboard");
+        } else if (state.combat->keyboard.forwarding()) {
+            ImGui::TextDisabled("W-Tap is active: it releases W while you keep it held");
+        } else {
+            ImGui::TextDisabled("Release every key once so W-Tap can take over the keyboard");
+        }
     }
     end_panel();
     ImGui::PopID();
