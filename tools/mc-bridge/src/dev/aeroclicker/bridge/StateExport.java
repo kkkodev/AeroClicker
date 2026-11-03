@@ -31,10 +31,13 @@ import net.fabricmc.api.ClientModInitializer;
  * player's {@code hurtTime} rises from an attack (an entity dealt the damage), and {@code hit}
  * when a new swing starts while the exact crosshair target is a living entity (attacking one).
  * Fall, fire, lava and other environmental damage are deliberately left out: a jump reset on
- * fall damage is both useless and an obvious tell. The app turns those counters into one Jump
- * Reset / Sprint Reset per step instead of firing on its own clicks. {@code back} rises alongside
- * {@code hurt} when the attacker was behind the player, so the app can leave the jump reset alone
- * after a backstab.</p>
+ * fall damage is both useless and an obvious tell. When an older server protocol (1.8 through
+ * ViaFabricPlus, or a server-side Via translation) sends no damage-event packet, the client only
+ * sees the hurt animation (and the health update); an entity in melee reach or one that is still
+ * swinging is used as the attacker, which keeps environmental damage on empty ground out. The
+ * app turns those counters into one Jump Reset / Sprint Reset per step instead of firing on its
+ * own clicks. {@code back} rises alongside {@code hurt} when the attacker was behind the player,
+ * so the app can leave the jump reset alone after a backstab.</p>
  *
  * <p>Everything about the game is reached through reflection on purpose: it keeps this file
  * free of Minecraft internals, so it compiles with nothing but the Fabric loader jar and keeps
@@ -124,6 +127,7 @@ public final class StateExport implements ClientModInitializer {
             // A new world or respawn: hurtTime and the swing object belong to the old player.
             b.lastPlayer = player;
             b.lastHurtTime = -1;
+            b.lastHealth = -1.0f;
             b.lastSwing = null;
             b.lastExactTarget = 0;
         }
@@ -135,7 +139,7 @@ public final class StateExport implements ClientModInitializer {
                             b.swordState(inventory, slot), b.targetState(mc, player),
                             b.bedState(inventory, slot), b.lookState(mc),
                             b.waterState(player), b.groundState(player),
-                            b.hurtState(player), b.hitState(mc, player), b.backCounter);
+                            b.hurtState(mc, player), b.hitState(mc, player), b.backCounter);
     }
 
     /** Logical state without the timestamp: compared to decide when to rewrite the file. */
@@ -225,8 +229,14 @@ public final class StateExport implements ClientModInitializer {
         final Method getLastDamageSource;
         final Method damageEntity;
         final Method damageDirectEntity;
+        // Legacy protocols (1.8 through ViaFabricPlus) have no damage-event packet, so the
+        // client only sees the hurt animation. Health catches a damage tick even when that
+        // animation is swallowed, and isSwinging names the attacker that is still swinging.
+        final Method getHealth;
+        final Method isSwinging;
         Object lastPlayer;
         int lastHurtTime = -1;
+        float lastHealth = -1.0f;
         Object lastSwing;
         int lastExactTarget;
         long hurtCounter;
@@ -318,6 +328,7 @@ public final class StateExport implements ClientModInitializer {
             Field hurtField = null;
             Method inWater = null, onGroundMethod = null, currentSwing = null;
             Method lastDamageSource = null, dmgEntity = null, dmgDirectEntity = null;
+            Method healthMethod = null, swingingMethod = null;
             try {
                 Class<?> livingType2 = Class.forName("net.minecraft.world.entity.LivingEntity");
                 hurtField = livingType2.getField("hurtTime");
@@ -326,6 +337,12 @@ public final class StateExport implements ClientModInitializer {
                 Class<?> damageSource = Class.forName("net.minecraft.world.damagesource.DamageSource");
                 dmgEntity = damageSource.getMethod("getEntity");
                 dmgDirectEntity = damageSource.getMethod("getDirectEntity");
+                // Optional legacy fallback, resolved separately so a rename cannot take the
+                // modern damage-source path down with it.
+                try { healthMethod = livingType2.getMethod("getHealth"); }
+                catch (ReflectiveOperationException | RuntimeException ignored2) { }
+                try { swingingMethod = livingType2.getMethod("isSwinging"); }
+                catch (ReflectiveOperationException | RuntimeException ignored2) { }
             } catch (ReflectiveOperationException | RuntimeException ignored) {
             }
             try {
@@ -341,6 +358,8 @@ public final class StateExport implements ClientModInitializer {
             getLastDamageSource = lastDamageSource;
             damageEntity = dmgEntity;
             damageDirectEntity = dmgDirectEntity;
+            getHealth = healthMethod;
+            isSwinging = swingingMethod;
 
             // Where a block hit landed, so the extended ray can stop at the wall instead of
             // reporting a player behind it.
@@ -509,29 +528,65 @@ public final class StateExport implements ClientModInitializer {
             }
         }
 
-        /** Counter that rises once each time the local player is hurt by an entity. */
-        long hurtState(Object self) {
+        /**
+         * Counter that rises once each time the local player is hurt by an entity.
+         *
+         * <p>Modern versions raise {@code hurtTime} inside {@code handleDamageEvent}, which
+         * also stores the damage source. A 1.8 server reached through ViaFabricPlus has no
+         * damage-event packet: the client only gets the hurt animation. Health is tracked as
+         * well so a damage tick is still seen when the animation is missed, and the entity is
+         * identified from a nearby attacker that is swinging.</p>
+         */
+        long hurtState(Object mc, Object self) {
             if (hurtTime == null) return -1;
             try {
                 int now = hurtTime.getInt(self);
+                float health = healthOf(self);
                 if (lastHurtTime < 0) {
                     // First look at this player: remember the value, do not replay old damage.
                     lastHurtTime = now;
-                } else if (now > lastHurtTime) {
-                    // Fall, fire, lava, drowning and starvation raise hurtTime too, but no
-                    // entity dealt them. Jumping after those is useless and leaks the module,
-                    // so only an entity source bumps the counter.
-                    if (hurtFromEntity(self)) {
-                        hurtCounter++;
-                        if (hurtFromBehind(self)) backCounter++;
+                } else {
+                    boolean hurtRose = now > lastHurtTime;
+                    // Health updates can arrive a poll before or after the animation. A drop
+                    // is only a damage tick when it is more than float noise.
+                    boolean healthFell = health >= 0.0f && lastHealth >= 0.0f &&
+                                         health < lastHealth - 0.01f;
+                    if (hurtRose || healthFell) {
+                        // Fall, fire, lava, drowning and starvation raise hurtTime too, but
+                        // no entity dealt them. Jumping after those is useless and leaks the
+                        // module, so only an entity source bumps the counter. Without a hurt
+                        // animation there is no direction to trust, so require a swing.
+                        if (hurtFromEntity(mc, self, !hurtRose)) {
+                            hurtCounter++;
+                            if (hurtFromBehind(self)) backCounter++;
+                        }
                     }
                     lastHurtTime = now;
-                } else {
-                    lastHurtTime = now;
                 }
+                lastHealth = health;
                 return hurtCounter;
             } catch (ReflectiveOperationException | RuntimeException e) {
                 return -1;
+            }
+        }
+
+        /** Current health, or -1 when this mapping does not expose it. */
+        private float healthOf(Object self) {
+            if (getHealth == null) return -1.0f;
+            try {
+                return (Float) getHealth.invoke(self);
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                return -1.0f;
+            }
+        }
+
+        /** True for a living entity that has not died yet. */
+        private boolean isAlive(Object entity) {
+            if (getHealth == null) return true;
+            try {
+                return (Float) getHealth.invoke(entity) > 0.0f;
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                return true;
             }
         }
 
@@ -542,12 +597,21 @@ public final class StateExport implements ClientModInitializer {
          *
          * <p>An older mapping that cannot provide any of this reports true, preserving the old
          * behavior instead of silently disabling the reset.</p>
+         *
+         * @param strict true for a health-only tick with no hurt animation, so a nearby entity
+         *               is not enough on its own
          */
-        private boolean hurtFromEntity(Object self) {
+        private boolean hurtFromEntity(Object mc, Object self, boolean strict) {
             if (getLastDamageSource == null) return true;
             try {
                 Object source = getLastDamageSource.invoke(self, 5);
-                if (source == null) return false;
+                if (source == null) {
+                    // ViaFabricPlus translating a 1.8 server: hurtTime rose from the hurt
+                    // animation, but there is no damage source to name. A living entity in
+                    // melee reach (or one still swinging) is the attacker; environmental
+                    // damage on an empty stretch of ground stays out.
+                    return hurtFromNearbyEntity(mc, self, strict);
+                }
                 if (damageEntity == null && damageDirectEntity == null) return true;
                 if (damageEntity != null) {
                     Object attacker = damageEntity.invoke(source);
@@ -560,6 +624,51 @@ public final class StateExport implements ClientModInitializer {
                 return false;
             } catch (ReflectiveOperationException | RuntimeException e) {
                 return true;
+            }
+        }
+
+        /**
+         * Legacy fallback for a hurt tick with no damage source. A living entity within melee
+         * reach (plus the knockback that lands in the same tick) is treated as the attacker,
+         * and a swing extends that reach a little further so a hit that pushed the attacker
+         * back still counts. The swing check is required when the hurt animation did not fire,
+         * which keeps starvation ticks quiet; when even the swing field is missing, reach alone
+         * is the best signal left.
+         */
+        private boolean hurtFromNearbyEntity(Object mc, Object self, boolean strict) {
+            if (level == null || getEntitiesOfClass == null || getBoundingBox == null ||
+                inflate == null || livingClass == null ||
+                getX == null || getZ == null) {
+                return false;
+            }
+            try {
+                Object world = level.get(mc);
+                if (world == null) return false;
+                Object search = inflate.invoke(getBoundingBox.invoke(self), 6.0);
+                Predicate<Object> wanted = e -> e != self && livingClass.isInstance(e) &&
+                                                isAlive(e);
+                List<?> entities = (List<?>) getEntitiesOfClass.invoke(
+                    world, livingClass, search, wanted);
+                if (entities == null || entities.isEmpty()) return false;
+
+                double x = (Double) getX.invoke(self);
+                double z = (Double) getZ.invoke(self);
+                boolean close = false;
+                for (Object entity : entities) {
+                    double dx = (Double) getX.invoke(entity) - x;
+                    double dz = (Double) getZ.invoke(entity) - z;
+                    double dist = Math.sqrt(dx * dx + dz * dz);
+                    if (isSwinging != null &&
+                        (Boolean) isSwinging.invoke(entity) && dist <= 6.0) {
+                        return true;
+                    }
+                    if (dist <= 4.5) close = true;
+                }
+                // A hurt animation near an opponent is enough even if the swing packet was
+                // missed; a health-only tick needs a swing unless swings cannot be read.
+                return close && (!strict || isSwinging == null);
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                return false;
             }
         }
 

@@ -490,6 +490,8 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
         gui_state.mc_water_known = mc_live && mc.water >= 0;
         gui_state.mc_ground_known = mc_live && mc.ground >= 0;
         if (mc_live) {
+            gui_state.mc_hurt = mc.hurt;
+            gui_state.mc_hit = mc.hit;
             if (mc.slot >= 0) gui_state.active_slot = mc.slot;
             // Edge-triggered: an explicit press (hotkey or pill) may un-pause while a screen is
             // open, and that choice must survive the next poll. Only a screen opening or

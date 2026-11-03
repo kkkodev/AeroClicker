@@ -349,7 +349,11 @@ so with no game running the modules do nothing. They need a live bridge link, an
 reports the counters (the jar in `tools/mc-bridge` does).
 
 - **Jump reset** presses Space shortly after an entity hurts you. Fall, fire, lava and other
-  environmental damage never trigger it. The defaults are tuned for a fast but human-looking
+  environmental damage never trigger it. When the server speaks an older protocol (Minemen's 1.8
+  practice through ViaFabricPlus or server-side Via translation, for example) the game sends no
+  damage source at all: the bridge then treats a living entity in melee reach, or one still
+  swinging, as the attacker, so environmental damage on empty ground stays out. The defaults are
+  tuned for a fast but human-looking
   reaction: 90 % chance, a 100 ms reaction drawn from a right-skewed 25 ms spread (clamped to
   60–170 ms), a 70 ms hold with an 8 ms spread (50–95 ms), and a 500 ms cooldown. It only fires
   while moving with any WASD key (**Only while moving (WASD)**, on by default); the stricter
@@ -468,7 +472,12 @@ keybinds survive the rename.
   counters `hurt`, `hit` and `back` are newer fields). Jump reset also needs the player moving
   with WASD by default, on the ground and out of water; Sprint reset's W-Tap needs W held and
   its panel must say **W-Tap is active** (release every key once after enabling it, so the app
-  can take the keyboard over).
+  can take the keyboard over). On a 1.8 server (ViaFabricPlus or a server-side Via translation)
+  the new bridge identifies the attacker from a nearby living entity, so update the jar there
+  too; an older jar only counts damage that carries a damage source, which 1.8 does not send.
+  With **Settings → Show the debug readout** on, the `Bridge events` line tells you whether the
+  game is reporting hurt/hit at all: a flat counter while you are being hit means the jar is old
+  or not loaded, while a rising counter with no reset means a module filter is blocking it.
 
 **No toggle sounds**
 - Install `paplay` (PipeWire/PulseAudio). Sound is optional and silently skipped when unavailable.

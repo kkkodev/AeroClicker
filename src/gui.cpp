@@ -847,6 +847,13 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
         } else {
             ImGui::TextDisabled("Jump/Sprint reset: unavailable (no virtual keyboard)");
         }
+        // The bridge counters are the input to both resets. Seeing them rise while a reset
+        // stays quiet points at the filters; seeing them flat points at the game or the mod.
+        if (state.mc_linked)
+            ImGui::Text("Bridge events: %lld hurt, %lld hit",
+                        (long long)state.mc_hurt.load(), (long long)state.mc_hit.load());
+        else
+            ImGui::TextDisabled("Bridge events: no live link");
     }
     end_panel();
 }

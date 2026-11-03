@@ -39,6 +39,10 @@ struct GuiState {
     std::atomic<bool> mc_look_known{false};
     std::atomic<bool> mc_water_known{false};
     std::atomic<bool> mc_ground_known{false};
+    // Cumulative bridge event counters, shown in the debug readout so a combat reset that does
+    // not fire can be traced to the bridge (no hurt events) or to the module's filters.
+    std::atomic<long long> mc_hurt{0};
+    std::atomic<long long> mc_hit{0};
     // Written by the UI thread, read by the input thread: while the pointer is over the app,
     // physical button presses belong to the interface, not to the clicker's MOUSE arming.
     std::atomic<bool> ui_hovered{false};
