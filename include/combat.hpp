@@ -192,6 +192,18 @@ inline double combat_gaussian(double mean, double stddev, double lo, double hi) 
     return combat_clamp(v, std::min(lo, hi), std::max(lo, hi));
 }
 
+// Human reaction times are not symmetric: most land just after the minimum and a few are much
+// slower. A log-normal draw keeps the configured mean and spread but gives that right tail,
+// where a Gaussian would either clip it at the max or put just as many values below the mean.
+inline double combat_reaction(double mean, double stddev, double lo, double hi) {
+    const double a = std::min(lo, hi), b = std::max(lo, hi);
+    if (mean <= 0.0 || stddev <= 0.0) return combat_clamp(mean, a, b);
+    const double sigma2 = std::log(1.0 + (stddev * stddev) / (mean * mean));
+    const double mu = std::log(mean) - sigma2 * 0.5;
+    const double v = std::exp(mu + std::sqrt(sigma2) * Variance::gaussian(0.0, 1.0));
+    return combat_clamp(v, a, b);
+}
+
 // Shared cooldown/chance gate. The cooldown stands in for hit confirmation: Minecraft only lets
 // a player take a hit every 10 ticks, so one decision per window matches how often a real hit
 // lands.
@@ -212,8 +224,8 @@ public:
     }
 };
 
-// Presses Space shortly after the game reports that you took damage, so the jump lines up with
-// the knockback you take in a trade.
+// Presses Space shortly after the game reports that an entity hurt the player, so the jump lines
+// up with the knockback you take in a trade. Environmental damage never reaches this module.
 class JumpReset {
     const JumpResetProfile& p_;
     VirtualKeyboard& kb_;
@@ -253,7 +265,7 @@ public:
         double probability = combat_clamp(p_.chance, 0, 1);
         if (probability <= 0 || (probability < 1 && !Variance::chance(probability))) return;
 
-        double delay = std::round(combat_gaussian(p_.delay_ms_mean, p_.delay_ms_stddev,
+        double delay = std::round(combat_reaction(p_.delay_ms_mean, p_.delay_ms_stddev,
                                                   p_.delay_ms_min, p_.delay_ms_max));
         sched_.schedule(std::max(0.0, delay), [this, delay] { press(delay); });
     }

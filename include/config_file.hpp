@@ -213,6 +213,20 @@ public:
                j.use_slot_filter && j.disable_in_water && j.require_on_ground;
     }
 
+    // Jump Reset after its first human-paced pass: 90 ms mean with a 45 ms floor. The floor was
+    // still inside the range a script would use, and the Gaussian head put values right at it.
+    // A profile whose every value still matches that set is upgraded to the slower, right-
+    // skewed reaction defaults; an edited one keeps the user's tuning.
+    static bool is_previous_jump_human_defaults(const JumpResetProfile& j) {
+        return near(j.chance, 0.85) &&
+               near(j.delay_ms_mean, 90.0) && near(j.delay_ms_stddev, 30.0) &&
+               near(j.delay_ms_min, 45.0) && near(j.delay_ms_max, 170.0) &&
+               near(j.hold_ms_mean, 80.0) && near(j.hold_ms_stddev, 12.0) &&
+               near(j.hold_ms_min, 55.0) && near(j.hold_ms_max, 120.0) &&
+               near(j.cooldown_ms, 500.0) && j.forward_only && !j.allow_in_menu &&
+               j.use_slot_filter && j.disable_in_water && j.require_on_ground;
+    }
+
     // Values from disk and from the command line are untrusted. A hand-edited profile could
     // hold a negative stddev (undefined for std::normal_distribution), a break window that
     // never ends, or a key code outside the keyboard; clamp everything that reaches the model.
@@ -317,6 +331,7 @@ public:
         bool accent_order_seen = false;   // file was written with the current accent list
         bool combat_v2_seen = false;      // file already has the event-driven reset fields
         bool combat_v3_seen = false;      // file was saved after the 85 % chance default
+        bool combat_v4_seen = false;      // file was saved after the reaction-time default
         while (fgets(line, sizeof(line), f)) {
             char key[96];
             double val;
@@ -356,6 +371,7 @@ public:
             else if (!strcmp(key, "left_gate_fireball")) cfg.left_gate_fireball = (int)val != 0;
             else if (!strcmp(key, "audio_enabled")) cfg.audio_enabled = (int)val != 0;
             else if (!strcmp(key, "combat_v3_seen")) combat_v3_seen = true;
+            else if (!strcmp(key, "combat_v4_seen")) combat_v4_seen = true;
             else if (!strcmp(key, "macro_count")) { /* counted implicitly */ }
             else {
                 bool handled = false;
@@ -436,6 +452,17 @@ public:
         // every later load.
         if (!combat_v3_seen && is_previous_jump_chance_default(cfg.jump_reset))
             cfg.jump_reset.chance = 0.85;
+        // The reaction floor and mean moved again, and the delay is now drawn from a right-
+        // skewed distribution. Upgrade an untouched copy of the previous default once.
+        if (!combat_v4_seen && is_previous_jump_human_defaults(cfg.jump_reset)) {
+            JumpResetProfile fresh;
+            fresh.forward_only = cfg.jump_reset.forward_only;
+            fresh.allow_in_menu = cfg.jump_reset.allow_in_menu;
+            fresh.use_slot_filter = cfg.jump_reset.use_slot_filter;
+            fresh.disable_in_water = cfg.jump_reset.disable_in_water;
+            fresh.require_on_ground = cfg.jump_reset.require_on_ground;
+            cfg.jump_reset = fresh;
+        }
         fclose(f);
         sanitize(cfg);
         return true;
@@ -478,6 +505,7 @@ public:
         fprintf(f, "jump_reset_enabled %d\n", cfg.jump_reset_enabled ? 1 : 0);
         fprintf(f, "sprint_reset_enabled %d\n", cfg.sprint_reset_enabled ? 1 : 0);
         fprintf(f, "combat_v3_seen 1\n");
+        fprintf(f, "combat_v4_seen 1\n");
         const JumpResetProfile& j = cfg.jump_reset;
         fprintf(f, "jump_reset.chance %g\n", j.chance);
         fprintf(f, "jump_reset.delay_ms_mean %g\n", j.delay_ms_mean);

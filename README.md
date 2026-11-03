@@ -50,7 +50,7 @@ See [Credits](#credits).
 - **Menu pause** — clicking stops while the game has a screen open (inventory, chat, chests, NPC menus) and resumes when it closes
 - **Left gate** — the **Left clicker** card on the Mod tab: the left clicker can require a mob, player or fireball in the crosshair, a sword in hand, or both, so it does not fire while you mine or build; the default is target-in-crosshair, and the target check reaches about half a block past vanilla reach so an incoming player or fireball becomes a target just before it can hit you
 - **Right gate** — the **Right clicker** card on the Mod tab: the right clicker can require a placeable block in hand, so right-click actions never fire on a sword, a pearl or an empty hand; **Placeable blocks only** and **Only while looking at a block** are on by default, and **Skip beds** is on by default and greys out while the block gate is off
-- **Jump reset / Sprint reset** — optional and off by default: both fire from the bridge mod's game events, not from the app's own clicks. Jump reset presses Space when the player is hurt; sprint reset breaks sprint after a hit on a living entity, with randomized chance, delay and W-/S-/Shift-tap duration. Jump reset stays quiet when the damage came from behind. Each reset has its own toggle key, and binding both to one key toggles both together, exactly like the two clickers
+- **Jump reset / Sprint reset** — optional and off by default: both fire from the bridge mod's game events, not from the app's own clicks. Jump reset presses Space when an entity hurts the player (fall, fire and other environmental damage are ignored); sprint reset breaks sprint after a hit on a living entity, with randomized chance, delay and W-/S-/Shift-tap duration. Jump reset stays quiet when the damage came from behind. Each reset has its own toggle key, and binding both to one key toggles both together, exactly like the two clickers
 - **Macros** — optional, off by default: sequences of left clicks, right clicks, delays and slot switches, with looping and a keybind
 - **Headless mode** — run the clicker with no window
 
@@ -237,12 +237,13 @@ slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch ms> block=<0|1|-1> swor
 `block`, `sword`, `bed`, `look`, `water` and `ground` are `1` for yes, `0` for no and `-1` for
 "this mod build cannot tell". `target` is a bitmask: `1` for a mob or player, `2` for a fireball,
 `3` for both, `0` for neither and `-1` for unknown. They come after `ms` so an older app build still parses the
-prefix, and an older mod build's `player` field is read as `target`. `hurt` goes up when the local
-player takes damage; `hit` goes up when a new swing starts while the exact crosshair target is a
-living entity; `back` goes up with `hurt` when the attacker was behind the player. The app turns
-each counter step into one Jump Reset or Sprint Reset, so an event from before it started is never
-replayed, and it uses `back` to skip a Jump Reset after a backstab. Nothing is sent to the
-server and no input is changed.
+prefix, and an older mod build's `player` field is read as `target`. `hurt` goes up when an
+entity hurts the local player (melee, arrows and fireballs count; fall, fire and other
+environmental damage do not); `hit` goes up when a new swing starts while the exact crosshair
+target is a living entity; `back` goes up with `hurt` when the attacker was behind the player.
+The app turns each counter step into one Jump Reset or Sprint Reset, so an event from before it
+started is never replayed, and it uses `back` to skip a Jump Reset after a backstab. Nothing is
+sent to the server and no input is changed.
 When the file stops updating (the game closed or crashed), the app treats the game as gone after
 2.5 seconds: slot activation stops and any clicker it switched on is switched off.
 
@@ -342,17 +343,18 @@ needs a bridge build that reports `look`; an older jar leaves that half inert.
 ### Combat resets
 
 The Mod tab has two optional panels, both off by default. They are event-driven: the bridge mod
-reports when the local player is hurt and when a new swing starts on a living entity, and the app
-turns each event into at most one action. The app's own clicks are not used as a trigger, so with
-no game running the modules do nothing. They need a live bridge link, and a mod build that reports
-the counters (the jar in `tools/mc-bridge` does).
+reports when an entity hurts the local player and when a new swing starts on a living entity, and
+the app turns each event into at most one action. The app's own clicks are not used as a trigger,
+so with no game running the modules do nothing. They need a live bridge link, and a mod build that
+reports the counters (the jar in `tools/mc-bridge` does).
 
-- **Jump reset** presses Space shortly after the game reports damage. The defaults are
-  human-paced rather than instant: 85 % chance, a 90 ms delay with 30 ms spread (clamped to
-  45–170 ms), an 80 ms hold with 12 ms spread (55–120 ms), and a 500 ms cooldown. It only fires
-  while moving forward, respects the slot filter, stays quiet while a game screen is open, and is
-  off in water (**Stop in water**, on by default, the same rule Vape uses) and in mid-air
-  (**Only on the ground**, on by default).
+- **Jump reset** presses Space shortly after an entity hurts you. Fall, fire, lava and other
+  environmental damage never trigger it. The defaults are human-paced rather than instant: 85 %
+  chance, a 110 ms reaction drawn from a right-skewed 32 ms spread (clamped to 65–200 ms), a
+  75 ms hold with a 10 ms spread (55–105 ms), and a 600 ms cooldown. It only fires while moving
+  forward, respects the slot filter, stays quiet while a game screen is open, and is off in water
+  (**Do not jump while in water**, on by default, the same rule Vape uses) and in mid-air
+  (**Only jump while on the ground**, on by default).
 - **Sprint reset** briefly breaks sprint after the game reports a hit on a mob or player so the
   next hit deals full sprint knockback. It can use **W-Tap** (release W), **S-Tap** (tap S) or
   **Shift-Tap** (tap Shift). Defaults: 90 % chance, a 15–65 ms delay, 1.25 ± 0.40 ticks clamped to
@@ -387,11 +389,12 @@ the gates to make the clicker behave the way you want; do not treat them as a wa
 server's rules.
 
 The combat resets are randomized (chance, delay, hold and tick count), and firing from real game
-events makes them far less mechanical than pressing Space on every click. They are still not
-undetectable: a server sees the resulting movement and attack timing, and can compare it against
-what a human can react to. A 90 ms jump reaction is already faster than most people react; a 20 ms one would be impossible. Choose
-values you would plausibly produce yourself, and accept that using any automation can still be
-against a server's rules.
+events makes them far less mechanical than pressing Space on every click. The jump delay is
+right-skewed like a real reaction: most presses land just after the minimum and a few are slower.
+They are still not undetectable: a server sees the resulting movement and attack timing, and can
+compare it against what a human can react to. A 110 ms jump reaction is already faster than most
+people react; a 20 ms one would be impossible. Choose values you would plausibly produce
+yourself, and accept that using any automation can still be against a server's rules.
 
 ---
 

@@ -281,21 +281,17 @@ static void draw_combat_card(GuiState& state, bool jump_reset, float card_w) {
     if (click_indicator("Enabled", on)) toggle_combat_pill(state, jump_reset);
     ImGui::EndDisabled();
 
-    if (jump_reset)
-        ImGui::TextDisabled("Presses Space shortly after you take damage");
-    else
-        ImGui::TextDisabled("Breaks sprint after you hit a living entity");
-
-    // Read-only summary of the timings the module will use; the sliders live on the Mod tab.
+    // One compact line instead of a sentence plus a timing summary: the full controls live on
+    // the Mod tab, so the card only needs what the module reacts to and how it is paced.
     if (jump_reset) {
         const JumpResetProfile& j = state.config.jump_reset;
-        ImGui::TextDisabled("%.0f%% chance - %.0f +/- %.0f ms", j.chance * 100.0,
-                            j.delay_ms_mean, j.delay_ms_stddev);
+        ImGui::TextDisabled("Space on hit - %.0f%% - %.0f ms", j.chance * 100.0,
+                            j.delay_ms_mean);
     } else {
         const SprintResetProfile& s = state.config.sprint_reset;
         static const char* const MODES[] = { "W-Tap", "S-Tap", "Shift-Tap" };
         const int mode = (int)s.mode;
-        ImGui::TextDisabled("%s - %.0f%% - %.0f-%.0f ms",
+        ImGui::TextDisabled("%s on hit - %.0f%% - %.0f-%.0f ms",
                             MODES[mode >= 0 && mode < 3 ? mode : 0], s.chance * 100.0,
                             s.delay_ms_min, s.delay_ms_max);
     }
@@ -305,9 +301,8 @@ static void draw_combat_card(GuiState& state, bool jump_reset, float card_w) {
     else if (!state.mc_linked.load())
         ImGui::TextDisabled("Waiting for the bridge mod");
     else
-        ImGui::Text("%u presses this session",
-                    (unsigned)(jump_reset ? state.combat->jump.fire_count()
-                                          : state.combat->sprint.fire_count()));
+        ImGui::Text("%u presses", (unsigned)(jump_reset ? state.combat->jump.fire_count()
+                                                        : state.combat->sprint.fire_count()));
 
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
     stacked_keybind("Toggle key", jump_reset ? state.config.key_jump_reset
@@ -576,9 +571,9 @@ static void draw_mod_tab(GuiState& state) {
     else
         ImGui::TextDisabled("Bridge mod: not detected - install it to use this panel");
 
-    row_check("Pause on menus", &state.config.pause_in_menu);
+    row_check("Pause clicking while a game menu is open", &state.config.pause_in_menu);
     ImGui::TextDisabled("Covers the inventory, chat, chests and NPC menus");
-    row_check("Follow hotbar slots", &state.config.slot_auto_enabled);
+    row_check("Switch clickers with the selected hotbar slot", &state.config.slot_auto_enabled);
     ImGui::TextDisabled("Switches a clicker on while one of its slots is selected");
 
     // The slot grid only means something while following is on. It uses the same muted style
@@ -621,7 +616,7 @@ static void draw_mod_tab(GuiState& state) {
     // A fireball only means something when the gate actually requires a target (values 2 and 3);
     // in the other modes the box is drawn muted instead of pretending it changes anything.
     const bool fireball_used = (gate & 2) != 0;
-    row_check("Click at fireballs", &state.config.left_gate_fireball, !fireball_used);
+    row_check("Treat fireballs in the crosshair as targets", &state.config.left_gate_fireball, !fireball_used);
     if (!fireball_used)
         ImGui::TextDisabled("Only used when the gate requires a target");
     else if (!state.config.left_gate_fireball)
@@ -631,7 +626,7 @@ static void draw_mod_tab(GuiState& state) {
     end_panel();
 
     begin_panel("Right clicker", -1.0f, -1, OxIcon::MouseRight);
-    row_check("Placeable blocks only", &state.config.right_placeable_only);
+    row_check("Only right-click while holding a placeable block", &state.config.right_placeable_only);
     if (live && state.config.right_placeable_only && !state.mc_block_known.load())
         ImGui::TextDisabled("This mod build cannot report the held item");
     else
@@ -639,7 +634,7 @@ static void draw_mod_tab(GuiState& state) {
 
     // Dependent option: without the block gate there is nothing to skip, so the box keeps its
     // checked state but is drawn (and behaves) as disabled instead of switching itself off.
-    row_check("Skip beds", &state.config.right_gate_no_bed, !state.config.right_placeable_only);
+    row_check("Skip beds while one is held", &state.config.right_gate_no_bed, !state.config.right_placeable_only);
     if (!state.config.right_placeable_only)
         ImGui::TextDisabled("Beds are skipped only while the block gate is on");
     else if (live && state.config.right_gate_no_bed && !state.mc_bed_known.load())
@@ -647,7 +642,7 @@ static void draw_mod_tab(GuiState& state) {
     else
         ImGui::TextDisabled("The right clicker stays off while a bed is held");
 
-    row_check("Only while looking at a block", &state.config.right_look_block);
+    row_check("Only right-click while looking at a block", &state.config.right_look_block);
     if (live && state.config.right_look_block && !state.mc_look_known.load())
         ImGui::TextDisabled("This mod build cannot report the crosshair");
     else
@@ -661,28 +656,28 @@ static void draw_mod_tab(GuiState& state) {
     if (!state.combat)
         ImGui::TextDisabled("Unavailable: the virtual keyboard could not be created");
     else if (!live)
-        ImGui::TextDisabled("Needs the bridge mod; fires when the game reports damage");
+        ImGui::TextDisabled("Needs the bridge mod; fires when an entity hurts you");
     else
-        ImGui::TextDisabled("Presses Space shortly after the game reports you were hurt");
-    row_check("Enable Jump Reset", &state.config.jump_reset_enabled);
+        ImGui::TextDisabled("Presses Space after a mob or player damages you");
+    row_check("Enable jump reset", &state.config.jump_reset_enabled);
     keybind_row("Toggle key", state.config.key_jump_reset);
     if (state.config.jump_reset_enabled) {
         JumpResetProfile& j = state.config.jump_reset;
         row_slider("Chance", &j.chance, 0.0, 1.0, "%.2f");
-        row_slider("Delay Mean (ms)", &j.delay_ms_mean, 0.0, 100.0, "%.0f");
-        row_slider("Delay StdDev (ms)", &j.delay_ms_stddev, 0.0, 50.0, "%.0f");
-        row_slider("Delay Min (ms)", &j.delay_ms_min, 0.0, 100.0, "%.0f");
-        row_slider("Delay Max (ms)", &j.delay_ms_max, 0.0, 200.0, "%.0f");
+        row_slider("Delay Mean (ms)", &j.delay_ms_mean, 0.0, 300.0, "%.0f");
+        row_slider("Delay StdDev (ms)", &j.delay_ms_stddev, 0.0, 80.0, "%.0f");
+        row_slider("Delay Min (ms)", &j.delay_ms_min, 0.0, 200.0, "%.0f");
+        row_slider("Delay Max (ms)", &j.delay_ms_max, 0.0, 400.0, "%.0f");
         row_slider("Hold Mean (ms)", &j.hold_ms_mean, 10.0, 200.0, "%.0f");
         row_slider("Hold StdDev (ms)", &j.hold_ms_stddev, 0.0, 50.0, "%.0f");
         row_slider("Hold Min (ms)", &j.hold_ms_min, 10.0, 150.0, "%.0f");
         row_slider("Hold Max (ms)", &j.hold_ms_max, 20.0, 300.0, "%.0f");
         row_slider("Cooldown (ms)", &j.cooldown_ms, 0.0, 2000.0, "%.0f");
         row_check("Only while moving forward", &j.forward_only);
-        row_check("Allow in menus", &j.allow_in_menu);
-        row_check("Respect slot filter", &j.use_slot_filter);
-        row_check("Stop in water", &j.disable_in_water);
-        row_check("Only on the ground", &j.require_on_ground);
+        row_check("Allow while a game menu is open", &j.allow_in_menu);
+        row_check("Respect the slot filter", &j.use_slot_filter);
+        row_check("Do not jump while in water", &j.disable_in_water);
+        row_check("Only jump while on the ground", &j.require_on_ground);
         if (live && !state.mc_water_known.load())
             ImGui::TextDisabled("This mod build cannot report water");
         else if (live && !state.mc_ground_known.load())
@@ -697,7 +692,7 @@ static void draw_mod_tab(GuiState& state) {
         ImGui::TextDisabled("Needs the bridge mod; fires when you hit a living entity");
     else
         ImGui::TextDisabled("Breaks sprint after the game reports a hit on a living entity");
-    row_check("Enable Sprint Reset", &state.config.sprint_reset_enabled);
+    row_check("Enable sprint reset", &state.config.sprint_reset_enabled);
     keybind_row("Toggle key", state.config.key_sprint_reset);
     if (state.config.sprint_reset_enabled) {
         SprintResetProfile& s = state.config.sprint_reset;
@@ -713,7 +708,7 @@ static void draw_mod_tab(GuiState& state) {
         row_slider("Ticks Max", &s.duration_ticks_max, 1.0, 3.0, "%.0f");
         row_slider("Cooldown (ms)", &s.cooldown_ms, 0.0, 2000.0, "%.0f");
         row_check("Only while moving forward", &s.forward_only);
-        row_check("Respect slot filter", &s.use_slot_filter);
+        row_check("Respect the slot filter", &s.use_slot_filter);
         ImGui::TextDisabled("W-Tap grabs the keyboard only while no key is held");
     }
     end_panel();
@@ -793,7 +788,7 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
     end_panel();
 
     begin_panel("Debug", -1.0f, -1, OxIcon::Terminal);
-    row_check("Show Debug Info", &state.show_debug);
+    row_check("Show the debug readout", &state.show_debug);
     if (state.show_debug) {
         ImGuiIO& io = ImGui::GetIO();
         // The raw per-frame figure changes every frame, which is impossible to read. Show a
@@ -805,9 +800,9 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
         fps_acc += io.DeltaTime;
         if (fps_acc >= 0.5f || fps_shown <= 0.0f) { fps_shown = fps_ema; fps_acc = 0.0f; }
         ImGui::Text("FPS: %.1f (%.2f ms)", fps_shown, 1000.0f / fps_shown);
-        ImGui::Text("Menu paused: %s", state.in_menu ? "Yes" : "No");
-        ImGui::Text("Left armed: %s", state.left_armed ? "Yes" : "No");
-        ImGui::Text("Right armed: %s", state.right_armed ? "Yes" : "No");
+        ImGui::Text("Menu paused: %s", state.in_menu ? "On" : "Off");
+        ImGui::Text("Left armed: %s", state.left_armed ? "On" : "Off");
+        ImGui::Text("Right armed: %s", state.right_armed ? "On" : "Off");
         // The resets are modules of their own; without this line their live state was only
         // visible in the sections above, not in the debug readout.
         if (state.combat) {

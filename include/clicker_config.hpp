@@ -177,19 +177,20 @@ struct JumpResetProfile {
     // 85 % reads as a person who sometimes misses the reaction rather than a machine that
     // jumps on every hit. Sprint reset keeps its own default.
     double chance = 0.85;
-    // A jump within 100 ms of every hit is faster than a visual reaction; 90 ms ± 30 (clamped
-    // to 45-170) is still fast enough to cut knockback but no longer machine-perfect.
-    double delay_ms_mean = 90.0;
-    double delay_ms_stddev = 30.0;
-    double delay_ms_min = 45.0;
-    double delay_ms_max = 170.0;
+    // A trained player reacts to a hit in roughly 100-150 ms; anything under ~60 ms is not a
+    // reaction at all. 110 ms with a right-skewed 32 ms spread (clamped to 65-200) is fast
+    // enough to cut knockback while still landing in the range a person can produce.
+    double delay_ms_mean = 110.0;
+    double delay_ms_stddev = 32.0;
+    double delay_ms_min = 65.0;
+    double delay_ms_max = 200.0;
 
-    double hold_ms_mean = 80.0;
-    double hold_ms_stddev = 12.0;
+    double hold_ms_mean = 75.0;
+    double hold_ms_stddev = 10.0;
     double hold_ms_min = 55.0;
-    double hold_ms_max = 120.0;
+    double hold_ms_max = 105.0;
 
-    double cooldown_ms = 500.0;
+    double cooldown_ms = 600.0;
     bool forward_only = true;
     bool allow_in_menu = false;
     bool use_slot_filter = true;

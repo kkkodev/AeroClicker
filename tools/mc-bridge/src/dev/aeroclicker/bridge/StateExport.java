@@ -28,11 +28,13 @@ import net.fabricmc.api.ClientModInitializer;
  * cannot tell (the app then leaves the matching gate inert).</p>
  *
  * <p>The counters make the combat resets reliable: {@code hurt} goes up when the local
- * player's {@code hurtTime} rises (taking damage), and {@code hit} when a new swing starts while
- * the exact crosshair target is a living entity (attacking one). The app turns those into one
- * Jump Reset / Sprint Reset per counter step instead of firing on its own clicks. {@code back}
- * rises alongside {@code hurt} when the attacker was behind the player, so the app can leave
- * the resets alone after a backstab.</p>
+ * player's {@code hurtTime} rises from an attack (an entity dealt the damage), and {@code hit}
+ * when a new swing starts while the exact crosshair target is a living entity (attacking one).
+ * Fall, fire, lava and other environmental damage are deliberately left out: a jump reset on
+ * fall damage is both useless and an obvious tell. The app turns those counters into one Jump
+ * Reset / Sprint Reset per step instead of firing on its own clicks. {@code back} rises alongside
+ * {@code hurt} when the attacker was behind the player, so the app can leave the jump reset alone
+ * after a backstab.</p>
  *
  * <p>Everything about the game is reached through reflection on purpose: it keeps this file
  * free of Minecraft internals, so it compiles with nothing but the Fabric loader jar and keeps
@@ -222,6 +224,7 @@ public final class StateExport implements ClientModInitializer {
         // by the server-side hurtServer path, so it is always null out here.
         final Method getLastDamageSource;
         final Method damageEntity;
+        final Method damageDirectEntity;
         Object lastPlayer;
         int lastHurtTime = -1;
         Object lastSwing;
@@ -314,14 +317,15 @@ public final class StateExport implements ClientModInitializer {
             // `getCurrentSwing` changes object identity for every new swing.
             Field hurtField = null;
             Method inWater = null, onGroundMethod = null, currentSwing = null;
-            Method lastDamageSource = null, dmgEntity = null;
+            Method lastDamageSource = null, dmgEntity = null, dmgDirectEntity = null;
             try {
                 Class<?> livingType2 = Class.forName("net.minecraft.world.entity.LivingEntity");
                 hurtField = livingType2.getField("hurtTime");
                 currentSwing = livingType2.getMethod("getCurrentSwing");
                 lastDamageSource = livingType2.getMethod("getLastDamageSource", int.class);
-                dmgEntity = Class.forName("net.minecraft.world.damagesource.DamageSource")
-                                 .getMethod("getEntity");
+                Class<?> damageSource = Class.forName("net.minecraft.world.damagesource.DamageSource");
+                dmgEntity = damageSource.getMethod("getEntity");
+                dmgDirectEntity = damageSource.getMethod("getDirectEntity");
             } catch (ReflectiveOperationException | RuntimeException ignored) {
             }
             try {
@@ -336,6 +340,7 @@ public final class StateExport implements ClientModInitializer {
             getCurrentSwing = currentSwing;
             getLastDamageSource = lastDamageSource;
             damageEntity = dmgEntity;
+            damageDirectEntity = dmgDirectEntity;
 
             // Where a block hit landed, so the extended ray can stop at the wall instead of
             // reporting a player behind it.
@@ -504,7 +509,7 @@ public final class StateExport implements ClientModInitializer {
             }
         }
 
-        /** Counter that rises once each time the local player takes damage. */
+        /** Counter that rises once each time the local player is hurt by an entity. */
         long hurtState(Object self) {
             if (hurtTime == null) return -1;
             try {
@@ -513,8 +518,13 @@ public final class StateExport implements ClientModInitializer {
                     // First look at this player: remember the value, do not replay old damage.
                     lastHurtTime = now;
                 } else if (now > lastHurtTime) {
-                    hurtCounter++;
-                    if (hurtFromBehind(self)) backCounter++;
+                    // Fall, fire, lava, drowning and starvation raise hurtTime too, but no
+                    // entity dealt them. Jumping after those is useless and leaks the module,
+                    // so only an entity source bumps the counter.
+                    if (hurtFromEntity(self)) {
+                        hurtCounter++;
+                        if (hurtFromBehind(self)) backCounter++;
+                    }
                     lastHurtTime = now;
                 } else {
                     lastHurtTime = now;
@@ -522,6 +532,34 @@ public final class StateExport implements ClientModInitializer {
                 return hurtCounter;
             } catch (ReflectiveOperationException | RuntimeException e) {
                 return -1;
+            }
+        }
+
+        /**
+         * True when the damage that just landed came from an entity. Melee attacks have a
+         * living attacker; arrows and fireballs expose the projectile as the direct entity, so
+         * both still count. Environmental damage has neither.
+         *
+         * <p>An older mapping that cannot provide any of this reports true, preserving the old
+         * behavior instead of silently disabling the reset.</p>
+         */
+        private boolean hurtFromEntity(Object self) {
+            if (getLastDamageSource == null) return true;
+            try {
+                Object source = getLastDamageSource.invoke(self, 5);
+                if (source == null) return false;
+                if (damageEntity == null && damageDirectEntity == null) return true;
+                if (damageEntity != null) {
+                    Object attacker = damageEntity.invoke(source);
+                    if (attacker != null && attacker != self) return true;
+                }
+                if (damageDirectEntity != null) {
+                    Object direct = damageDirectEntity.invoke(source);
+                    if (direct != null && direct != self) return true;
+                }
+                return false;
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                return true;
             }
         }
 
