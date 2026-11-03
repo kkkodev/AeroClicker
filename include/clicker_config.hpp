@@ -172,26 +172,30 @@ struct Macro {
 // when the game reports that the local player took damage, Sprint Reset when it reports that
 // the player attacked a living entity. That keeps them quiet outside real combat. The defaults
 // are deliberately human-paced and randomized; a jump reset 15 ms after a hit looks nothing
-// like a person reacting, while ~90 ms with a broad spread reads as a fast reaction.
+// like a person reacting, while ~100 ms with a broad spread reads as a fast reaction.
 struct JumpResetProfile {
-    // 85 % reads as a person who sometimes misses the reaction rather than a machine that
-    // jumps on every hit. Sprint reset keeps its own default.
-    double chance = 0.85;
-    // A trained player reacts to a hit in roughly 100-150 ms; anything under ~60 ms is not a
-    // reaction at all. 110 ms with a right-skewed 32 ms spread (clamped to 65-200) is fast
-    // enough to cut knockback while still landing in the range a person can produce.
-    double delay_ms_mean = 110.0;
-    double delay_ms_stddev = 32.0;
-    double delay_ms_min = 65.0;
-    double delay_ms_max = 200.0;
+    // 90 % keeps the reset reliable in a real fight while the occasional missed reaction is
+    // what a person looks like. Sprint reset keeps its own default.
+    double chance = 0.90;
+    // A trained player reacts to a hit in roughly 90-130 ms, and strafing is as normal as
+    // running straight. 100 ms with a right-skewed 25 ms spread (clamped to 60-170) is fast
+    // enough to cut knockback without sitting on an impossible floor.
+    double delay_ms_mean = 100.0;
+    double delay_ms_stddev = 25.0;
+    double delay_ms_min = 60.0;
+    double delay_ms_max = 170.0;
 
-    double hold_ms_mean = 75.0;
-    double hold_ms_stddev = 10.0;
-    double hold_ms_min = 55.0;
-    double hold_ms_max = 105.0;
+    double hold_ms_mean = 70.0;
+    double hold_ms_stddev = 8.0;
+    double hold_ms_min = 50.0;
+    double hold_ms_max = 95.0;
 
-    double cooldown_ms = 600.0;
-    bool forward_only = true;
+    double cooldown_ms = 500.0;
+    // "Only while moving forward" is the strict W check; this one accepts any WASD direction,
+    // which is what a player strafing or backing up actually does. Both may be on: forward then
+    // wins because it is the narrower filter.
+    bool forward_only = false;
+    bool moving_only = true;
     bool allow_in_menu = false;
     bool use_slot_filter = true;
     // Pressing Space in water makes the player swim upward, which is both useless and a clear
@@ -213,6 +217,10 @@ struct SprintResetProfile {
     double duration_ticks_stddev = 0.40;
     double duration_ticks_min = 1.0;
     double duration_ticks_max = 2.0;
+    // Whole ticks alone make every W-Tap exactly 50 or 100 ms. A little per-tap millisecond
+    // jitter keeps the release off the same sample boundary without shortening the tap below
+    // the tick count the game needs to see.
+    double tap_jitter_ms = 12.0;
 
     double cooldown_ms = 400.0;
     bool forward_only = true;

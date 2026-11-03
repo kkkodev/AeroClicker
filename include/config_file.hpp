@@ -158,6 +158,7 @@ public:
         else if (!strcmp(key, "jump_reset.hold_ms_max")) j.hold_ms_max = val;
         else if (!strcmp(key, "jump_reset.cooldown_ms")) j.cooldown_ms = val;
         else if (!strcmp(key, "jump_reset.forward_only")) j.forward_only = (int)val != 0;
+        else if (!strcmp(key, "jump_reset.moving_only")) j.moving_only = (int)val != 0;
         else if (!strcmp(key, "jump_reset.allow_in_menu")) j.allow_in_menu = (int)val != 0;
         else if (!strcmp(key, "jump_reset.use_slot_filter")) j.use_slot_filter = (int)val != 0;
         else if (!strcmp(key, "jump_reset.disable_in_water")) j.disable_in_water = (int)val != 0;
@@ -170,6 +171,7 @@ public:
         else if (!strcmp(key, "sprint_reset.duration_ticks_stddev")) s.duration_ticks_stddev = val;
         else if (!strcmp(key, "sprint_reset.duration_ticks_min")) s.duration_ticks_min = val;
         else if (!strcmp(key, "sprint_reset.duration_ticks_max")) s.duration_ticks_max = val;
+        else if (!strcmp(key, "sprint_reset.tap_jitter_ms")) s.tap_jitter_ms = val;
         else if (!strcmp(key, "sprint_reset.cooldown_ms")) s.cooldown_ms = val;
         else if (!strcmp(key, "sprint_reset.forward_only")) s.forward_only = (int)val != 0;
         else if (!strcmp(key, "sprint_reset.use_slot_filter")) s.use_slot_filter = (int)val != 0;
@@ -225,6 +227,19 @@ public:
                near(j.hold_ms_min, 55.0) && near(j.hold_ms_max, 120.0) &&
                near(j.cooldown_ms, 500.0) && j.forward_only && !j.allow_in_menu &&
                j.use_slot_filter && j.disable_in_water && j.require_on_ground;
+    }
+
+    // The reaction-time pass that shipped right before the movement-aware/pro tuning. Its
+    // forward-only filter missed every strafe, and its delay still had a script-like floor.
+    static bool is_previous_jump_pro_defaults(const JumpResetProfile& j) {
+        return near(j.chance, 0.85) &&
+               near(j.delay_ms_mean, 110.0) && near(j.delay_ms_stddev, 32.0) &&
+               near(j.delay_ms_min, 65.0) && near(j.delay_ms_max, 200.0) &&
+               near(j.hold_ms_mean, 75.0) && near(j.hold_ms_stddev, 10.0) &&
+               near(j.hold_ms_min, 55.0) && near(j.hold_ms_max, 105.0) &&
+               near(j.cooldown_ms, 600.0) && j.forward_only && j.moving_only &&
+               !j.allow_in_menu && j.use_slot_filter &&
+               j.disable_in_water && j.require_on_ground;
     }
 
     // Values from disk and from the command line are untrusted. A hand-edited profile could
@@ -298,6 +313,7 @@ public:
         s.duration_ticks_min = clamp(s.duration_ticks_min, 1.0, 10.0);
         s.duration_ticks_max = clamp(s.duration_ticks_max, s.duration_ticks_min, 10.0);
         s.cooldown_ms = clamp(s.cooldown_ms, 0.0, 60000.0);
+        s.tap_jitter_ms = clamp(s.tap_jitter_ms, 0.0, 40.0);
 
         if (cfg.left_gate < 0) cfg.left_gate = 0;
         if (cfg.left_gate > 3) cfg.left_gate = 3;
@@ -332,6 +348,7 @@ public:
         bool combat_v2_seen = false;      // file already has the event-driven reset fields
         bool combat_v3_seen = false;      // file was saved after the 85 % chance default
         bool combat_v4_seen = false;      // file was saved after the reaction-time default
+        bool combat_v5_seen = false;      // file was saved after the movement-aware pro default
         while (fgets(line, sizeof(line), f)) {
             char key[96];
             double val;
@@ -372,6 +389,7 @@ public:
             else if (!strcmp(key, "audio_enabled")) cfg.audio_enabled = (int)val != 0;
             else if (!strcmp(key, "combat_v3_seen")) combat_v3_seen = true;
             else if (!strcmp(key, "combat_v4_seen")) combat_v4_seen = true;
+            else if (!strcmp(key, "combat_v5_seen")) combat_v5_seen = true;
             else if (!strcmp(key, "macro_count")) { /* counted implicitly */ }
             else {
                 bool handled = false;
@@ -456,7 +474,16 @@ public:
         // skewed distribution. Upgrade an untouched copy of the previous default once.
         if (!combat_v4_seen && is_previous_jump_human_defaults(cfg.jump_reset)) {
             JumpResetProfile fresh;
-            fresh.forward_only = cfg.jump_reset.forward_only;
+            fresh.allow_in_menu = cfg.jump_reset.allow_in_menu;
+            fresh.use_slot_filter = cfg.jump_reset.use_slot_filter;
+            fresh.disable_in_water = cfg.jump_reset.disable_in_water;
+            fresh.require_on_ground = cfg.jump_reset.require_on_ground;
+            cfg.jump_reset = fresh;
+        }
+        // The movement filter and the faster pro-facing timings. This also catches a config
+        // that was already saved by the reaction-time build above.
+        if (!combat_v5_seen && is_previous_jump_pro_defaults(cfg.jump_reset)) {
+            JumpResetProfile fresh;
             fresh.allow_in_menu = cfg.jump_reset.allow_in_menu;
             fresh.use_slot_filter = cfg.jump_reset.use_slot_filter;
             fresh.disable_in_water = cfg.jump_reset.disable_in_water;
@@ -506,6 +533,7 @@ public:
         fprintf(f, "sprint_reset_enabled %d\n", cfg.sprint_reset_enabled ? 1 : 0);
         fprintf(f, "combat_v3_seen 1\n");
         fprintf(f, "combat_v4_seen 1\n");
+        fprintf(f, "combat_v5_seen 1\n");
         const JumpResetProfile& j = cfg.jump_reset;
         fprintf(f, "jump_reset.chance %g\n", j.chance);
         fprintf(f, "jump_reset.delay_ms_mean %g\n", j.delay_ms_mean);
@@ -518,6 +546,7 @@ public:
         fprintf(f, "jump_reset.hold_ms_max %g\n", j.hold_ms_max);
         fprintf(f, "jump_reset.cooldown_ms %g\n", j.cooldown_ms);
         fprintf(f, "jump_reset.forward_only %d\n", j.forward_only ? 1 : 0);
+        fprintf(f, "jump_reset.moving_only %d\n", j.moving_only ? 1 : 0);
         fprintf(f, "jump_reset.allow_in_menu %d\n", j.allow_in_menu ? 1 : 0);
         fprintf(f, "jump_reset.use_slot_filter %d\n", j.use_slot_filter ? 1 : 0);
         fprintf(f, "jump_reset.disable_in_water %d\n", j.disable_in_water ? 1 : 0);
@@ -531,6 +560,7 @@ public:
         fprintf(f, "sprint_reset.duration_ticks_stddev %g\n", s.duration_ticks_stddev);
         fprintf(f, "sprint_reset.duration_ticks_min %g\n", s.duration_ticks_min);
         fprintf(f, "sprint_reset.duration_ticks_max %g\n", s.duration_ticks_max);
+        fprintf(f, "sprint_reset.tap_jitter_ms %g\n", s.tap_jitter_ms);
         fprintf(f, "sprint_reset.cooldown_ms %g\n", s.cooldown_ms);
         fprintf(f, "sprint_reset.forward_only %d\n", s.forward_only ? 1 : 0);
         fprintf(f, "sprint_reset.use_slot_filter %d\n", s.use_slot_filter ? 1 : 0);

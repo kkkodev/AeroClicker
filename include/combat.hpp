@@ -257,6 +257,8 @@ public:
         // A hit from behind is not a trade, so jumping would only give the attacker a cleaner
         // follow-up. Ignore the event before the cooldown is claimed.
         if (ctx.hit_from_behind) return;
+        if (p_.moving_only && !(kb_.physical(KEY_W) || kb_.physical(KEY_A) ||
+                                kb_.physical(KEY_S) || kb_.physical(KEY_D))) return;
         if (p_.forward_only && !kb_.physical(KEY_W)) return;
         if (p_.disable_in_water && ctx.in_water) return;
         if (p_.require_on_ground && !ctx.on_ground) return;
@@ -351,6 +353,12 @@ private:
         if (!enabled_) return;
 
         double ms = sample_ticks() * TICK_MS;
+        // Whole ticks only give 50 ms or 100 ms taps. Randomising around that by a few
+        // milliseconds keeps the release off the same tick boundary every time, while the floor
+        // guarantees a full tick so the game actually samples the key as released.
+        const double jitter = combat_clamp(p_.tap_jitter_ms, 0.0, 40.0);
+        if (jitter > 0.0)
+            ms = std::max(TICK_MS, ms + Variance::range(-jitter, jitter));
         if (mode == SprintResetMode::W_TAP) {
             if (!kb_.physical(KEY_W)) return;
             if (!kb_.mask(KEY_W)) return;

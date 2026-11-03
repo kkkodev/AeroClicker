@@ -673,7 +673,8 @@ static void draw_mod_tab(GuiState& state) {
         row_slider("Hold Min (ms)", &j.hold_ms_min, 10.0, 150.0, "%.0f");
         row_slider("Hold Max (ms)", &j.hold_ms_max, 20.0, 300.0, "%.0f");
         row_slider("Cooldown (ms)", &j.cooldown_ms, 0.0, 2000.0, "%.0f");
-        row_check("Only while moving forward", &j.forward_only);
+        row_check("Only while moving (WASD)", &j.moving_only);
+        row_check("Only while moving forward (W)", &j.forward_only);
         row_check("Allow while a game menu is open", &j.allow_in_menu);
         row_check("Respect the slot filter", &j.use_slot_filter);
         row_check("Do not jump while in water", &j.disable_in_water);
@@ -706,6 +707,7 @@ static void draw_mod_tab(GuiState& state) {
         row_slider("Ticks StdDev", &s.duration_ticks_stddev, 0.0, 1.0, "%.2f");
         row_slider("Ticks Min", &s.duration_ticks_min, 1.0, 3.0, "%.0f");
         row_slider("Ticks Max", &s.duration_ticks_max, 1.0, 3.0, "%.0f");
+        row_slider("Tap Jitter (ms)", &s.tap_jitter_ms, 0.0, 40.0, "%.0f");
         row_slider("Cooldown (ms)", &s.cooldown_ms, 0.0, 2000.0, "%.0f");
         row_check("Only while moving forward", &s.forward_only);
         row_check("Respect the slot filter", &s.use_slot_filter);
@@ -882,7 +884,16 @@ static void draw_analytics_tab(GuiState& state, char* status_msg, float& status_
     }
     ImGui::SameLine();
     if (oxygen_button("Clear Data", ImVec2(120, 0), 0, 0, false, OxIcon::Trash)) {
-        state.left.tracker().clear_history(); state.right.tracker().clear_history();
+        // Clear the live averages and graphs too, not just the CSV history: otherwise the CPS
+        // cards keep their old numbers and the Session block keeps the old duration and peak.
+        state.left.tracker().reset();
+        state.right.tracker().reset();
+        state.left.reset_click_count();
+        state.right.reset_click_count();
+        state.session_start = std::chrono::steady_clock::now();
+        state.active_time_s = 0.0;
+        state.peak_cps_left = 0.0;
+        state.peak_cps_right = 0.0;
         if (state.combat) {
             state.combat->jump.reset_fire_count();
             state.combat->sprint.reset_fire_count();

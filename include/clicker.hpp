@@ -104,6 +104,8 @@ public:
     void set_paused(bool v) { set_pause(PAUSE_POINTER, v); }
     void toggle() { set_enabled(!enabled_.load()); }
     uint32_t click_count() const { return click_count_.load(); }
+    // Analytics "Clear Data" resets the session, so the clicker's own counter goes with it.
+    void reset_click_count() { click_count_ = 0; }
     // The live profile the UI edits. Only hand it to set_profile(); the worker does not read it.
     ClickerProfile& profile() { return profile_; }
     const Tracker& tracker() const { return tracker_; }

@@ -56,7 +56,7 @@ See [Credits](#credits).
 
 **Interface**
 - **Paused readout** — a switched-on clicker that is held back shows `Paused` and the reason, with an amber dot, instead of a misleading green `ON`
-- **Live analytics** — real-time CPS graphs, session averages and peaks, how often each combat reset fired, optional recording and CSV export
+- **Live analytics** — real-time CPS graphs, session averages and peaks, how often each combat reset fired, optional recording and CSV export; **Clear Data** resets the graphs, session stats and reset counts together
 - **Profiles** — save and load complete configurations; the `config` profile loads at startup
 - **Theming** — follows the KDE colour scheme and accent; the accent can also be fixed to Blue, Red, Green, Purple or Orange, or a custom colour
 - **Sound feedback** — a short two-note chime when a module toggles, at most once per key press even if that key toggles several of them, via `paplay`
@@ -349,18 +349,21 @@ so with no game running the modules do nothing. They need a live bridge link, an
 reports the counters (the jar in `tools/mc-bridge` does).
 
 - **Jump reset** presses Space shortly after an entity hurts you. Fall, fire, lava and other
-  environmental damage never trigger it. The defaults are human-paced rather than instant: 85 %
-  chance, a 110 ms reaction drawn from a right-skewed 32 ms spread (clamped to 65–200 ms), a
-  75 ms hold with a 10 ms spread (55–105 ms), and a 600 ms cooldown. It only fires while moving
-  forward, respects the slot filter, stays quiet while a game screen is open, and is off in water
-  (**Do not jump while in water**, on by default, the same rule Vape uses) and in mid-air
-  (**Only jump while on the ground**, on by default).
+  environmental damage never trigger it. The defaults are tuned for a fast but human-looking
+  reaction: 90 % chance, a 100 ms reaction drawn from a right-skewed 25 ms spread (clamped to
+  60–170 ms), a 70 ms hold with an 8 ms spread (50–95 ms), and a 500 ms cooldown. It only fires
+  while moving with any WASD key (**Only while moving (WASD)**, on by default); the stricter
+  **Only while moving forward (W)** option narrows that to W. It respects the slot filter, stays
+  quiet while a game screen is open, and is off in water (**Do not jump while in water**, on by
+  default, the same rule Vape uses) and in mid-air (**Only jump while on the ground**, on by
+  default).
 - **Sprint reset** briefly breaks sprint after the game reports a hit on a mob or player so the
   next hit deals full sprint knockback. It can use **W-Tap** (release W), **S-Tap** (tap S) or
   **Shift-Tap** (tap Shift). Defaults: 90 % chance, a 15–65 ms delay, 1.25 ± 0.40 ticks clamped to
-  1–2 ticks, and a 400 ms cooldown. W-Tap needs to hide a W you are still holding, so it grabs the
-  keyboard while no key is down and forwards every key through a virtual keyboard; S-Tap and
-  Shift-Tap do not need the grab.
+  1–2 ticks, a 12 ms per-tap jitter so the key is not held for exactly 50 or 100 ms every time,
+  and a 400 ms cooldown. W-Tap needs to hide a W you are still holding, so it grabs the keyboard
+  while no key is down and forwards every key through a virtual keyboard; S-Tap and Shift-Tap do
+  not need the grab.
 
 Their toggle keys default to F9 and F10 and can be changed in the panels, to a keyboard key or a
 mouse button. Both may share one key, just like the two clickers: one press then toggles both
@@ -392,9 +395,10 @@ The combat resets are randomized (chance, delay, hold and tick count), and firin
 events makes them far less mechanical than pressing Space on every click. The jump delay is
 right-skewed like a real reaction: most presses land just after the minimum and a few are slower.
 They are still not undetectable: a server sees the resulting movement and attack timing, and can
-compare it against what a human can react to. A 110 ms jump reaction is already faster than most
-people react; a 20 ms one would be impossible. Choose values you would plausibly produce
-yourself, and accept that using any automation can still be against a server's rules.
+compare it against what a human can react to. A 100 ms jump reaction is already fast for a
+person who is anticipating a hit; a 20 ms one would be impossible. Choose values you would
+plausibly produce yourself, and accept that using any automation can still be against a server's
+rules.
 
 ---
 
@@ -456,8 +460,8 @@ keybinds survive the rename.
 **Jump/Sprint reset does nothing**
 - Both need the bridge mod and a live link; they never fire from the app's own clicks. Check that
   Mod → Global says `Bridge mod: live`, and that the mod build is the current jar (the
-  counters `hurt`, `hit` and `back` are newer fields). Jump reset also needs W held by default,
-  the player on the ground and out of water; Sprint reset's W-Tap needs W held.
+  counters `hurt`, `hit` and `back` are newer fields). Jump reset also needs the player moving
+  with WASD by default, on the ground and out of water; Sprint reset's W-Tap needs W held.
 
 **No toggle sounds**
 - Install `paplay` (PipeWire/PulseAudio). Sound is optional and silently skipped when unavailable.
