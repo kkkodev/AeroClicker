@@ -231,7 +231,7 @@ entity, a fireball or a block, whether the player is in water or on the ground, 
 `$XDG_RUNTIME_DIR/aeroclicker-mc.state` as a single line:
 
 ```
-slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch ms> block=<0|1|-1> sword=<0|1|-1> target=<0-3|-1> bed=<0|1|-1> look=<0|1|-1> water=<0|1|-1> ground=<0|1|-1> hurt=<counter> hit=<counter> back=<counter>
+slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch ms> block=<0|1|-1> sword=<0|1|-1> target=<0-3|-1> bed=<0|1|-1> look=<0|1|-1> water=<0|1|-1> ground=<0|1|-1> hurt=<counter> hit=<counter> back=<counter> hground=<0|1|-1> hwater=<0|1|-1>
 ```
 
 `block`, `sword`, `bed`, `look`, `water` and `ground` are `1` for yes, `0` for no and `-1` for
@@ -240,7 +240,10 @@ slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch ms> block=<0|1|-1> swor
 prefix, and an older mod build's `player` field is read as `target`. `hurt` goes up when an
 entity hurts the local player (melee, arrows and fireballs count; fall, fire and other
 environmental damage do not); `hit` goes up when a new swing starts while the exact crosshair
-target is a living entity; `back` goes up with `hurt` when the attacker was behind the player.
+target is a living entity; `back` goes up with `hurt` when the attacker was behind the player. `hground` and `hwater` are
+the posture from the sample *before* the newest `hurt`: the knockback from a hit lifts the player
+off the ground quickly, so the poll that notices the damage would otherwise call every hit
+mid-air and the jump reset would skip it.
 The app turns each counter step into one Jump Reset or Sprint Reset, so an event from before it
 started is never replayed, and it uses `back` to skip a Jump Reset after a backstab. Nothing is
 sent to the server and no input is changed.
@@ -349,10 +352,13 @@ so with no game running the modules do nothing. They need a live bridge link, an
 reports the counters (the jar in `tools/mc-bridge` does).
 
 - **Jump reset** presses Space shortly after an entity hurts you. Fall, fire, lava and other
-  environmental damage never trigger it. When the server speaks an older protocol (Minemen's 1.8
-  practice through ViaFabricPlus or server-side Via translation, for example) the game sends no
-  damage source at all: the bridge then treats a living entity in melee reach, or one still
-  swinging, as the attacker, so environmental damage on empty ground stays out. The defaults are
+  environmental damage never trigger it, and neither does a hit from behind (melee or projectile)
+  or one that lands while you are in water or in mid-air. When the server speaks an older protocol
+  (Hypixel or Minemen's 1.8 through ViaFabricPlus, or server-side Via translation) the game sends
+  no damage source at all, so the bridge infers the attacker from what it can see: an arrow,
+  snowball or egg that disappears right next to you, a living entity under the crosshair, one that
+  is still swinging, or the nearest one within melee reach. Projectiles are judged by the
+  direction they were flying, so an arrow from behind is still a backstab. The defaults are
   tuned for a fast but human-looking
   reaction: 90 % chance, a 100 ms reaction drawn from a right-skewed 25 ms spread (clamped to
   60–170 ms), a 70 ms hold with an 8 ms spread (50–95 ms), and a 500 ms cooldown. It only fires

@@ -25,8 +25,10 @@
 // while the player stands on the ground.
 // `hurt` and `hit` are counters: hurt goes up when the local player takes damage, hit when the
 // local player attacks a living entity, and `back` goes up alongside hurt when the attacker was
-// behind the player. They are last so a build without them still parses as a prefix, and -1
-// means "this mod build cannot tell". Older mod builds call the target field `player`; it is
+// behind the player (for an arrow, snowball or egg: when it came from behind, judged by its
+// flight direction). `seen` counts every damage tick, attributed or not: comparing it with hurt
+// separates a hit that never reached the bridge from one a filter dropped. They are last so a
+// build without them still parses as a prefix, and -1 means "this mod build cannot tell". Older mod builds call the target field `player`; it is
 // read as `target` too.
 // Reading is the whole contract: nothing is sent to the server and no input is touched.
 namespace McLink {
@@ -63,9 +65,13 @@ struct State {
     int look = -1;
     int water = -1;
     int ground = -1;
+    // Posture latched by the bridge for the newest hurt tick (the sample before the damage).
+    int hwater = -1;
+    int hground = -1;
     long long hurt = 0;
     long long hit = 0;
     long long back = 0;
+    long long seen = 0;
 };
 
 // Returns true only while the file is fresh, and fills `out` with that line.
@@ -119,9 +125,12 @@ inline bool poll(State& out) {
     out.look = int_field("look", -1);
     out.water = int_field("water", -1);
     out.ground = int_field("ground", -1);
+    out.hwater = int_field("hwater", -1);
+    out.hground = int_field("hground", -1);
     out.hurt = long_field("hurt");
     out.hit = long_field("hit");
     out.back = long_field("back");
+    out.seen = long_field("seen");
     return true;
 }
 

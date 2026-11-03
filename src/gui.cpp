@@ -661,6 +661,21 @@ static void draw_mod_tab(GuiState& state) {
         ImGui::TextDisabled("Presses Space after a mob or player damages you");
     row_check("Enable jump reset", &state.config.jump_reset_enabled);
     keybind_row("Toggle key", state.config.key_jump_reset);
+    // Why the last event did nothing is otherwise invisible: a filtered hit and a hit that
+    // never arrived look identical.
+    if (state.combat && state.config.jump_reset_enabled) {
+        ImGui::TextDisabled("Last hit: %s", state.combat->jump.outcome_text());
+        // Fired against events, not against raw damage: a hit from behind or fall damage never
+        // gets here, so the ratio stays honest about what the module was asked to do.
+        if (state.combat->jump.event_count() > 0) {
+            ImGui::TextDisabled("Since enabled: %u fired of %lld hits",
+                                state.combat->jump.fire_count(),
+                                state.combat->jump.event_count());
+            char skipped[192];
+            state.combat->jump.skip_summary(skipped, sizeof skipped);
+            if (skipped[0]) ImGui::TextDisabled("Skipped: %s", skipped);
+        }
+    }
     if (state.config.jump_reset_enabled) {
         JumpResetProfile& j = state.config.jump_reset;
         row_slider("Chance", &j.chance, 0.0, 1.0, "%.2f");
@@ -699,6 +714,17 @@ static void draw_mod_tab(GuiState& state) {
         ImGui::TextDisabled("Breaks sprint after the game reports a hit on a living entity");
     row_check("Enable sprint reset", &state.config.sprint_reset_enabled);
     keybind_row("Toggle key", state.config.key_sprint_reset);
+    if (state.combat && state.config.sprint_reset_enabled) {
+        ImGui::TextDisabled("Last hit: %s", state.combat->sprint.outcome_text());
+        if (state.combat->sprint.event_count() > 0) {
+            ImGui::TextDisabled("Since enabled: %u fired of %lld hits",
+                                state.combat->sprint.fire_count(),
+                                state.combat->sprint.event_count());
+            char skipped[192];
+            state.combat->sprint.skip_summary(skipped, sizeof skipped);
+            if (skipped[0]) ImGui::TextDisabled("Skipped: %s", skipped);
+        }
+    }
     if (state.config.sprint_reset_enabled) {
         SprintResetProfile& s = state.config.sprint_reset;
         int sm = static_cast<int>(s.mode);
@@ -735,6 +761,19 @@ static void draw_mod_tab(GuiState& state) {
 }
 
 // ---------------- Settings ----------------
+
+// The built-in entry is not a file: it always lists first, cannot be deleted or overwritten,
+// and loads the shipped defaults, so an empty profile directory still has a way back.
+static const char* kDefaultProfileName = "Default";
+
+static void refresh_profiles(std::vector<std::string>& profiles) {
+    profiles = ConfigFile::list_profiles();
+    for (size_t i = 0; i < profiles.size();) {
+        if (profiles[i] == kDefaultProfileName) profiles.erase(profiles.begin() + i);
+        else i++;
+    }
+    profiles.insert(profiles.begin(), kDefaultProfileName);
+}
 
 static void draw_settings_tab(GuiState& state, std::vector<std::string>& profiles, int& selected_profile,
                               char* profile_name_buf, char* status_msg, float& status_timer) {
@@ -781,9 +820,12 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
             snprintf(status_msg, 128, "Enter a profile name first"); status_timer = 3.0f;
         } else if (name == "config") {
             snprintf(status_msg, 128, "\"config\" is the live settings file"); status_timer = 3.0f;
+        } else if (name == kDefaultProfileName) {
+            snprintf(status_msg, 128, "\"%s\" is the built-in profile", kDefaultProfileName);
+            status_timer = 3.0f;
         } else if (ConfigFile::save(state.config, name)) {
             snprintf(status_msg, 128, "Saved profile: %s", name.c_str()); status_timer = 3.0f;
-            profiles = ConfigFile::list_profiles();
+            refresh_profiles(profiles);
             // Select what was just written so Load and Delete act on it right away.
             for (int i = 0; i < (int)profiles.size(); i++)
                 if (profiles[i] == name) selected_profile = i;
@@ -794,15 +836,25 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
     }
     ImGui::SameLine();
     if (oxygen_button("Load", ImVec2(80, 0), 0, 0, false, OxIcon::Folder) && selected_profile >= 0 && selected_profile < (int)profiles.size()) {
-        if (ConfigFile::load(state.config, profiles[selected_profile])) {
-            snprintf(status_msg, 128, "Loaded: %s", profiles[selected_profile].c_str()); status_timer = 3.0f;
+        const std::string chosen = profiles[selected_profile];
+        if (chosen == kDefaultProfileName) {
+            state.config = Config();
+            snprintf(status_msg, 128, "Loaded the built-in defaults"); status_timer = 3.0f;
+        } else if (ConfigFile::load(state.config, chosen)) {
+            snprintf(status_msg, 128, "Loaded: %s", chosen.c_str()); status_timer = 3.0f;
         }
     }
     ImGui::SameLine();
     if (oxygen_button("Delete", ImVec2(80, 0), 0, 0, false, OxIcon::Trash) && selected_profile >= 0 && selected_profile < (int)profiles.size()) {
-        ConfigFile::remove_profile(profiles[selected_profile]);
-        snprintf(status_msg, 128, "Deleted: %s", profiles[selected_profile].c_str()); status_timer = 3.0f;
-        profiles = ConfigFile::list_profiles(); selected_profile = -1;
+        const std::string chosen = profiles[selected_profile];
+        if (chosen == kDefaultProfileName) {
+            snprintf(status_msg, 128, "\"%s\" is built in and cannot be deleted", kDefaultProfileName);
+            status_timer = 3.0f;
+        } else {
+            ConfigFile::remove_profile(chosen);
+            snprintf(status_msg, 128, "Deleted: %s", chosen.c_str()); status_timer = 3.0f;
+            refresh_profiles(profiles); selected_profile = -1;
+        }
     }
     ImGui::SameLine();
     if (oxygen_button("Reset", ImVec2(80, 0), 0, 0, false, OxIcon::Refresh)) {
@@ -840,8 +892,10 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
         // The resets are modules of their own; without this line their live state was only
         // visible in the sections above, not in the debug readout.
         if (state.combat) {
-            ImGui::Text("Jump reset: %s%s", state.combat->jump.is_enabled() ? "On" : "Off",
-                        state.combat->jump.busy() ? " (firing)" : "");
+            ImGui::Text("Jump reset: %s%s, last hit %s",
+                        state.combat->jump.is_enabled() ? "On" : "Off",
+                        state.combat->jump.busy() ? " (firing)" : "",
+                        state.combat->jump.outcome_text());
             ImGui::Text("Sprint reset: %s%s", state.combat->sprint.is_enabled() ? "On" : "Off",
                         state.combat->sprint.busy() ? " (firing)" : "");
         } else {
@@ -849,16 +903,44 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
         }
         // The bridge counters are the input to both resets. Seeing them rise while a reset
         // stays quiet points at the filters; seeing them flat points at the game or the mod.
+        // A raw tick with no hurt step above it means the bridge saw damage but could not
+        // name the attacker; a flat raw counter means the game never reported the hit.
         if (state.mc_linked)
-            ImGui::Text("Bridge events: %lld hurt, %lld hit",
-                        (long long)state.mc_hurt.load(), (long long)state.mc_hit.load());
+            ImGui::Text("Bridge events: %lld hurt (%lld raw damage ticks), %lld hit",
+                        (long long)state.mc_hurt.load(), (long long)state.mc_seen.load(),
+                        (long long)state.mc_hit.load());
         else
             ImGui::TextDisabled("Bridge events: no live link");
+        // Standing still must read "on the ground": if it does not, the mod cannot see the
+        // player's posture and every hit is being skipped as mid-air.
+        if (state.mc_linked) {
+            const int g = state.mc_ground.load();
+            const int w = state.mc_water.load();
+            ImGui::Text("Posture now: %s | %s",
+                        g == 1 ? "on the ground" : g == 0 ? "airborne" : "ground unknown",
+                        w == 1 ? "in water" : w == 0 ? "dry" : "water unknown");
+        }
     }
     end_panel();
 }
 
 // ---------------- Analytics ----------------
+
+// The same three numbers for either reset: presses, the events they came from, and the reasons
+// the rest did not fire. Read side by side they answer "is it working" without a fight log.
+template <typename Module>
+static void reset_stats_block(const char* name, const Module& m) {
+    char skipped[192];
+    m.skip_summary(skipped, sizeof skipped);
+    ImGui::Text("%s: %s  |  %u fired of %lld events", name, m.is_enabled() ? "On" : "Off",
+                (unsigned)m.fire_count(), m.event_count());
+    // A small indent groups these under the module name; the old leading spaces rendered as a
+    // 28 px gap and pushed the lines further right than the panel's own content.
+    ImGui::Indent(6.0f);
+    ImGui::TextDisabled("Last: %s", m.outcome_text());
+    if (skipped[0]) ImGui::TextDisabled("Skipped: %s", skipped);
+    ImGui::Unindent(6.0f);
+}
 
 static void draw_analytics_tab(GuiState& state, char* status_msg, float& status_timer) {
     ImGui::Spacing();
@@ -894,13 +976,10 @@ static void draw_analytics_tab(GuiState& state, char* status_msg, float& status_
     if (!state.combat) {
         ImGui::TextDisabled("Unavailable: the virtual keyboard could not be created");
     } else {
-        const uint32_t jf = state.combat->jump.fire_count();
-        const uint32_t sf = state.combat->sprint.fire_count();
-        ImGui::Text("Jump reset: %s  |  %u fired",
-                    state.combat->jump.is_enabled() ? "On" : "Off", (unsigned)jf);
-        ImGui::Text("Sprint reset: %s  |  %u fired",
-                    state.combat->sprint.is_enabled() ? "On" : "Off", (unsigned)sf);
-        ImGui::TextDisabled("Counts reset with Clear Data");
+        reset_stats_block("Jump reset", state.combat->jump);
+        ImGui::Spacing();
+        reset_stats_block("Sprint reset", state.combat->sprint);
+        ImGui::TextDisabled("Events are hits handed to the module; both are cleared with Clear Data");
     }
     end_panel();
 
@@ -934,8 +1013,8 @@ static void draw_analytics_tab(GuiState& state, char* status_msg, float& status_
         state.peak_cps_left = 0.0;
         state.peak_cps_right = 0.0;
         if (state.combat) {
-            state.combat->jump.reset_fire_count();
-            state.combat->sprint.reset_fire_count();
+            state.combat->jump.clear_stats();
+            state.combat->sprint.clear_stats();
         }
         snprintf(status_msg, 128, "Analytics data cleared"); status_timer = 3.0f;
     }
@@ -968,7 +1047,16 @@ void gui_run(GuiState& state) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
     glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
-    GLFWwindow* window = glfwCreateWindow(760, 700, "AeroClicker", nullptr, nullptr);
+    // The home page stacks both clicker cards, the slot strip and both reset cards; at 700 px
+    // it scrolled on first launch. 820 shows all of it, capped to the monitor's work area so a
+    // short screen cannot open a window taller than the display.
+    int launch_w = 760, launch_h = 820;
+    if (GLFWmonitor* monitor = glfwGetPrimaryMonitor()) {
+        int mx = 0, my = 0, mw = 0, mh = 0;
+        glfwGetMonitorWorkarea(monitor, &mx, &my, &mw, &mh);
+        if (mh > 0 && launch_h > mh) launch_h = mh;
+    }
+    GLFWwindow* window = glfwCreateWindow(launch_w, launch_h, "AeroClicker", nullptr, nullptr);
     if (GLFWcursor* cur = glfwCreateStandardCursor(GLFW_ARROW_CURSOR))
         glfwSetCursor(window, cur);
     if (!window) { fprintf(stderr, "Failed to create GLFW window\n"); glfwTerminate(); return; }
@@ -1007,7 +1095,8 @@ void gui_run(GuiState& state) {
 
     static char profile_name_buf[64] = "";
     int selected_profile = -1;
-    auto profiles = ConfigFile::list_profiles();
+    std::vector<std::string> profiles;
+    refresh_profiles(profiles);
     char status_msg[128] = "";
     float status_timer = 0;
     int current_tab = 0;   // pin / always_on_top removed entirely

@@ -178,12 +178,13 @@ struct JumpResetProfile {
     // what a person looks like. Sprint reset keeps its own default.
     double chance = 0.90;
     // A trained player reacts to a hit in roughly 90-130 ms, and strafing is as normal as
-    // running straight. 100 ms with a right-skewed 25 ms spread (clamped to 60-170) is fast
-    // enough to cut knockback without sitting on an impossible floor.
-    double delay_ms_mean = 100.0;
-    double delay_ms_stddev = 25.0;
-    double delay_ms_min = 60.0;
-    double delay_ms_max = 170.0;
+    // running straight. The bridge has already spent up to one 50 ms tick reporting the hit
+    // before this delay starts, so 80 ms with a right-skewed 20 ms spread (clamped to 45-140)
+    // lands the jump about two ticks after the damage instead of three.
+    double delay_ms_mean = 80.0;
+    double delay_ms_stddev = 20.0;
+    double delay_ms_min = 45.0;
+    double delay_ms_max = 140.0;
 
     double hold_ms_mean = 70.0;
     double hold_ms_stddev = 8.0;
@@ -222,7 +223,10 @@ struct SprintResetProfile {
     // the tick count the game needs to see.
     double tap_jitter_ms = 12.0;
 
-    double cooldown_ms = 400.0;
+    // Only a tap that already went out is blocked by this, and a real trade can come back
+    // inside 400 ms. 250 ms still sits well above the 2-tick tap itself, so it never eats a
+    // second real hit but still stops a burst of packets from becoming a stutter.
+    double cooldown_ms = 250.0;
     bool forward_only = true;
     bool use_slot_filter = true;
 };

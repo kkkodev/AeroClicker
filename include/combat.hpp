@@ -8,6 +8,7 @@
 #include <cmath>
 #include <condition_variable>
 #include <cstdint>
+#include <cstdio>
 #include <functional>
 #include <mutex>
 #include <thread>
@@ -224,6 +225,101 @@ public:
     }
 };
 
+// Why a reset event did or did not act. A hit a filter dropped and a hit the bridge never
+// delivered look exactly the same without it.
+enum class ResetOutcome : int {
+    none = 0, fired, busy, menu, slot, behind, moving, forward, water, air, chance, cooldown,
+    space_held, key_missing, key_held
+};
+constexpr int kResetOutcomeCount = static_cast<int>(ResetOutcome::key_held) + 1;
+
+inline const char* reset_outcome_label(ResetOutcome o) {
+    switch (o) {
+        case ResetOutcome::fired:       return "fired";
+        case ResetOutcome::busy:        return "busy";
+        case ResetOutcome::menu:        return "menu";
+        case ResetOutcome::slot:        return "slot";
+        case ResetOutcome::behind:      return "behind";
+        case ResetOutcome::moving:      return "not moving";
+        case ResetOutcome::forward:     return "not forward";
+        case ResetOutcome::water:       return "water";
+        case ResetOutcome::air:         return "mid-air";
+        case ResetOutcome::chance:      return "chance";
+        case ResetOutcome::cooldown:    return "cooldown";
+        case ResetOutcome::space_held:  return "space held";
+        case ResetOutcome::key_missing: return "key released";
+        case ResetOutcome::key_held:    return "key held";
+        default:                        return "none";
+    }
+}
+
+inline const char* reset_outcome_text(ResetOutcome o) {
+    switch (o) {
+        case ResetOutcome::fired:       return "fired";
+        case ResetOutcome::busy:        return "still busy from the last action";
+        case ResetOutcome::menu:        return "game menu open";
+        case ResetOutcome::slot:        return "slot filter";
+        case ResetOutcome::behind:      return "hit from behind";
+        case ResetOutcome::moving:      return "not moving";
+        case ResetOutcome::forward:     return "not moving forward";
+        case ResetOutcome::water:       return "in water";
+        case ResetOutcome::air:         return "mid-air";
+        case ResetOutcome::chance:      return "chance roll";
+        case ResetOutcome::cooldown:    return "cooldown";
+        case ResetOutcome::space_held:  return "Space already held";
+        case ResetOutcome::key_missing: return "the key was released first";
+        case ResetOutcome::key_held:    return "the key was already held";
+        default:                        return "no event yet";
+    }
+}
+
+// Fired-of-events tally shared by both resets: every event ends as an action or as a named
+// reason, so the two numbers on a panel always add up.
+class ResetStats {
+    std::atomic<long long> events_{0};
+    std::atomic<int> last_{0};
+    std::atomic<int> skips_[kResetOutcomeCount];
+
+public:
+    ResetStats() {
+        for (auto& s : skips_) s = 0;
+    }
+
+    void begin_event() { events_.fetch_add(1); }
+    void note(ResetOutcome o) {
+        last_ = static_cast<int>(o);
+        if (o != ResetOutcome::fired && o != ResetOutcome::none)
+            skips_[static_cast<int>(o)].fetch_add(1);
+    }
+    void clear() {
+        events_ = 0;
+        last_ = 0;
+        for (auto& s : skips_) s = 0;
+    }
+    long long event_count() const { return events_.load(); }
+    int skip_count(ResetOutcome o) const { return skips_[static_cast<int>(o)].load(); }
+    const char* last_text() const {
+        return reset_outcome_text(static_cast<ResetOutcome>(last_.load()));
+    }
+
+    // "cooldown 9, chance 4": only the reasons that actually cost an action, in enum order.
+    void summary(char* out, size_t n) const {
+        if (n == 0) return;
+        out[0] = '\0';
+        size_t used = 0;
+        for (int i = static_cast<int>(ResetOutcome::busy); i < kResetOutcomeCount; i++) {
+            const int count = skips_[i].load();
+            if (count <= 0) continue;
+            const int wrote = std::snprintf(out + used, n - used, "%s%s %d",
+                                            used ? ", " : "",
+                                            reset_outcome_label(static_cast<ResetOutcome>(i)),
+                                            count);
+            if (wrote < 0 || static_cast<size_t>(wrote) >= n - used) return;
+            used += static_cast<size_t>(wrote);
+        }
+    }
+};
+
 // Presses Space shortly after the game reports that an entity hurt the player, so the jump lines
 // up with the knockback you take in a trade. Environmental damage never reaches this module.
 class JumpReset {
@@ -233,6 +329,7 @@ class JumpReset {
     AttackGate gate_;
     std::atomic<bool> enabled_{false};
     std::atomic<uint32_t> fires_{0};
+    ResetStats stats_;
 
 public:
     JumpReset(const JumpResetProfile& p, VirtualKeyboard& kb) : p_(p), kb_(kb) {}
@@ -240,33 +337,55 @@ public:
     bool is_enabled() const { return enabled_; }
     void set_enabled(bool v) {
         enabled_ = v;
-        if (!v) sched_.cancel();
+        if (v) clear_stats();
+        else sched_.cancel();
     }
     void toggle() { set_enabled(!enabled_.load()); }
     bool busy() { return !sched_.idle(); }
+    long long event_count() const { return stats_.event_count(); }
+    void clear_stats() {
+        stats_.clear();
+        fires_ = 0;
+    }
+    // "cooldown 9, chance 4": only the reasons that actually cost a press.
+    void skip_summary(char* out, size_t n) const { stats_.summary(out, n); }
     // Analytics/Debug: how often the module actually pressed Space.
     uint32_t fire_count() const { return fires_.load(); }
     void reset_fire_count() { fires_ = 0; }
 
+    const char* outcome_text() const { return stats_.last_text(); }
+
     void on_hurt(const CombatContext& ctx) {
-        if (!enabled_ || !sched_.idle()) return;
+        if (!enabled_) return;
+        stats_.begin_event();
+        if (!sched_.idle()) { stats_.note(ResetOutcome::busy); return; }
         // Filters first: an event the module would ignore must not burn its cooldown window,
         // or the next real hit after a menu closes or you start moving would still wait.
-        if (ctx.in_menu && !p_.allow_in_menu) return;
-        if (ctx.slot_blocked && p_.use_slot_filter) return;
+        if (ctx.in_menu && !p_.allow_in_menu) { stats_.note(ResetOutcome::menu); return; }
+        if (ctx.slot_blocked && p_.use_slot_filter) { stats_.note(ResetOutcome::slot); return; }
         // A hit from behind is not a trade, so jumping would only give the attacker a cleaner
         // follow-up. Ignore the event before the cooldown is claimed.
-        if (ctx.hit_from_behind) return;
+        if (ctx.hit_from_behind) { stats_.note(ResetOutcome::behind); return; }
         if (p_.moving_only && !(kb_.physical(KEY_W) || kb_.physical(KEY_A) ||
-                                kb_.physical(KEY_S) || kb_.physical(KEY_D))) return;
-        if (p_.forward_only && !kb_.physical(KEY_W)) return;
-        if (p_.disable_in_water && ctx.in_water) return;
-        if (p_.require_on_ground && !ctx.on_ground) return;
-        if (!gate_.claim(p_.cooldown_ms)) return;
+                                kb_.physical(KEY_S) || kb_.physical(KEY_D))) {
+            stats_.note(ResetOutcome::moving);
+            return;
+        }
+        if (p_.forward_only && !kb_.physical(KEY_W)) {
+            stats_.note(ResetOutcome::forward);
+            return;
+        }
+        if (p_.disable_in_water && ctx.in_water) { stats_.note(ResetOutcome::water); return; }
+        if (p_.require_on_ground && !ctx.on_ground) { stats_.note(ResetOutcome::air); return; }
+        if (!gate_.claim(p_.cooldown_ms)) { stats_.note(ResetOutcome::cooldown); return; }
 
         double probability = combat_clamp(p_.chance, 0, 1);
-        if (probability <= 0 || (probability < 1 && !Variance::chance(probability))) return;
+        if (probability <= 0 || (probability < 1 && !Variance::chance(probability))) {
+            stats_.note(ResetOutcome::chance);
+            return;
+        }
 
+        stats_.note(ResetOutcome::fired);
         double delay = std::round(combat_reaction(p_.delay_ms_mean, p_.delay_ms_stddev,
                                                   p_.delay_ms_min, p_.delay_ms_max));
         sched_.schedule(std::max(0.0, delay), [this, delay] { press(delay); });
@@ -276,7 +395,9 @@ private:
     void press(double delay) {
         (void)delay;
         if (!enabled_) return;
-        if (kb_.physical(KEY_SPACE)) return;
+        // Pressing Space you already hold does nothing, so a decided press that lands here is
+        // still a lost one and has to appear in the tally.
+        if (kb_.physical(KEY_SPACE)) { stats_.note(ResetOutcome::space_held); return; }
 
         double hold = std::round(combat_gaussian(p_.hold_ms_mean, p_.hold_ms_stddev,
                                                  p_.hold_ms_min, p_.hold_ms_max));
@@ -296,6 +417,7 @@ class SprintReset {
     AttackGate gate_;
     std::atomic<bool> enabled_{false};
     std::atomic<uint32_t> fires_{0};
+    ResetStats stats_;
 
 public:
     SprintReset(const SprintResetProfile& p, VirtualKeyboard& kb) : p_(p), kb_(kb) {}
@@ -303,34 +425,53 @@ public:
     bool is_enabled() const { return enabled_; }
     void set_enabled(bool v) {
         enabled_ = v;
-        if (!v) sched_.cancel();
+        if (v) clear_stats();
+        else sched_.cancel();
     }
     void toggle() { set_enabled(!enabled_.load()); }
     bool busy() { return !sched_.idle(); }
     // Analytics/Debug: how often the module actually performed its tap.
     uint32_t fire_count() const { return fires_.load(); }
     void reset_fire_count() { fires_ = 0; }
+    long long event_count() const { return stats_.event_count(); }
+    void clear_stats() {
+        stats_.clear();
+        fires_ = 0;
+    }
+    const char* outcome_text() const { return stats_.last_text(); }
+    void skip_summary(char* out, size_t n) const { stats_.summary(out, n); }
 
     // W-Tap is the only mode that has to hide a key you're physically holding.
     bool needs_keyboard_grab() const { return enabled_ && p_.mode == SprintResetMode::W_TAP; }
 
     void on_hit(const CombatContext& ctx) {
-        if (!enabled_ || !sched_.idle()) return;
+        if (!enabled_) return;
+        stats_.begin_event();
+        if (!sched_.idle()) { stats_.note(ResetOutcome::busy); return; }
         // Filters first: see JumpReset::on_hurt.
-        if (ctx.in_menu) return;
-        if (ctx.slot_blocked && p_.use_slot_filter) return;
+        if (ctx.in_menu) { stats_.note(ResetOutcome::menu); return; }
+        if (ctx.slot_blocked && p_.use_slot_filter) {
+            stats_.note(ResetOutcome::slot);
+            return;
+        }
         bool need_w = p_.forward_only || p_.mode == SprintResetMode::W_TAP;
-        if (need_w && !kb_.physical(KEY_W)) return;
-        if (!gate_.claim(p_.cooldown_ms)) return;
+        if (need_w && !kb_.physical(KEY_W)) { stats_.note(ResetOutcome::forward); return; }
+        if (!gate_.claim(p_.cooldown_ms)) { stats_.note(ResetOutcome::cooldown); return; }
 
         double probability = combat_clamp(p_.chance, 0, 1);
-        if (probability <= 0 || (probability < 1 && !Variance::chance(probability))) return;
+        if (probability <= 0 || (probability < 1 && !Variance::chance(probability))) {
+            stats_.note(ResetOutcome::chance);
+            return;
+        }
 
         double lo = combat_clamp(std::min(p_.delay_ms_min, p_.delay_ms_max), 0, 500);
         double hi = combat_clamp(std::max(p_.delay_ms_min, p_.delay_ms_max), lo, 500);
         double delay = std::round(Variance::range(lo, hi));
         SprintResetMode mode = p_.mode;
-        sched_.schedule(delay, [this, delay, mode] { tap(delay, mode); });
+        if (!sched_.schedule(delay, [this, delay, mode] { tap(delay, mode); }))
+            stats_.note(ResetOutcome::busy);
+        else
+            stats_.note(ResetOutcome::fired);
     }
 
 private:
@@ -360,14 +501,14 @@ private:
         if (jitter > 0.0)
             ms = std::max(TICK_MS, ms + Variance::range(-jitter, jitter));
         if (mode == SprintResetMode::W_TAP) {
-            if (!kb_.physical(KEY_W)) return;
-            if (!kb_.mask(KEY_W)) return;
+            if (!kb_.physical(KEY_W)) { stats_.note(ResetOutcome::key_missing); return; }
+            if (!kb_.mask(KEY_W)) { stats_.note(ResetOutcome::key_missing); return; }
             fires_.fetch_add(1);
             sched_.sleep_ms(ms);
             kb_.unmask(KEY_W);
         } else {
             int key = mode == SprintResetMode::S_TAP ? KEY_S : KEY_LEFTSHIFT;
-            if (kb_.physical(key)) return;
+            if (kb_.physical(key)) { stats_.note(ResetOutcome::key_held); return; }
             kb_.press(key);
             fires_.fetch_add(1);
             sched_.sleep_ms(ms);

@@ -489,9 +489,12 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
         gui_state.mc_look_known = mc_live && mc.look >= 0;
         gui_state.mc_water_known = mc_live && mc.water >= 0;
         gui_state.mc_ground_known = mc_live && mc.ground >= 0;
+        gui_state.mc_water = mc_live ? mc.water : -1;
+        gui_state.mc_ground = mc_live ? mc.ground : -1;
         if (mc_live) {
             gui_state.mc_hurt = mc.hurt;
             gui_state.mc_hit = mc.hit;
+            gui_state.mc_seen = mc.seen;
             if (mc.slot >= 0) gui_state.active_slot = mc.slot;
             // Edge-triggered: an explicit press (hotkey or pill) may un-pause while a screen is
             // open, and that choice must survive the next poll. Only a screen opening or
@@ -531,13 +534,18 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
             const bool backstab = hurt_steps > 0 && back_steps > 0;
             if (combat && (hurt_steps > 0 || hit_steps > 0)) {
                 const int slot = mc.slot;
+                // A hit counts as mid-air only if the player was already off the ground
+                // before the damage: the poll that reports the hurt runs after the knockback
+                // has lifted them, so the posture is the one the bridge latched for that hit.
+                // An older mod build that cannot report either value must not make Jump Reset
+                // permanently inert, so unknown reads as "safe to try" and "not in water".
+                const bool hit_in_water = mc.hwater >= 0 ? mc.hwater == 1 : mc.water == 1;
+                const bool hit_on_ground = mc.hground >= 0 ? mc.hground != 0 : mc.ground != 0;
                 const CombatContext ctx = {
                     menu,
                     config.slot_auto_enabled && (slot < 0 || !config.left_slots[slot]),
-                    mc.water == 1,
-                    // An older mod build that cannot report the ground must not make Jump
-                    // Reset permanently inert, so unknown reads as "safe to try".
-                    mc.ground != 0,
+                    hit_in_water,
+                    hit_on_ground,
                     backstab,
                 };
                 // One event per step; a frame that somehow saw two keeps each reset on its own

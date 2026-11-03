@@ -493,6 +493,11 @@ public:
             fresh.require_on_ground = cfg.jump_reset.require_on_ground;
             cfg.jump_reset = fresh;
         }
+        // The resets never come back enabled: the clickers start switched off after a restart
+        // too, and a build that starts jumping the moment it launches is the surprise this
+        // avoids. The toggle is a session choice, so the old keys are read and thrown away.
+        cfg.jump_reset_enabled = false;
+        cfg.sprint_reset_enabled = false;
         fclose(f);
         sanitize(cfg);
         return true;
@@ -532,8 +537,6 @@ public:
         fprintf(f, "left_gate %d\n", cfg.left_gate);
         fprintf(f, "left_gate_fireball %d\n", cfg.left_gate_fireball ? 1 : 0);
 
-        fprintf(f, "jump_reset_enabled %d\n", cfg.jump_reset_enabled ? 1 : 0);
-        fprintf(f, "sprint_reset_enabled %d\n", cfg.sprint_reset_enabled ? 1 : 0);
         fprintf(f, "combat_v3_seen 1\n");
         fprintf(f, "combat_v4_seen 1\n");
         fprintf(f, "combat_v5_seen 1\n");

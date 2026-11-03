@@ -22,7 +22,7 @@ import net.fabricmc.api.ClientModInitializer;
  * <p>The state goes to {@code $XDG_RUNTIME_DIR/aeroclicker-mc.state} as one line:
  * {@code slot=<0-8 or -1> screen=<0|1> ms=<epoch milliseconds> block=<0|1|-1>
  * sword=<0|1|-1> target=<0|1|-1> bed=<0|1|-1> look=<0|1|-1> water=<0|1|-1>
- * ground=<0|1|-1> hurt=<counter> hit=<counter> back=<counter>}. The app treats a file whose timestamp is a
+ * ground=<0|1|-1> hurt=<counter> hit=<counter> back=<counter> hground=<0|1|-1> hwater=<0|1|-1>}. The app treats a file whose timestamp is a
  * couple of seconds old as absent, so a crashed game cannot leave the clicker stuck. The
  * optional fields are last so an older app build still parses the line, and -1 means this build
  * cannot tell (the app then leaves the matching gate inert).</p>
@@ -33,11 +33,13 @@ import net.fabricmc.api.ClientModInitializer;
  * Fall, fire, lava and other environmental damage are deliberately left out: a jump reset on
  * fall damage is both useless and an obvious tell. When an older server protocol (1.8 through
  * ViaFabricPlus, or a server-side Via translation) sends no damage-event packet, the client only
- * sees the hurt animation (and the health update); an entity in melee reach or one that is still
- * swinging is used as the attacker, which keeps environmental damage on empty ground out. The
- * app turns those counters into one Jump Reset / Sprint Reset per step instead of firing on its
- * own clicks. {@code back} rises alongside {@code hurt} when the attacker was behind the player,
- * so the app can leave the jump reset alone after a backstab.</p>
+ * sees the hurt animation (and the health update), so the attacker is inferred instead: an
+ * arrow, snowball or egg that disappears next to the player, a living entity under the
+ * crosshair, one that is still swinging, or the nearest one within melee reach. The app turns
+ * those counters into one Jump Reset / Sprint Reset per step instead of firing on its own
+ * clicks. {@code back} rises alongside {@code hurt} when the attacker was behind the player, so
+ * the app can leave the jump reset alone after a backstab; the side is worked out the same way
+ * for projectiles, from the direction they were flying in.</p>
  *
  * <p>Everything about the game is reached through reflection on purpose: it keeps this file
  * free of Minecraft internals, so it compiles with nothing but the Fabric loader jar and keeps
@@ -82,7 +84,8 @@ public final class StateExport implements ClientModInitializer {
                              + " bed=" + snap.bed + " look=" + snap.look
                              + " water=" + snap.water + " ground=" + snap.ground
                              + " hurt=" + snap.hurt + " hit=" + snap.hit
-                             + " back=" + snap.back;
+                             + " back=" + snap.back + " seen=" + snap.seen
+                             + " hground=" + snap.hground + " hwater=" + snap.hwater;
                 long now = System.currentTimeMillis();
                 if (!state.equals(last) || now - lastWrite >= HEARTBEAT_MS) {
                     // `ms` goes before the optional fields so an app build without them still
@@ -92,7 +95,8 @@ public final class StateExport implements ClientModInitializer {
                           + " bed=" + snap.bed + " look=" + snap.look
                           + " water=" + snap.water + " ground=" + snap.ground
                           + " hurt=" + snap.hurt + " hit=" + snap.hit
-                          + " back=" + snap.back);
+                          + " back=" + snap.back + " seen=" + snap.seen
+                          + " hground=" + snap.hground + " hwater=" + snap.hwater);
                     last = state;
                     lastWrite = now;
                 }
@@ -105,7 +109,7 @@ public final class StateExport implements ClientModInitializer {
                 try {
                     write("slot=-1 screen=1 ms=" + System.currentTimeMillis()
                           + " block=-1 sword=-1 target=-1 bed=-1 look=-1 water=-1 ground=-1"
-                          + " hurt=-1 hit=-1 back=-1");
+                          + " hurt=-1 hit=-1 back=-1 seen=-1 hground=-1 hwater=-1");
                     Thread.sleep(HEARTBEAT_MS);
                 } catch (Throwable ignored) {
                     return;
@@ -120,8 +124,11 @@ public final class StateExport implements ClientModInitializer {
         if (player == null) {
             // Not in a world: nothing can be clicked, so report "GUI open" and no slot. The
             // counters are monotonic across worlds, so the app never replays an old event.
+            b.prevGround = -1;
+            b.prevWater = -1;
             return new Snapshot("slot=-1 screen=1", -1, -1, -1, -1, -1, -1, -1,
-                                b.hurtCounter, b.hitCounter, b.backCounter);
+                                b.hurtCounter, b.seenCounter, b.hitCounter, b.backCounter,
+                                b.hurtGround, b.hurtWater);
         }
         if (player != b.lastPlayer) {
             // A new world or respawn: hurtTime and the swing object belong to the old player.
@@ -130,16 +137,35 @@ public final class StateExport implements ClientModInitializer {
             b.lastHealth = -1.0f;
             b.lastSwing = null;
             b.lastExactTarget = 0;
+            b.lastProjectiles = new java.util.ArrayList<>();
+            b.pendingProjectileSide = 0;
+            b.pendingProjectilePolls = 0;
+            b.prevGround = -1;
+            b.prevWater = -1;
+            b.hurtGround = -1;
+            b.hurtWater = -1;
         }
         Object inventory = b.getInventory.invoke(player);
         int slot = (Integer) b.getSelectedSlot.invoke(inventory);
         String line = "slot=" + (slot >= 0 && slot < 9 ? slot : -1)
                     + " screen=" + (screenOpen(b, mc) ? 1 : 0);
+        // Sampled before the counters: a projectile that vanished this poll is what names
+        // the attacker of a hurt tick without a damage source.
+        b.trackProjectiles(mc, player);
+        b.sampleMotion(player);
+        // Posture is sampled first so hurtState can latch it for the hit it is about to report.
+        // The counters still have to be read before the snapshot, since the hurt counter is what
+        // bumps the raw tick counter the two are compared on.
+        final int ground = b.groundState(player);
+        final int water = b.waterState(player);
+        long hurt = b.hurtState(mc, player, ground, water);
+        long hit = b.hitState(mc, player);
         return new Snapshot(line, b.blockState(inventory, slot),
                             b.swordState(inventory, slot), b.targetState(mc, player),
                             b.bedState(inventory, slot), b.lookState(mc),
-                            b.waterState(player), b.groundState(player),
-                            b.hurtState(mc, player), b.hitState(mc, player), b.backCounter);
+                            water, ground,
+                            hurt, b.seenCounter, hit, b.backCounter,
+                            b.hurtGround, b.hurtWater);
     }
 
     /** Logical state without the timestamp: compared to decide when to rewrite the file. */
@@ -152,12 +178,16 @@ public final class StateExport implements ClientModInitializer {
         final int look;
         final int water;
         final int ground;
+        final int hground;
+        final int hwater;
         final long hurt;
+        final long seen;
         final long hit;
         final long back;
 
         Snapshot(String line, int block, int sword, int target, int bed, int look, int water,
-                 int ground, long hurt, long hit, long back) {
+                 int ground, long hurt, long seen, long hit, long back, int hground,
+                 int hwater) {
             this.line = line;
             this.block = block;
             this.sword = sword;
@@ -166,7 +196,10 @@ public final class StateExport implements ClientModInitializer {
             this.look = look;
             this.water = water;
             this.ground = ground;
+            this.hground = hground;
+            this.hwater = hwater;
             this.hurt = hurt;
+            this.seen = seen;
             this.hit = hit;
             this.back = back;
         }
@@ -222,6 +255,13 @@ public final class StateExport implements ClientModInitializer {
         final Field hurtTime;
         final Method isInWater;
         final Method onGround;
+        // Posture from the sample before the newest hurt tick. The poll that detects a hit runs
+        // up to 50 ms after it, and the knockback from that hit has usually lifted the player by
+        // then, so reading the ground at that moment reports "mid-air" for grounded hits.
+        int prevGround = -1;
+        int prevWater = -1;
+        int hurtGround = -1;
+        int hurtWater = -1;
         final Method getCurrentSwing;
         // Client-side damage: handleDamageEvent stores the DamageSource (and rises hurtTime),
         // which is the only reliable "who hit me" on the client. getLastHurtByMob is only set
@@ -242,6 +282,23 @@ public final class StateExport implements ClientModInitializer {
         long hurtCounter;
         long hitCounter;
         long backCounter;
+        // Every damage tick seen, attributed or not: the app compares it with hurtCounter to
+        // tell "the hit never reached the bridge" from "a filter dropped it".
+        long seenCounter;
+        // Attribution when the server names no attacker (a 1.8 protocol has no damage packet).
+        final Method damageMsgId;
+        final Method noArgDamageSource;
+        final Method getDeltaMovement;
+        final Method projectileOwner;
+        final Class<?> entityClass;
+        List<Track> lastProjectiles = new java.util.ArrayList<>();
+        int pendingProjectileSide;
+        int pendingProjectilePolls;
+        // The player's own velocity: a hit knocks you away from the attacker even when the
+        // server names nobody, which keeps 1.8 hits working at any range.
+        double lastHorizontalSpeed = -1.0;
+        int knockbackPolls;
+        int knockbackSide;
         // Extended-reach check. Vanilla only puts an entity in hitResult within the normal
         // attack reach; this ray looks a little further so the gate opens as a player runs in.
         final Field level;
@@ -360,6 +417,43 @@ public final class StateExport implements ClientModInitializer {
             damageDirectEntity = dmgDirectEntity;
             getHealth = healthMethod;
             isSwinging = swingingMethod;
+
+            // A source that names no attacker still carries a damage type string, which is
+            // what keeps fall and fire out without an entity. getLastDamageSource(int) has a
+            // no-arg form on some versions, so the fallback is resolved separately.
+            Method msg = null;
+            try {
+                msg = Class.forName("net.minecraft.world.damagesource.DamageSource")
+                           .getMethod("getMsgId");
+            } catch (ReflectiveOperationException | RuntimeException ignored) {
+            }
+            Method noArg = null;
+            try {
+                noArg = Class.forName("net.minecraft.world.entity.LivingEntity")
+                              .getMethod("getLastDamageSource");
+            } catch (ReflectiveOperationException | RuntimeException ignored) {
+            }
+            damageMsgId = msg;
+            noArgDamageSource = noArg;
+
+            // Projectiles are sampled every poll: on a 1.8 server an arrow hit is only visible
+            // as the arrow disappearing plus the hurt animation.
+            Method delta = null;
+            Class<?> entityType2 = null;
+            try {
+                entityType2 = Class.forName("net.minecraft.world.entity.Entity");
+                delta = entityType2.getMethod("getDeltaMovement");
+            } catch (ReflectiveOperationException | RuntimeException ignored) {
+            }
+            Method owner = null;
+            try {
+                owner = Class.forName("net.minecraft.world.entity.projectile.Projectile")
+                             .getMethod("getOwner");
+            } catch (ReflectiveOperationException | RuntimeException ignored) {
+            }
+            getDeltaMovement = delta;
+            projectileOwner = owner;
+            entityClass = entityType2;
 
             // Where a block hit landed, so the extended ray can stop at the wall instead of
             // reporting a player behind it.
@@ -534,10 +628,11 @@ public final class StateExport implements ClientModInitializer {
          * <p>Modern versions raise {@code hurtTime} inside {@code handleDamageEvent}, which
          * also stores the damage source. A 1.8 server reached through ViaFabricPlus has no
          * damage-event packet: the client only gets the hurt animation. Health is tracked as
-         * well so a damage tick is still seen when the animation is missed, and the entity is
-         * identified from a nearby attacker that is swinging.</p>
+         * well so a damage tick is still seen when the animation is missed, and the attacker is
+         * inferred by classifyHit (projectiles that vanished nearby, the crosshair target, a
+         * swinging entity, melee reach).</p>
          */
-        long hurtState(Object mc, Object self) {
+        long hurtState(Object mc, Object self, int nowGround, int nowWater) {
             if (hurtTime == null) return -1;
             try {
                 int now = hurtTime.getInt(self);
@@ -552,18 +647,27 @@ public final class StateExport implements ClientModInitializer {
                     boolean healthFell = health >= 0.0f && lastHealth >= 0.0f &&
                                          health < lastHealth - 0.01f;
                     if (hurtRose || healthFell) {
-                        // Fall, fire, lava, drowning and starvation raise hurtTime too, but
-                        // no entity dealt them. Jumping after those is useless and leaks the
-                        // module, so only an entity source bumps the counter. Without a hurt
-                        // animation there is no direction to trust, so require a swing.
-                        if (hurtFromEntity(mc, self, !hurtRose)) {
+                        seenCounter++;
+                        // Fall, fire, lava, drowning and starvation raise hurtTime too, but no
+                        // entity dealt them. classifyHit names the attacker and its side, or
+                        // returns none, so those ticks never bump either counter.
+                        int side = classifyHit(mc, self, !hurtRose);
+                        if (side != HIT_NONE) {
                             hurtCounter++;
-                            if (hurtFromBehind(self)) backCounter++;
+                            // Posture before the knockback: this poll is already post-hit, so
+                            // the previous sample is the one that saw the player as they were
+                            // when the damage landed. A missing previous sample falls back to
+                            // this one rather than leaving the hit unclassified.
+                            hurtGround = prevGround >= 0 ? prevGround : nowGround;
+                            hurtWater = prevWater >= 0 ? prevWater : nowWater;
+                            if (side == HIT_BEHIND) backCounter++;
                         }
                     }
                     lastHurtTime = now;
                 }
                 lastHealth = health;
+                prevGround = nowGround;
+                prevWater = nowWater;
                 return hurtCounter;
             } catch (ReflectiveOperationException | RuntimeException e) {
                 return -1;
@@ -590,124 +694,340 @@ public final class StateExport implements ClientModInitializer {
             }
         }
 
+        /** Side of a hit: no entity to blame, in front of the player, or behind the player. */
+        private static final int HIT_NONE = 0;
+        private static final int HIT_FRONT = 1;
+        private static final int HIT_BEHIND = 2;
+
         /**
-         * True when the damage that just landed came from an entity. Melee attacks have a
-         * living attacker; arrows and fireballs expose the projectile as the direct entity, so
-         * both still count. Environmental damage has neither.
-         *
-         * <p>An older mapping that cannot provide any of this reports true, preserving the old
-         * behavior instead of silently disabling the reset.</p>
-         *
-         * @param strict true for a health-only tick with no hurt animation, so a nearby entity
-         *               is not enough on its own
+         * Damage types that no jump reset should answer. Only used when a source names no
+         * attacker: modern sources usually name one, so this is what keeps fall, fire and lava
+         * quiet when the server sends a damage type without an entity.
          */
-        private boolean hurtFromEntity(Object mc, Object self, boolean strict) {
-            if (getLastDamageSource == null) return true;
+        private static final java.util.Set<String> ENVIRONMENTAL = java.util.Set.of(
+            "fall", "lava", "inFire", "onFire", "hotFloor", "drown", "starve", "cactus",
+            "outOfWorld", "flyIntoWall", "freeze", "sweetBerryBush", "stalagmite", "anvil",
+            "fallingBlock", "fallingAnvil", "inWall", "cramming", "outsideBorder");
+
+        /**
+         * Names the attacker and the side the hit came from: 0 when nothing caused it, 1 when
+         * the attacker is in front, 2 when it is behind. The side matters because a jump reset
+         * after a backstab only hands the attacker a cleaner follow-up.
+         *
+         * <p>A damage source that names an entity is trusted completely. When it names none,
+         * the source is only believed if its damage type is a known environmental one;
+         * anything else (a 1.8 packet translated by ViaFabricPlus carries a source with no
+         * attacker) falls through to the local evidence in {@link #classifyLocally}.</p>
+         */
+        private int classifyHit(Object mc, Object self, boolean strict) {
+            int fromSource = classifyFromSource(self);
+            if (fromSource != -1) return fromSource;
+            return classifyLocally(mc, self, strict);
+        }
+
+        /** -1 = the source says nothing about an attacker, 0 = environmental, 1/2 = front/back. */
+        private int classifyFromSource(Object self) {
+            Object source = damageSource(self);
+            if (source == null) return -1;
+            Object attacker = entityOf(source, damageEntity);
+            if (attacker != null && attacker != self) return sideOf(attacker, self);
+            Object direct = entityOf(source, damageDirectEntity);
+            if (direct != null && direct != self) return sideOf(direct, self);
+            return environmental(source) ? HIT_NONE : -1;
+        }
+
+        /** The damage source for the hit that just landed, through either signature. */
+        private Object damageSource(Object self) {
+            if (getLastDamageSource == null) return null;
             try {
-                Object source = getLastDamageSource.invoke(self, 5);
-                if (source == null) {
-                    // ViaFabricPlus translating a 1.8 server: hurtTime rose from the hurt
-                    // animation, but there is no damage source to name. A living entity in
-                    // melee reach (or one still swinging) is the attacker; environmental
-                    // damage on an empty stretch of ground stays out.
-                    return hurtFromNearbyEntity(mc, self, strict);
-                }
-                if (damageEntity == null && damageDirectEntity == null) return true;
-                if (damageEntity != null) {
-                    Object attacker = damageEntity.invoke(source);
-                    if (attacker != null && attacker != self) return true;
-                }
-                if (damageDirectEntity != null) {
-                    Object direct = damageDirectEntity.invoke(source);
-                    if (direct != null && direct != self) return true;
-                }
-                return false;
+                return getLastDamageSource.invoke(self, 5);
             } catch (ReflectiveOperationException | RuntimeException e) {
-                return true;
+                if (noArgDamageSource == null) return null;
+                try {
+                    return noArgDamageSource.invoke(self);
+                } catch (ReflectiveOperationException | RuntimeException ignored) {
+                    return null;
+                }
+            }
+        }
+
+        private Object entityOf(Object source, Method getter) {
+            if (getter == null) return null;
+            try {
+                return getter.invoke(source);
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                return null;
+            }
+        }
+
+        private boolean environmental(Object source) {
+            if (damageMsgId == null || source == null) return false;
+            try {
+                Object id = damageMsgId.invoke(source);
+                return id != null && ENVIRONMENTAL.contains(id.toString());
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                return false;
             }
         }
 
         /**
-         * Legacy fallback for a hurt tick with no damage source. A living entity within melee
-         * reach (plus the knockback that lands in the same tick) is treated as the attacker,
-         * and a swing extends that reach a little further so a hit that pushed the attacker
-         * back still counts. The swing check is required when the hurt animation did not fire,
-         * which keeps starvation ticks quiet; when even the swing field is missing, reach alone
-         * is the best signal left.
+         * Best guess at what hurt the player when the server sent no attacker. The cues are
+         * ordered from strongest to weakest, and every one of them also says which side the
+         * hit came from:
+         *
+         * <ol>
+         *   <li>a projectile that was next to the player last poll and is gone now - arrows,
+         *       snowballs and eggs are removed the frame they land on an entity, so this is
+         *       what a bow or snowball hit looks like on a 1.8 server;</li>
+         *   <li>a living entity under the crosshair - you can see who hit you;</li>
+         *   <li>a living entity that is still swinging;</li>
+         *   <li>the nearest living entity within melee reach plus a little lag.</li>
+         * </ol>
+         *
+         * <p>Nothing found means environmental damage, so the counter does not rise and the
+         * module stays quiet. A health-only tick (the hurt animation was missed) needs a swing
+         * or a hit under the crosshair, which keeps starvation ticks out.</p>
          */
-        private boolean hurtFromNearbyEntity(Object mc, Object self, boolean strict) {
+        private int classifyLocally(Object mc, Object self, boolean strict) {
+            if (pendingProjectilePolls > 0) {
+                int side = pendingProjectileSide;
+                pendingProjectilePolls = 0;
+                pendingProjectileSide = HIT_NONE;
+                if (side != HIT_NONE) return side;
+            }
+            if (exactTargetState(mc, self) == 1) return HIT_FRONT;
+
+            List<?> entities = nearbyLiving(mc, self);
+            if (entities == null || entities.isEmpty()) return HIT_NONE;
+            Object nearest = null;
+            double nearestDist = Double.MAX_VALUE;
+            Object swinger = null;
+            double swingerDist = Double.MAX_VALUE;
+            for (Object entity : entities) {
+                double dist = horizontalDistance(entity, self);
+                if (dist < nearestDist) {
+                    nearestDist = dist;
+                    nearest = entity;
+                }
+                if (dist <= 6.0 && swinging(entity) && dist < swingerDist) {
+                    swingerDist = dist;
+                    swinger = entity;
+                }
+            }
+            if (swinger != null) return sideOf(swinger, self);
+            // A hit also pushes the player away from the attacker, which is the one cue that
+            // still works when nothing identifiable is left nearby.
+            if (knockbackPolls > 0) {
+                knockbackPolls = 0;
+                return knockbackSide;
+            }
+            // Swings are short; when this mapping cannot read them at all, reach is the only
+            // signal left, so it is allowed the full radius.
+            double reach = (strict && isSwinging != null) ? 3.0 : 4.5;
+            if (nearest != null && nearestDist <= reach) return sideOf(nearest, self);
+            return HIT_NONE;
+        }
+
+        /** Living entities close enough to have hit the player, or null when unreadable. */
+        private List<?> nearbyLiving(Object mc, Object self) {
             if (level == null || getEntitiesOfClass == null || getBoundingBox == null ||
-                inflate == null || livingClass == null ||
-                getX == null || getZ == null) {
-                return false;
+                inflate == null || livingClass == null || entityClass == null) {
+                return null;
             }
             try {
                 Object world = level.get(mc);
-                if (world == null) return false;
+                if (world == null) return null;
                 Object search = inflate.invoke(getBoundingBox.invoke(self), 6.0);
                 Predicate<Object> wanted = e -> e != self && livingClass.isInstance(e) &&
                                                 isAlive(e);
-                List<?> entities = (List<?>) getEntitiesOfClass.invoke(
-                    world, livingClass, search, wanted);
-                if (entities == null || entities.isEmpty()) return false;
+                return (List<?>) getEntitiesOfClass.invoke(world, entityClass, search, wanted);
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                return null;
+            }
+        }
 
-                double x = (Double) getX.invoke(self);
-                double z = (Double) getZ.invoke(self);
-                boolean close = false;
-                for (Object entity : entities) {
-                    double dx = (Double) getX.invoke(entity) - x;
-                    double dz = (Double) getZ.invoke(entity) - z;
-                    double dist = Math.sqrt(dx * dx + dz * dz);
-                    if (isSwinging != null &&
-                        (Boolean) isSwinging.invoke(entity) && dist <= 6.0) {
-                        return true;
-                    }
-                    if (dist <= 4.5) close = true;
-                }
-                // A hurt animation near an opponent is enough even if the swing packet was
-                // missed; a health-only tick needs a swing unless swings cannot be read.
-                return close && (!strict || isSwinging == null);
+        private double horizontalDistance(Object other, Object self) {
+            if (getX == null || getZ == null) return Double.MAX_VALUE;
+            try {
+                double dx = (Double) getX.invoke(other) - (Double) getX.invoke(self);
+                double dz = (Double) getZ.invoke(other) - (Double) getZ.invoke(self);
+                return Math.sqrt(dx * dx + dz * dz);
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                return Double.MAX_VALUE;
+            }
+        }
+
+        private boolean swinging(Object entity) {
+            if (isSwinging == null) return false;
+            try {
+                return (Boolean) isSwinging.invoke(entity);
             } catch (ReflectiveOperationException | RuntimeException e) {
                 return false;
             }
         }
 
         /**
-         * True when the attacker stands in the rear hemisphere. Only the horizontal direction
-         * matters: looking down at the ground while fighting must not turn a frontal hit into
-         * a backstab. The -0.25 margin keeps a glancing side hit from counting.
-         *
-         * <p>Uses {@code getLastDamageSource} rather than {@code getLastHurtByMob}, because the
-         * client only fills the former when the server tells it about damage. The 5-tick limit
-         * ties the source to the hit that just raised hurtTime; fall or fire damage has no
-         * living attacker and therefore never counts.</p>
+         * 1 in front, 2 behind. A living attacker is judged by where it stands; a projectile by
+         * the direction it was flying, because one that came from behind travels roughly the
+         * way the player looks instead of toward them.
          */
-        private boolean hurtFromBehind(Object self) {
-            if (getLastDamageSource == null || damageEntity == null ||
-                livingClass == null || getLookAngle == null ||
-                getX == null || getZ == null ||
-                vecX == null || vecY == null || vecZ == null) {
-                return false;
+        private int sideOf(Object attacker, Object self) {
+            if (livingClass != null && livingClass.isInstance(attacker)) {
+                return dotTo(attacker, self) < -0.25 ? HIT_BEHIND : HIT_FRONT;
             }
+            return projectileBehind(attacker, self) ? HIT_BEHIND : HIT_FRONT;
+        }
+
+        private double dotTo(Object other, Object self) {
+            if (getX == null || getZ == null) return 0.0;
             try {
-                Object source = getLastDamageSource.invoke(self, 5);
-                if (source == null) return false;
-                Object attacker = damageEntity.invoke(source);
-                if (attacker == null || attacker == self || !livingClass.isInstance(attacker)) {
-                    return false;
-                }
-                double dx = (Double) getX.invoke(attacker) - (Double) getX.invoke(self);
-                double dz = (Double) getZ.invoke(attacker) - (Double) getZ.invoke(self);
-                double dist = Math.sqrt(dx * dx + dz * dz);
+                double dx = (Double) getX.invoke(other) - (Double) getX.invoke(self);
+                double dz = (Double) getZ.invoke(other) - (Double) getZ.invoke(self);
+                return horizontalDot(dx, dz, self);
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                return 0.0;
+            }
+        }
+
+        /** Cosine of the angle between (dx, dz) and the player's horizontal look vector. */
+        private double horizontalDot(double dx, double dz, Object self) {
+            if (getLookAngle == null || vecX == null || vecZ == null) return 0.0;
+            try {
                 Object look = getLookAngle.invoke(self);
                 double lx = vecX.getDouble(look);
                 double lz = vecZ.getDouble(look);
-                double lookDist = Math.sqrt(lx * lx + lz * lz);
-                if (dist < 1.0e-4 || lookDist < 1.0e-4) return false;
-                double dot = (dx * lx + dz * lz) / (dist * lookDist);
-                return dot < -0.25;
+                double ld = Math.sqrt(lx * lx + lz * lz);
+                double d = Math.sqrt(dx * dx + dz * dz);
+                if (ld < 1.0e-4 || d < 1.0e-4) return 0.0;
+                return (dx * lx + dz * lz) / (d * ld);
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                return 0.0;
+            }
+        }
+
+        private boolean projectileBehind(Object projectile, Object self) {
+            double[] motion = motionOf(projectile);
+            if (motion != null && motion[0] * motion[0] + motion[2] * motion[2] > 1.0e-6) {
+                return horizontalDot(motion[0], motion[2], self) > 0.25;
+            }
+            return dotTo(projectile, self) < -0.25;
+        }
+
+        private double[] motionOf(Object entity) {
+            if (getDeltaMovement == null || vecX == null || vecY == null || vecZ == null) {
+                return null;
+            }
+            try {
+                Object motion = getDeltaMovement.invoke(entity);
+                if (motion == null) return null;
+                return new double[] { vecX.getDouble(motion), vecY.getDouble(motion),
+                                      vecZ.getDouble(motion) };
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                return null;
+            }
+        }
+
+        /**
+         * Samples the arrows, snowballs and eggs around the player every poll. A projectile
+         * that was within a couple of blocks last poll and is gone now was removed because it
+         * landed on an entity - and when a hurt tick arrives in the same poll, that entity was
+         * the player. Nothing is counted here; the hit still has to arrive.
+         */
+        void trackProjectiles(Object mc, Object self) {
+            if (getEntitiesOfClass == null || entityClass == null || level == null ||
+                getBoundingBox == null || inflate == null || getX == null || getZ == null) {
+                return;
+            }
+            try {
+                Object world = level.get(mc);
+                if (world == null) return;
+                Object search = inflate.invoke(getBoundingBox.invoke(self), 3.0);
+                Predicate<Object> wanted = e -> e != self && isProjectile(e) &&
+                                                !ownedByPlayer(e, self);
+                List<?> found = (List<?>) getEntitiesOfClass.invoke(
+                    world, entityClass, search, wanted);
+                List<Track> now = new java.util.ArrayList<>();
+                if (found != null) {
+                    for (Object entity : found) {
+                        now.add(new Track(entity, horizontalDistance(entity, self),
+                                          projectileBehind(entity, self)));
+                    }
+                }
+                // A hit can land either side of the sample, so the flag survives one poll.
+                if (pendingProjectilePolls > 0) pendingProjectilePolls--;
+                for (Track was : lastProjectiles) {
+                    if (was.distance > 2.5 || present(now, was.entity)) continue;
+                    pendingProjectileSide = was.behind ? HIT_BEHIND : HIT_FRONT;
+                    pendingProjectilePolls = 2;
+                    break;
+                }
+                lastProjectiles = now;
+            } catch (ReflectiveOperationException | RuntimeException ignored) {
+                // Missing a sample only costs projectile recognition for one poll.
+            }
+        }
+
+        /**
+         * Samples the player's own velocity to catch the knockback a hit applies. Walking keeps
+         * its speed from tick to tick, so only a spike counts. The push points away from the
+         * attacker, so its horizontal direction is also a side signal: pushed roughly the way
+         * you look means the hit came from behind.
+         */
+        void sampleMotion(Object self) {
+            double[] motion = motionOf(self);
+            if (motion == null) return;
+            double speed = Math.sqrt(motion[0] * motion[0] + motion[2] * motion[2]);
+            if (lastHorizontalSpeed >= 0.0 && speed > 0.20 &&
+                speed - lastHorizontalSpeed > 0.12) {
+                knockbackSide = horizontalDot(motion[0], motion[2], self) > 0.25
+                                ? HIT_BEHIND : HIT_FRONT;
+                knockbackPolls = 2;
+            }
+            lastHorizontalSpeed = speed;
+            if (knockbackPolls > 0) knockbackPolls--;
+        }
+
+        private static boolean present(List<Track> tracks, Object entity) {
+            for (Track t : tracks) {
+                if (t.entity == entity) return true;
+            }
+            return false;
+        }
+
+        /** An arrow, spectral arrow, trident, snowball or egg, whatever the mapping calls it. */
+        private static boolean isProjectile(Object entity) {
+            for (Class<?> c = entity.getClass(); c != null; c = c.getSuperclass()) {
+                String name = c.getName();
+                if (name.endsWith(".Arrow") || name.endsWith("ArrowEntity") ||
+                    name.endsWith(".ThrownTrident") || name.endsWith("TridentEntity") ||
+                    name.endsWith(".Snowball") || name.endsWith("SnowballEntity") ||
+                    name.endsWith(".ThrownEgg") || name.endsWith("EggEntity")) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /** Your own arrow leaving the bow must not be mistaken for a hit on you. */
+        private boolean ownedByPlayer(Object projectile, Object self) {
+            if (projectileOwner == null) return false;
+            try {
+                return projectileOwner.invoke(projectile) == self;
             } catch (ReflectiveOperationException | RuntimeException e) {
                 return false;
+            }
+        }
+
+        /** A projectile remembered between polls: enough to place its last flight direction. */
+        private static final class Track {
+            final Object entity;
+            final double distance;
+            final boolean behind;
+
+            Track(Object entity, double distance, boolean behind) {
+                this.entity = entity;
+                this.distance = distance;
+                this.behind = behind;
             }
         }
 
