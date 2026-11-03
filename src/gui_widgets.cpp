@@ -36,6 +36,13 @@ static const float LABEL_COL_W = 118.0f;
 static const float COL_GAP     = 8.0f;
 static const float VALUE_W     = 52.0f;
 
+// A checkbox row is as tall as a framed control, but a description line above it only paints
+// ~15 px of ink inside its 18 px row (its descenders even hang 1 px past the row bottom). With
+// the same 8 px ItemSpacing on both sides that left the box 5 px tighter against the text
+// above than against the text below. Reserving 4 px at the top of the row turns that 7/12 split
+// into 11/12, without adding a second ItemSpacing between neighbouring checkboxes.
+static const float CHECK_TOP_PAD = 4.0f;
+
 // State variables
 static float s_panel_inner = 0.0f;
 static float s_panel_x     = 0.0f;
@@ -1147,6 +1154,18 @@ bool row_combo(const char* label, int* idx, const char* items) {
 }
 
 bool row_check(const char* label, bool* v, bool disabled) {
+    // A description line above the row only paints ~15 px of ink inside its 18 px row (its
+    // descenders even hang 1 px past the row bottom), so with equal ItemSpacing the checkmark
+    // sat 5 px closer to the text above than to the text below. A few pixels reserved at the
+    // top of the row balance the two gaps. Only a text line gets it: after a framed control the
+    // usual spacing is already right, and checkboxes stacked under each other stay compact.
+    // Checkboxes placed at a fixed position (the slot grid) or on a SameLine go through
+    // oxygen_checkbox directly and must keep their exact top edge.
+    ImVec2 prev = ImGui::GetItemRectSize();
+    if (prev.y > 0.0f && prev.y <= ImGui::GetFontSize() + 1.0f) {
+        ImVec2 p = ImGui::GetCursorScreenPos();
+        ImGui::SetCursorScreenPos(ImVec2(p.x, p.y + CHECK_TOP_PAD));
+    }
     // Checkmark first, then the label. Keeping them together also stops a long label from
     // running into the fixed control column and being clipped in a narrow window.
     return oxygen_checkbox(label, v, true, disabled);
