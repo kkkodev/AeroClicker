@@ -303,6 +303,9 @@ public:
         j.hold_ms_min = clamp(j.hold_ms_min, 0.0, 5000.0);
         j.hold_ms_max = clamp(j.hold_ms_max, j.hold_ms_min, 5000.0);
         j.cooldown_ms = clamp(j.cooldown_ms, 0.0, 60000.0);
+        // "Forward only" is the narrower of the two movement filters and already implies
+        // "moving"; a config that somehow holds both behaves as forward-only, so store that.
+        if (j.forward_only) j.moving_only = false;
 
         SprintResetProfile& s = cfg.sprint_reset;
         s.chance = clamp(s.chance, 0.0, 1.0);
@@ -620,6 +623,9 @@ public:
     }
 
     static bool remove_profile(const std::string& filename) {
+        // The live settings file lives in the same directory, and deleting it from the profile
+        // list would wipe the running configuration.
+        if (filename == "config") return false;
         if (!valid_name(filename)) return false;
         std::string p = path() + "/" + filename;
         return ::remove(p.c_str()) == 0;

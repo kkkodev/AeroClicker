@@ -192,8 +192,8 @@ struct JumpResetProfile {
 
     double cooldown_ms = 500.0;
     // "Only while moving forward" is the strict W check; this one accepts any WASD direction,
-    // which is what a player strafing or backing up actually does. Both may be on: forward then
-    // wins because it is the narrower filter.
+    // which is what a player strafing or backing up actually does. They are alternatives rather
+    // than layers: forward implies moving, so the UI ticks one only when the other is off.
     bool forward_only = false;
     bool moving_only = true;
     bool allow_in_menu = false;

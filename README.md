@@ -353,7 +353,8 @@ reports the counters (the jar in `tools/mc-bridge` does).
   reaction: 90 % chance, a 100 ms reaction drawn from a right-skewed 25 ms spread (clamped to
   60–170 ms), a 70 ms hold with an 8 ms spread (50–95 ms), and a 500 ms cooldown. It only fires
   while moving with any WASD key (**Only while moving (WASD)**, on by default); the stricter
-  **Only while moving forward (W)** option narrows that to W. It respects the slot filter, stays
+  **Only while moving forward (W)** option narrows that to W. The two are alternatives: ticking
+  one clears the other, because forward already implies moving. It respects the slot filter, stays
   quiet while a game screen is open, and is off in water (**Do not jump while in water**, on by
   default, the same rule Vape uses) and in mid-air (**Only jump while on the ground**, on by
   default).

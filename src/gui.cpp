@@ -673,8 +673,12 @@ static void draw_mod_tab(GuiState& state) {
         row_slider("Hold Min (ms)", &j.hold_ms_min, 10.0, 150.0, "%.0f");
         row_slider("Hold Max (ms)", &j.hold_ms_max, 20.0, 300.0, "%.0f");
         row_slider("Cooldown (ms)", &j.cooldown_ms, 0.0, 2000.0, "%.0f");
-        row_check("Only while moving (WASD)", &j.moving_only);
-        row_check("Only while moving forward (W)", &j.forward_only);
+        // A movement filter is an alternative, not a layer: "forward" already implies moving,
+        // so ticking one clears the other instead of leaving a redundant pair checked.
+        if (row_check("Only while moving (WASD)", &j.moving_only) && j.moving_only)
+            j.forward_only = false;
+        if (row_check("Only while moving forward (W)", &j.forward_only) && j.forward_only)
+            j.moving_only = false;
         row_check("Allow while a game menu is open", &j.allow_in_menu);
         row_check("Respect the slot filter", &j.use_slot_filter);
         row_check("Do not jump while in water", &j.disable_in_water);
@@ -764,10 +768,25 @@ static void draw_settings_tab(GuiState& state, std::vector<std::string>& profile
     ox_input_text("##profile_name", profile_name_buf, 64, "New profile name...", panel_inner() * 0.6f);
     field_gloss_last_item();  // Add slider-style sheen
     if (oxygen_button("Save", ImVec2(80, 0), 0, 0, false, OxIcon::Save)) {
-        std::string name = profile_name_buf[0] ? profile_name_buf : "config";
-        if (ConfigFile::save(state.config, name)) {
-            snprintf(status_msg, 128, "Saved: %s", name.c_str()); status_timer = 3.0f;
+        // A profile is a file next to the live config. An empty box used to fall back to the
+        // name "config", which silently rewrote the live settings and could never appear in the
+        // list (that name is the running config, not a profile). Trim the input and refuse the
+        // empty and the reserved name instead.
+        std::string name(profile_name_buf);
+        const size_t first = name.find_first_not_of(" \t\r\n");
+        const size_t last = name.find_last_not_of(" \t\r\n");
+        name = (first == std::string::npos) ? std::string() : name.substr(first, last - first + 1);
+        snprintf(profile_name_buf, 64, "%s", name.c_str());
+        if (name.empty()) {
+            snprintf(status_msg, 128, "Enter a profile name first"); status_timer = 3.0f;
+        } else if (name == "config") {
+            snprintf(status_msg, 128, "\"config\" is the live settings file"); status_timer = 3.0f;
+        } else if (ConfigFile::save(state.config, name)) {
+            snprintf(status_msg, 128, "Saved profile: %s", name.c_str()); status_timer = 3.0f;
             profiles = ConfigFile::list_profiles();
+            // Select what was just written so Load and Delete act on it right away.
+            for (int i = 0; i < (int)profiles.size(); i++)
+                if (profiles[i] == name) selected_profile = i;
         } else {
             // ConfigFile refuses names that could escape the config directory.
             snprintf(status_msg, 128, "Invalid name (no slashes or leading dots)"); status_timer = 3.0f;
