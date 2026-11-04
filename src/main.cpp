@@ -506,6 +506,9 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
         McLink::State mc;
         mc_live = McLink::poll(mc);
         gui_state.mc_linked = mc_live;
+        // A valid hotbar slot means the mod found a player in a world. Outside one it writes -1
+        // for every world field, which must not be read as "this build cannot report it".
+        gui_state.mc_in_world = mc_live && mc.slot >= 0;
         gui_state.mc_block_known = mc_live && mc.block >= 0;
         gui_state.mc_sword_known = mc_live && mc.sword >= 0;
         gui_state.mc_target_known = mc_live && mc.target >= 0;

@@ -33,6 +33,10 @@ struct GuiState {
     // Which optional fields the live bridge build reports. A link without one is a slot/menu
     // only mod build, so the gate that needs it cannot work and the UI says so.
     std::atomic<bool> mc_block_known{false};
+    // The link is live AND the player is in a world. The bridge reports -1 for every world
+    // field outside a world, so without this the warnings would blame the mod build for a
+    // state it simply has nothing to report yet.
+    std::atomic<bool> mc_in_world{false};
     std::atomic<bool> mc_sword_known{false};
     std::atomic<bool> mc_target_known{false};
     std::atomic<bool> mc_bed_known{false};

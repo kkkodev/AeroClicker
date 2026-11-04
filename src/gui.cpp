@@ -225,7 +225,7 @@ static void draw_clicker_card(const char* title, ClickerProfile& profile, Activa
 static void draw_slot_indicator(GuiState& state, float width) {
     const bool live = state.mc_linked.load();
     const int  slot = state.active_slot.load();
-    begin_panel("Slot activation", width, -1, OxIcon::Grid);
+    begin_panel("Hotbar", width, -1, OxIcon::Grid);
     const float inner = panel_inner();
 
     // 1-9 chips: tinted while mapped, ringed on the slot the game has selected. Read-only,
@@ -569,6 +569,9 @@ static void draw_mod_tab(GuiState& state) {
     begin_panel("Global", -1.0f, -1, OxIcon::Globe);
     const int active_slot = state.active_slot.load();
     const bool live = state.mc_linked.load();
+    // Outside a world the bridge reports -1 for every world field, so "unknown" there means
+    // "nothing to report yet", not "this mod build cannot report it".
+    const bool in_world = state.mc_in_world.load();
     if (live)
         ImGui::TextColored(ok_text_color(), "Bridge mod: live (slot %d)", active_slot + 1);
     else
@@ -576,8 +579,13 @@ static void draw_mod_tab(GuiState& state) {
 
     row_check("Pause clicking while a game menu is open", &state.config.pause_in_menu);
     ImGui::TextDisabled("Covers the inventory, chat, chests and NPC menus");
+    end_panel();
+
+    // The hotbar rules are their own card: they are the only part of the tab that follows the
+    // selected slot, and keeping them out of Global makes that separation visible.
+    begin_panel("Hotbar", -1.0f, -1, OxIcon::Grid);
     row_check("Switch clickers with the selected hotbar slot", &state.config.slot_auto_enabled);
-    ImGui::TextDisabled("Switches a clicker on while one of its slots is selected");
+    ImGui::TextDisabled("Turns a clicker on while one of its slots is selected");
 
     // The slot grid only means something while following is on. It uses the same muted style
     // as Skip beds rather than ImGui's stock disabled dimming, and keeps its stored mapping.
@@ -611,7 +619,7 @@ static void draw_mod_tab(GuiState& state) {
     const int gate = state.config.left_gate;
     const bool gate_known = (gate & 1 ? state.mc_sword_known.load() : true) &&
                             (gate & 2 ? state.mc_target_known.load() : true);
-    if (live && gate != 0 && !gate_known)
+    if (in_world && gate != 0 && !gate_known)
         ImGui::TextDisabled("This mod build cannot report this gate");
     else
         ImGui::TextDisabled("%s", LEFT_GATE_HINTS[gate]);
@@ -630,7 +638,7 @@ static void draw_mod_tab(GuiState& state) {
 
     begin_panel("Right clicker", -1.0f, -1, OxIcon::MouseRight);
     row_check("Only right-click while holding a placeable block", &state.config.right_placeable_only);
-    if (live && state.config.right_placeable_only && !state.mc_block_known.load())
+    if (in_world && state.config.right_placeable_only && !state.mc_block_known.load())
         ImGui::TextDisabled("This mod build cannot report the held item");
     else
         ImGui::TextDisabled("Only right-clicks while holding a placeable block");
@@ -640,13 +648,13 @@ static void draw_mod_tab(GuiState& state) {
     row_check("Skip beds while one is held", &state.config.right_gate_no_bed, !state.config.right_placeable_only);
     if (!state.config.right_placeable_only)
         ImGui::TextDisabled("Beds are skipped only while the block gate is on");
-    else if (live && state.config.right_gate_no_bed && !state.mc_bed_known.load())
+    else if (in_world && state.config.right_gate_no_bed && !state.mc_bed_known.load())
         ImGui::TextDisabled("This mod build cannot report beds");
     else
         ImGui::TextDisabled("The right clicker stays off while a bed is held");
 
     row_check("Only right-click while looking at a block", &state.config.right_look_block);
-    if (live && state.config.right_look_block && !state.mc_look_known.load())
+    if (in_world && state.config.right_look_block && !state.mc_look_known.load())
         ImGui::TextDisabled("This mod build cannot report the crosshair");
     else
         ImGui::TextDisabled("Stops while the crosshair is on air or an entity");
@@ -714,9 +722,9 @@ static void draw_mod_tab(GuiState& state) {
                 ImGui::TextDisabled("Still counts a hit that lifted you off the floor this recently");
             }
         }
-        if (live && !state.mc_water_known.load())
+        if (in_world && !state.mc_water_known.load())
             ImGui::TextDisabled("This mod build cannot report water");
-        else if (live && !state.mc_ground_known.load())
+        else if (in_world && !state.mc_ground_known.load())
             ImGui::TextDisabled("This mod build cannot report the ground");
     }
     end_panel();

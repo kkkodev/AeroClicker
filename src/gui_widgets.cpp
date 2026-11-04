@@ -32,7 +32,9 @@ static const float PANEL_PAD = 12.0f;
 static const float PANEL_GAP = 14.0f;
 
 // Alignment constants for row widgets
-static const float LABEL_COL_W = 118.0f;
+// A row's control starts right after its own label instead of at a fixed column: a short label
+// like "Chance" used to leave a wide empty gap before the slider. The right edge stays fixed, so
+// only the control's width adapts to the label.
 static const float COL_GAP     = 8.0f;
 static const float VALUE_W     = 52.0f;
 
@@ -51,10 +53,12 @@ static ImGuiID s_panel_hid = 0;
 
 void set_big_font(ImFont* font) { g_font_big = font; }
 
-// Control column helpers for row layout
-static float ctrl_x0()       { return s_panel_x + PANEL_PAD + LABEL_COL_W + COL_GAP; }
-static float ctrl_w_full()   { return s_panel_inner - (LABEL_COL_W + COL_GAP); }
-static float ctrl_w_slider() { return ctrl_w_full() - VALUE_W - ImGui::GetStyle().ItemSpacing.x; }
+// Control placement for row layout. The control follows the label on that row, and both stay
+// inside the panel's padded content box.
+static float ctrl_right() { return s_panel_x + PANEL_PAD + s_panel_inner; }
+static float ctrl_x_for(const char* label, float start_x) {
+    return start_x + ImGui::CalcTextSize(label, nullptr, true).x + COL_GAP;
+}
 
 // ---------- low-level draw helpers ----------
 
@@ -1014,8 +1018,11 @@ bool row_slider(const char* label, double* v, double lo, double hi, const char* 
     ImGui::AlignTextToFramePadding();
     ImVec2 start = ImGui::GetCursorScreenPos();
     ImGui::TextUnformatted(label);
-    ImGui::SetCursorScreenPos(ImVec2(ctrl_x0(), start.y));
-    ImGui::SetNextItemWidth(ctrl_w_slider());
+    const float cx = ctrl_x_for(label, start.x);
+    float cw = ctrl_right() - cx - VALUE_W - ImGui::GetStyle().ItemSpacing.x;
+    if (cw < 40.0f) cw = 40.0f;
+    ImGui::SetCursorScreenPos(ImVec2(cx, start.y));
+    ImGui::SetNextItemWidth(cw);
     char id[96]; snprintf(id, sizeof(id), "##%s", label);
     bool changed = slider_widget(id, v, lo, hi);
     ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
@@ -1194,8 +1201,11 @@ bool row_combo(const char* label, int* idx, const char* items) {
     ImGui::AlignTextToFramePadding();
     ImVec2 start = ImGui::GetCursorScreenPos();
     ImGui::TextUnformatted(label);
-    ImGui::SetCursorScreenPos(ImVec2(ctrl_x0(), start.y));   // same start point as sliders
-    ImGui::SetNextItemWidth(ctrl_w_full());                  // same right edge as slider+value
+    const float cx = ctrl_x_for(label, start.x);
+    float cw = ctrl_right() - cx;
+    if (cw < 60.0f) cw = 60.0f;
+    ImGui::SetCursorScreenPos(ImVec2(cx, start.y));
+    ImGui::SetNextItemWidth(cw);
     char id[96]; snprintf(id, sizeof(id), "##%s", label);
     return combo_framed(id, idx, items);
 }
@@ -1222,7 +1232,7 @@ bool row_color3(const char* label, float* rgb) {
     ImGui::AlignTextToFramePadding();
     ImVec2 start = ImGui::GetCursorScreenPos();
     ImGui::TextUnformatted(label);
-    ImGui::SetCursorScreenPos(ImVec2(ctrl_x0(), start.y));
+    ImGui::SetCursorScreenPos(ImVec2(ctrl_x_for(label, start.x), start.y));
 
     ImGui::PushID(label);
     bool changed = false;
