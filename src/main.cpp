@@ -264,6 +264,11 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
     long long last_hurt = 0;
     long long last_hit = 0;
     long long last_back = 0;
+    // Last poll that reported the player on the ground. Jump Reset's grace is measured from
+    // this sample rather than the post-knockback state, so a hit taken well after takeoff
+    // still counts as mid-air.
+    Clock::time_point last_ground_at{};
+    bool ground_seen = false;
     // Slot activation bookkeeping: the mapping is applied when the slot changes, and not again
     // in between, so a deliberate press of a clicker's key is not undone on the next poll.
     int  auto_slot = -1;
@@ -541,11 +546,18 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                 // permanently inert, so unknown reads as "safe to try" and "not in water".
                 const bool hit_in_water = mc.hwater >= 0 ? mc.hwater == 1 : mc.water == 1;
                 const bool hit_on_ground = mc.hground >= 0 ? mc.hground != 0 : mc.ground != 0;
+                // Deliberately read before the history update below: this is the last sample
+                // from *before* the current poll, matching the posture the bridge latched.
+                const double ms_since_ground = ground_seen
+                    ? std::chrono::duration<double, std::milli>(
+                          Clock::now() - last_ground_at).count()
+                    : 1.0e9;
                 const CombatContext ctx = {
                     menu,
                     config.slot_auto_enabled && (slot < 0 || !config.left_slots[slot]),
                     hit_in_water,
                     hit_on_ground,
+                    ms_since_ground,
                     backstab,
                 };
                 // One event per step; a frame that somehow saw two keeps each reset on its own
@@ -553,9 +565,14 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                 if (hurt_steps > 0) combat->on_hurt(ctx);
                 if (hit_steps > 0) combat->on_hit(ctx);
             }
+            if (mc.ground == 1) {
+                last_ground_at = Clock::now();
+                ground_seen = true;
+            }
         } else {
             mc_synced = false;   // no game: nothing drives the slot rules until it comes back
             mc_counters_seeded = false;
+            ground_seen = false;
             // Do not leave a clicker running that the slot rules switched on: the game they were
             // following is gone.
             if (auto_engaged) {

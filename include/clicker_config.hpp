@@ -204,6 +204,11 @@ struct JumpResetProfile {
     bool disable_in_water = true;
     // A jump only does anything from the ground; pressing it mid-air just leaks the module.
     bool require_on_ground = true;
+    // The bridge latches the posture before the hit, but that sample is still up to one poll
+    // old: a hit that lands just after the player leaves the floor would look airborne. If the
+    // last on-ground sample is inside this window, the hit still counts as grounded. 0 keeps
+    // the strict "ground now" check.
+    double ground_grace_ms = 100.0;
 };
 
 struct SprintResetProfile {

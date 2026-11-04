@@ -183,6 +183,9 @@ struct CombatContext {
     bool slot_blocked;
     bool in_water;
     bool on_ground;
+    // How long ago the bridge last reported the player on the ground. Large when no sample has
+    // been seen, so a fresh link cannot grant a grace window it did not observe.
+    double ms_since_ground;
     bool hit_from_behind;   // the hurt event being handled came from behind the player
 };
 
@@ -376,7 +379,15 @@ public:
             return;
         }
         if (p_.disable_in_water && ctx.in_water) { stats_.note(ResetOutcome::water); return; }
-        if (p_.require_on_ground && !ctx.on_ground) { stats_.note(ResetOutcome::air); return; }
+        // The bridge latches the posture before the hit, but a hit can still land just after
+        // the player leaves the floor, or the previous sample can be one tick too old. The
+        // grace keeps a hit that was on the ground a moment ago, while a hit taken after
+        // actually leaving the floor is still ignored once the window has passed.
+        if (p_.require_on_ground && !ctx.on_ground &&
+            !(p_.ground_grace_ms > 0.0 && ctx.ms_since_ground <= p_.ground_grace_ms)) {
+            stats_.note(ResetOutcome::air);
+            return;
+        }
         if (!gate_.claim(p_.cooldown_ms)) { stats_.note(ResetOutcome::cooldown); return; }
 
         double probability = combat_clamp(p_.chance, 0, 1);

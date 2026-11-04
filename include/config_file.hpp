@@ -163,6 +163,7 @@ public:
         else if (!strcmp(key, "jump_reset.use_slot_filter")) j.use_slot_filter = (int)val != 0;
         else if (!strcmp(key, "jump_reset.disable_in_water")) j.disable_in_water = (int)val != 0;
         else if (!strcmp(key, "jump_reset.require_on_ground")) j.require_on_ground = (int)val != 0;
+        else if (!strcmp(key, "jump_reset.ground_grace_ms")) j.ground_grace_ms = val;
         else if (!strcmp(key, "sprint_reset.mode")) s.mode = static_cast<SprintResetMode>((int)val);
         else if (!strcmp(key, "sprint_reset.chance")) s.chance = val;
         else if (!strcmp(key, "sprint_reset.delay_ms_min")) s.delay_ms_min = val;
@@ -303,6 +304,7 @@ public:
         j.hold_ms_min = clamp(j.hold_ms_min, 0.0, 5000.0);
         j.hold_ms_max = clamp(j.hold_ms_max, j.hold_ms_min, 5000.0);
         j.cooldown_ms = clamp(j.cooldown_ms, 0.0, 60000.0);
+        j.ground_grace_ms = clamp(j.ground_grace_ms, 0.0, 500.0);
         // "Forward only" is the narrower of the two movement filters and already implies
         // "moving"; a config that somehow holds both behaves as forward-only, so store that.
         if (j.forward_only) j.moving_only = false;
@@ -557,6 +559,7 @@ public:
         fprintf(f, "jump_reset.use_slot_filter %d\n", j.use_slot_filter ? 1 : 0);
         fprintf(f, "jump_reset.disable_in_water %d\n", j.disable_in_water ? 1 : 0);
         fprintf(f, "jump_reset.require_on_ground %d\n", j.require_on_ground ? 1 : 0);
+        fprintf(f, "jump_reset.ground_grace_ms %g\n", j.ground_grace_ms);
         const SprintResetProfile& s = cfg.sprint_reset;
         fprintf(f, "sprint_reset.mode %d\n", static_cast<int>(s.mode));
         fprintf(f, "sprint_reset.chance %g\n", s.chance);

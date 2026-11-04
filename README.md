@@ -367,7 +367,9 @@ reports the counters (the jar in `tools/mc-bridge` does).
   one clears the other, because forward already implies moving. It respects the slot filter, stays
   quiet while a game screen is open, and is off in water (**Do not jump while in water**, on by
   default, the same rule Vape uses) and in mid-air (**Only jump while on the ground**, on by
-  default).
+  default). The ground check uses the posture latched just before the hit, and **Jump Grace
+  (ms)** (100 ms by default) still counts a hit that lifted you off the floor a moment ago; set
+  it to 0 for the strict "ground now" rule.
 - **Sprint reset** briefly breaks sprint after the game reports a hit on a mob or player so the
   next hit deals full sprint knockback. It can use **W-Tap** (release W), **S-Tap** (tap S) or
   **Shift-Tap** (tap Shift). Defaults: 90 % chance, a 15–65 ms delay, 1.25 ± 0.40 ticks clamped to

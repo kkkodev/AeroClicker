@@ -698,6 +698,10 @@ static void draw_mod_tab(GuiState& state) {
         row_check("Respect the slot filter", &j.use_slot_filter);
         row_check("Do not jump while in water", &j.disable_in_water);
         row_check("Only jump while on the ground", &j.require_on_ground);
+        if (j.require_on_ground) {
+            row_slider("Jump Grace (ms)", &j.ground_grace_ms, 0.0, 300.0, "%.0f");
+            ImGui::TextDisabled("Still counts a hit that lifted you off the floor this recently");
+        }
         if (live && !state.mc_water_known.load())
             ImGui::TextDisabled("This mod build cannot report water");
         else if (live && !state.mc_ground_known.load())
