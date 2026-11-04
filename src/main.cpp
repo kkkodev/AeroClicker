@@ -212,6 +212,12 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
     bool kb_grabbed = false;
     bool last_jump_enabled = false;
     bool last_sprint_enabled = false;
+    // The kernel is the ground truth for which keys are down. Reading it on a timer catches a
+    // release lost without SYN_DROPPED (a grab handover, or a tap cancelled mid-flight), which
+    // would otherwise leave the game holding W after you let go. The reassert pass is slower:
+    // it only needs to cover a game that missed a release the app did send.
+    auto next_kb_resync = Clock::now();
+    auto next_kb_reassert = Clock::now();
 
     // Keeps the mouse device/grab in sync with the current modes and keybinds: at startup, when
     // they are changed in the UI, and after the device is replugged.
@@ -454,6 +460,21 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
         // A release the kernel refused earlier is retried here instead of being lost: a dropped
         // key-up is what makes the game keep walking after the key is already up.
         if (combat) combat->keyboard.retry_owed();
+        // Reconcile the forwarded keyboard with the kernel on a timer, not only on SYN_DROPPED:
+        // a tap cancelled while W is masked can otherwise leave the virtual key out of step with
+        // the physical one forever.
+        if (combat && kb_fd >= 0) {
+            const auto now = Clock::now();
+            if (now >= next_kb_resync) {
+                next_kb_resync = now + std::chrono::milliseconds(250);
+                bool down[UInputKeyboard::MAX_CODE + 1] = {};
+                if (read_key_state(kb_fd, down)) combat->keyboard.resync(down);
+            }
+            if (now >= next_kb_reassert) {
+                next_kb_reassert = now + std::chrono::milliseconds(500);
+                combat->keyboard.release_unheld();
+            }
+        }
 
         // Mirror the Settings toggles into the modules. The F9/F10 hotkeys write the config
         // too, so this is the single place the live state follows.

@@ -115,6 +115,12 @@ class VirtualKeyboard {
     // Keys this layer has pressed at least once. Used to re-assert key-up without spraying
     // releases for the whole 255-key range.
     bool ever_down_[N] = {};
+    // A key a combat module is deliberately holding (S-Tap, Shift-Tap, Jump Reset's Space).
+    // Reconciliation must not steal it back from the module while it runs.
+    bool module_hold_[N] = {};
+    // A redundant key-up was already re-sent for this press cycle, so the periodic reassert
+    // does not spam the same release every pass.
+    bool reasserted_[N] = {};
     bool forwarding_ = false;
 
     // Must be called with mu_ held.
@@ -135,7 +141,10 @@ class VirtualKeyboard {
             return false;
         }
         virtual_[code] = down;
-        if (down) ever_down_[code] = true;
+        if (down) {
+            ever_down_[code] = true;
+            reasserted_[code] = false;
+        }
         if (owed_release_[code]) {
             // The key is now in the state we wanted, so the release debt is settled.
             owed_release_[code] = false;
@@ -186,15 +195,15 @@ public:
         for (int i = 1; i < N; i++) physical_[i] = down[i];
     }
 
-    // The kernel's event queue overflowed (SYN_DROPPED), so events between the last one read
-    // and now are gone. The device's key state is still authoritative: mirror it and make the
-    // virtual keyboard agree again, because a missed release would leave the key held and a
-    // missed press would leave the game deaf to a key that is still down.
+    // The device's key state is authoritative. SYN_DROPPED uses this, and the input loop also
+    // calls it on a timer: a release that is lost without a SYN_DROPPED (a hitch, a grab
+    // handover, a tap cancelled at the wrong moment) is then corrected within a poll or two
+    // instead of leaving W held forever.
     void resync(const bool* down) {
         std::lock_guard<std::mutex> lock(mu_);
         for (int i = 1; i < N; i++) {
             physical_[i] = down[i];
-            if (!forwarding_ || masked_[i]) continue;
+            if (!forwarding_ || masked_[i] || module_hold_[i]) continue;
             if (virtual_[i] != down[i]) set(i, down[i]);
         }
     }
@@ -220,7 +229,10 @@ public:
         std::lock_guard<std::mutex> lock(mu_);
         if (!forwarding_) return;
         for (int i = 1; i < N; i++) {
-            if (!ever_down_[i] || physical_[i] || virtual_[i]) continue;
+            if (!ever_down_[i] || physical_[i] || virtual_[i] || reasserted_[i]) continue;
+            // One redundant release per press cycle: enough to clear a game that missed the
+            // last one, without spraying a key-up every pass.
+            reasserted_[i] = true;
             if (!dev_.key(i, 0) && !owed_release_[i]) {
                 owed_release_[i] = true;
                 owed_count_++;
@@ -232,10 +244,24 @@ public:
         std::lock_guard<std::mutex> lock(mu_);
         if (!v) {
             // A mask hides a key from the game, so it must not survive the handover: the next
-            // grab starts from the physical state again.
-            for (int i = 1; i < N; i++) masked_[i] = false;
+            // grab starts from the physical state again. A module hold is dropped too, so the
+            // first reconcile after the next grab is free to restore the physical state.
+            for (int i = 1; i < N; i++) {
+                masked_[i] = false;
+                module_hold_[i] = false;
+            }
             for (int i = 1; i < N; i++)
                 if (virtual_[i]) set(i, false);
+            // Also send a redundant key-up for anything this layer ever forwarded and no longer
+            // holds. It costs nothing and clears a key the game still believes is down, which
+            // is exactly what would keep you walking after the grab is handed back.
+            for (int i = 1; i < N; i++) {
+                if (!ever_down_[i] || physical_[i] || virtual_[i]) continue;
+                if (!dev_.key(i, 0) && !owed_release_[i]) {
+                    owed_release_[i] = true;
+                    owed_count_++;
+                }
+            }
             flush_owed_locked();
         }
         forwarding_ = v;
@@ -248,12 +274,16 @@ public:
 
     void press(int code) {
         std::lock_guard<std::mutex> lock(mu_);
+        module_hold_[code] = true;
         set(code, true);
     }
 
     void release(int code) {
         std::lock_guard<std::mutex> lock(mu_);
-        set(code, false);
+        module_hold_[code] = false;
+        // The user may have started holding this key during the tap; in that case keep it down
+        // instead of blindly releasing it.
+        set(code, forwarding_ && physical_[code]);
     }
 
     // Hide a held key from the game until unmask(); only works while forwarding.
@@ -532,7 +562,14 @@ public:
     void set_enabled(bool v) {
         enabled_ = v;
         if (v) clear_stats();
-        else sched_.cancel();
+        else {
+            sched_.cancel();
+            // A W-Tap in flight may already have hidden W. Restore it on the calling thread
+            // instead of waiting for the cancelled job to wake: otherwise the game keeps
+            // seeing W released (or, after the tap's own unmask races the state change, down)
+            // for as long as the sleep lasts.
+            if (p_.mode == SprintResetMode::W_TAP) kb_.unmask(KEY_W);
+        }
     }
     void toggle() { set_enabled(!enabled_.load()); }
     bool busy() { return !sched_.idle(); }
