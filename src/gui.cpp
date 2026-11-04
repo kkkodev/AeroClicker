@@ -702,6 +702,11 @@ static void draw_mod_tab(GuiState& state) {
             row_slider("Hold Max (ms)", &j.hold_ms_max, 20.0, 300.0, "%.0f");
             row_slider("Cooldown (ms)", &j.cooldown_ms, 0.0, 2000.0, "%.0f");
             if (j.require_on_ground) {
+                // The grace window only makes sense with the ground check, so it sits after a
+                // rule rather than looking like another timing value in the same block.
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Spacing();
                 row_slider("Jump Grace (ms)", &j.ground_grace_ms, 0.0, 300.0, "%.0f");
                 ImGui::TextDisabled("Still counts a hit that lifted you off the floor this recently");
             }

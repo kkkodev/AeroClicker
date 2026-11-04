@@ -870,15 +870,15 @@ bool oxygen_disclosure(const char* label, bool default_open) {
     const float cy = (a.y + b.y) * 0.5f;
     const float ax = a.x + ImGui::GetStyle().FramePadding.x + 8.0f;
     const ImU32 arrow = lerp_u32(ox_text_dim(), ImGui::GetColorU32(ImGuiCol_Text), t_h);
-    // Same proportions as the combo arrows: a wide, flat triangle reads cleanly at this size,
-    // while a tall narrow one only fills a few pixels and looks clipped.
-    const float aw = 5.5f, ah = 2.75f;
+    // Both states use a triangle inscribed in the same square, so expanding the section does
+    // not make the arrow look any wider than it does closed.
+    const float aw = 3.5f, ah = 3.5f;
     if (open)
         dl->AddTriangleFilled(ImVec2(ax - aw, cy + ah), ImVec2(ax + aw, cy + ah),
                               ImVec2(ax, cy - ah), arrow);
     else
-        dl->AddTriangleFilled(ImVec2(ax - aw, cy - ah), ImVec2(ax + aw, cy - ah),
-                              ImVec2(ax, cy + ah), arrow);
+        dl->AddTriangleFilled(ImVec2(ax - aw, cy - ah), ImVec2(ax - aw, cy + ah),
+                              ImVec2(ax + aw, cy), arrow);
 
     dl->AddText(ImVec2(ax + aw + 7.0f, vcenter_top(a.y, b.y)),
                 ImGui::GetColorU32(ImGuiCol_Text), label, tend ? tend : nullptr);
