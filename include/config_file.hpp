@@ -184,6 +184,12 @@ public:
         const double d = a - b;
         return d < 1e-6 && d > -1e-6;
     }
+    // A slider leaves values like 512.17 where the shipped default was 500. Match the previous
+    // default within a small tolerance so those configs are still recognised as untouched.
+    static bool close_to(double a, double b, double tol) {
+        const double d = a - b;
+        return d < tol && d > -tol;
+    }
 
     // The combat resets used to fire from the app's own clicks and shipped with a near-instant
     // jump. A profile that still holds every old default is upgraded once to the event-driven,
@@ -241,6 +247,34 @@ public:
                near(j.cooldown_ms, 600.0) && j.forward_only && j.moving_only &&
                !j.allow_in_menu && j.use_slot_filter &&
                j.disable_in_water && j.require_on_ground;
+    }
+
+    // The balanced-pro pass: a 60 ms reaction with a 16 ms spread, a slightly shorter hold,
+    // a 450 ms cooldown and a tighter one-tick W-Tap. A profile that still matches the
+    // previous shipped defaults (including the small drift a slider leaves behind) is moved
+    // over once; an edited profile keeps its tuning.
+    static bool is_previous_jump_balanced_defaults(const JumpResetProfile& j) {
+        return close_to(j.chance, 0.90, 0.02) &&
+               close_to(j.delay_ms_mean, 80.0, 2.0) && close_to(j.delay_ms_stddev, 20.0, 2.0) &&
+               close_to(j.delay_ms_min, 45.0, 2.0) && close_to(j.delay_ms_max, 140.0, 2.0) &&
+               close_to(j.hold_ms_mean, 70.0, 2.0) && close_to(j.hold_ms_stddev, 8.0, 1.0) &&
+               close_to(j.hold_ms_min, 50.0, 2.0) && close_to(j.hold_ms_max, 95.0, 2.0) &&
+               close_to(j.cooldown_ms, 500.0, 20.0) &&
+               close_to(j.ground_grace_ms, 100.0, 10.0) &&
+               !j.forward_only && j.moving_only && !j.allow_in_menu &&
+               j.use_slot_filter && j.disable_in_water && j.require_on_ground;
+    }
+    static bool is_previous_sprint_wtap_defaults(const SprintResetProfile& s) {
+        return s.mode == SprintResetMode::W_TAP &&
+               close_to(s.chance, 0.90, 0.02) &&
+               close_to(s.delay_ms_min, 15.0, 2.0) && close_to(s.delay_ms_max, 65.0, 2.0) &&
+               close_to(s.duration_ticks_mean, 1.25, 0.02) &&
+               close_to(s.duration_ticks_stddev, 0.40, 0.02) &&
+               close_to(s.duration_ticks_min, 1.0, 0.01) &&
+               close_to(s.duration_ticks_max, 2.0, 0.01) &&
+               close_to(s.tap_jitter_ms, 12.0, 1.0) &&
+               close_to(s.cooldown_ms, 250.0, 20.0) &&
+               s.forward_only && s.use_slot_filter;
     }
 
     // Values from disk and from the command line are untrusted. A hand-edited profile could
@@ -354,6 +388,7 @@ public:
         bool combat_v3_seen = false;      // file was saved after the 85 % chance default
         bool combat_v4_seen = false;      // file was saved after the reaction-time default
         bool combat_v5_seen = false;      // file was saved after the movement-aware pro default
+        bool combat_v6_seen = false;      // file was saved after the balanced-pro default
         while (fgets(line, sizeof(line), f)) {
             char key[96];
             double val;
@@ -395,6 +430,7 @@ public:
             else if (!strcmp(key, "combat_v3_seen")) combat_v3_seen = true;
             else if (!strcmp(key, "combat_v4_seen")) combat_v4_seen = true;
             else if (!strcmp(key, "combat_v5_seen")) combat_v5_seen = true;
+            else if (!strcmp(key, "combat_v6_seen")) combat_v6_seen = true;
             else if (!strcmp(key, "macro_count")) { /* counted implicitly */ }
             else {
                 bool handled = false;
@@ -495,6 +531,27 @@ public:
             fresh.require_on_ground = cfg.jump_reset.require_on_ground;
             cfg.jump_reset = fresh;
         }
+        // The balanced-pro pass: faster reaction, shorter hold, tighter cooldown, and a
+        // one-tick W-Tap. Upgrade untouched previous defaults once; keep edited tuning.
+        if (!combat_v6_seen) {
+            if (is_previous_jump_balanced_defaults(cfg.jump_reset)) {
+                JumpResetProfile fresh;
+                fresh.forward_only = cfg.jump_reset.forward_only;
+                fresh.moving_only = cfg.jump_reset.moving_only;
+                fresh.allow_in_menu = cfg.jump_reset.allow_in_menu;
+                fresh.use_slot_filter = cfg.jump_reset.use_slot_filter;
+                fresh.disable_in_water = cfg.jump_reset.disable_in_water;
+                fresh.require_on_ground = cfg.jump_reset.require_on_ground;
+                cfg.jump_reset = fresh;
+            }
+            if (is_previous_sprint_wtap_defaults(cfg.sprint_reset)) {
+                SprintResetProfile fresh;
+                fresh.mode = cfg.sprint_reset.mode;
+                fresh.forward_only = cfg.sprint_reset.forward_only;
+                fresh.use_slot_filter = cfg.sprint_reset.use_slot_filter;
+                cfg.sprint_reset = fresh;
+            }
+        }
         // The resets never come back enabled: the clickers start switched off after a restart
         // too, and a build that starts jumping the moment it launches is the surprise this
         // avoids. The toggle is a session choice, so the old keys are read and thrown away.
@@ -542,6 +599,7 @@ public:
         fprintf(f, "combat_v3_seen 1\n");
         fprintf(f, "combat_v4_seen 1\n");
         fprintf(f, "combat_v5_seen 1\n");
+        fprintf(f, "combat_v6_seen 1\n");
         const JumpResetProfile& j = cfg.jump_reset;
         fprintf(f, "jump_reset.chance %g\n", j.chance);
         fprintf(f, "jump_reset.delay_ms_mean %g\n", j.delay_ms_mean);

@@ -360,8 +360,8 @@ reports the counters (the jar in `tools/mc-bridge` does).
   is still swinging, or the nearest one within melee reach. Projectiles are judged by the
   direction they were flying, so an arrow from behind is still a backstab. The defaults are
   tuned for a fast but human-looking
-  reaction: 90 % chance, a 100 ms reaction drawn from a right-skewed 25 ms spread (clamped to
-  60–170 ms), a 70 ms hold with an 8 ms spread (50–95 ms), and a 500 ms cooldown. It only fires
+  reaction: 92 % chance, a 60 ms reaction drawn from a right-skewed 16 ms spread (clamped to
+  35–110 ms), a 65 ms hold with a 7 ms spread (48–85 ms), and a 450 ms cooldown. It only fires
   while moving with any WASD key (**Only while moving (WASD)**, on by default); the stricter
   **Only while moving forward (W)** option narrows that to W. The two are alternatives: ticking
   one clears the other, because forward already implies moving. It respects the slot filter, stays
@@ -372,9 +372,9 @@ reports the counters (the jar in `tools/mc-bridge` does).
   it to 0 for the strict "ground now" rule.
 - **Sprint reset** briefly breaks sprint after the game reports a hit on a mob or player so the
   next hit deals full sprint knockback. It can use **W-Tap** (release W), **S-Tap** (tap S) or
-  **Shift-Tap** (tap Shift). Defaults: 90 % chance, a 15–65 ms delay, 1.25 ± 0.40 ticks clamped to
-  1–2 ticks, a 12 ms per-tap jitter so the key is not held for exactly 50 or 100 ms every time,
-  and a 400 ms cooldown. W-Tap fires while W is held, like every other mode: the "no key held"
+  **Shift-Tap** (tap Shift). Defaults: 90 % chance, a 10–55 ms delay, 1.15 ± 0.28 ticks clamped to
+  1–2 ticks, a 15 ms per-tap jitter so the key is not held for exactly 50 or 100 ms every time,
+  and a 220 ms cooldown. W-Tap fires while W is held, like every other mode: the "no key held"
   rule is only about the one-time moment the app takes the keyboard over. Hiding a W you are
   holding means forwarding every key through a virtual keyboard, and a key held across that
   switch would never deliver its release (the game would keep it stuck down), so the grab waits

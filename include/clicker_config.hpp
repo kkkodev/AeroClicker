@@ -176,22 +176,23 @@ struct Macro {
 struct JumpResetProfile {
     // 90 % keeps the reset reliable in a real fight while the occasional missed reaction is
     // what a person looks like. Sprint reset keeps its own default.
-    double chance = 0.90;
+    double chance = 0.92;
     // A trained player reacts to a hit in roughly 90-130 ms, and strafing is as normal as
     // running straight. The bridge has already spent up to one 50 ms tick reporting the hit
-    // before this delay starts, so 80 ms with a right-skewed 20 ms spread (clamped to 45-140)
-    // lands the jump about two ticks after the damage instead of three.
-    double delay_ms_mean = 80.0;
-    double delay_ms_stddev = 20.0;
-    double delay_ms_min = 45.0;
-    double delay_ms_max = 140.0;
+    // before this delay starts, so 60 ms with a right-skewed 16 ms spread (clamped to 35-110)
+    // lands the jump around 60-110 ms after the damage: fast enough to read as a top player's
+    // anticipation, still above the frame-perfect range a script would use.
+    double delay_ms_mean = 60.0;
+    double delay_ms_stddev = 16.0;
+    double delay_ms_min = 35.0;
+    double delay_ms_max = 110.0;
 
-    double hold_ms_mean = 70.0;
-    double hold_ms_stddev = 8.0;
-    double hold_ms_min = 50.0;
-    double hold_ms_max = 95.0;
+    double hold_ms_mean = 65.0;
+    double hold_ms_stddev = 7.0;
+    double hold_ms_min = 48.0;
+    double hold_ms_max = 85.0;
 
-    double cooldown_ms = 500.0;
+    double cooldown_ms = 450.0;
     // "Only while moving forward" is the strict W check; this one accepts any WASD direction,
     // which is what a player strafing or backing up actually does. They are alternatives rather
     // than layers: forward implies moving, so the UI ticks one only when the other is off.
@@ -214,24 +215,24 @@ struct JumpResetProfile {
 struct SprintResetProfile {
     SprintResetMode mode = SprintResetMode::W_TAP;
     double chance = 0.90;
-    // A random delay keeps the tap from landing on the exact tick of every hit; 15-65 ms still
+    // A random delay keeps the tap from landing on the exact tick of every hit; 10-55 ms still
     // breaks sprint before the next swing without looking frame-perfect.
-    double delay_ms_min = 15.0;
-    double delay_ms_max = 65.0;
+    double delay_ms_min = 10.0;
+    double delay_ms_max = 55.0;
 
-    double duration_ticks_mean = 1.25;
-    double duration_ticks_stddev = 0.40;
+    double duration_ticks_mean = 1.15;
+    double duration_ticks_stddev = 0.28;
     double duration_ticks_min = 1.0;
     double duration_ticks_max = 2.0;
     // Whole ticks alone make every W-Tap exactly 50 or 100 ms. A little per-tap millisecond
     // jitter keeps the release off the same sample boundary without shortening the tap below
     // the tick count the game needs to see.
-    double tap_jitter_ms = 12.0;
+    double tap_jitter_ms = 15.0;
 
     // Only a tap that already went out is blocked by this, and a real trade can come back
-    // inside 400 ms. 250 ms still sits well above the 2-tick tap itself, so it never eats a
+    // inside 400 ms. 220 ms still sits well above the 2-tick tap itself, so it never eats a
     // second real hit but still stops a burst of packets from becoming a stutter.
-    double cooldown_ms = 250.0;
+    double cooldown_ms = 220.0;
     bool forward_only = true;
     bool use_slot_filter = true;
 };
