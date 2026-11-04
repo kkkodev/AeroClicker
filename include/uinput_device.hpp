@@ -130,21 +130,25 @@ public:
     UInputKeyboard(const UInputKeyboard&) = delete;
     UInputKeyboard& operator=(const UInputKeyboard&) = delete;
 
-    void key(int code, int value) const {
-        emit(EV_KEY, code, value);
+    // False when the key event could not be queued. The caller keeps the key marked down and
+    // retries a failed release, because dropping one leaves the key stuck on the desktop.
+    bool key(int code, int value) const {
+        const bool sent = emit(EV_KEY, code, value);
         emit(EV_SYN, SYN_REPORT, 0);
+        return sent;
     }
 
 private:
-    void emit(int type, int code, int val) const {
+    bool emit(int type, int code, int val) const {
         struct input_event ev{};
         ev.type = type;
         ev.code = code;
         ev.value = val;
         for (int attempt = 0; attempt < 50; attempt++) {
-            if (write(fd_, &ev, sizeof(ev)) == (ssize_t)sizeof(ev)) return;
-            if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) return;
+            if (write(fd_, &ev, sizeof(ev)) == (ssize_t)sizeof(ev)) return true;
+            if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) return false;
             usleep(100);
         }
+        return false;
     }
 };

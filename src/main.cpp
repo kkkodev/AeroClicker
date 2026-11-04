@@ -162,15 +162,22 @@ static bool any_key_down(int fd) {
     return false;
 }
 
-// Seeds the virtual keyboard's idea of which physical keys are held. Called when the device is
-// opened and after a replug, so a key that was already down is known before W-Tap masks it.
-static void sync_key_state(int fd, VirtualKeyboard& kb) {
+// Reads the device's current key state into `down` (indexed by key code). Returns false when
+// the kernel could not answer, so a resync never mistakes a failed ioctl for "all keys up".
+static bool read_key_state(int fd, bool* down) {
     unsigned char keys[KEY_MAX / 8 + 1] = {};
-    ioctl(fd, EVIOCGKEY(sizeof(keys)), keys);
-    bool down[UInputKeyboard::MAX_CODE + 1] = {};
+    if (ioctl(fd, EVIOCGKEY(sizeof(keys)), keys) < 0) return false;
     for (int i = 0; i <= UInputKeyboard::MAX_CODE; i++)
         down[i] = keys[i / 8] & (1 << (i % 8));
-    kb.sync_physical(down);
+    return true;
+}
+
+// Seeds the virtual keyboard's idea of which physical keys are held. Called when the device is
+// opened, after a replug and after a grab handover, so a key that was already down is known
+// before W-Tap masks it.
+static void sync_key_state(int fd, VirtualKeyboard& kb) {
+    bool down[UInputKeyboard::MAX_CODE + 1] = {};
+    if (read_key_state(fd, down)) kb.sync_physical(down);
 }
 
 static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_clicker,
@@ -444,6 +451,9 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
             }
         }
         sync_mouse_device();
+        // A release the kernel refused earlier is retried here instead of being lost: a dropped
+        // key-up is what makes the game keep walking after the key is already up.
+        if (combat) combat->keyboard.retry_owed();
 
         // Mirror the Settings toggles into the modules. The F9/F10 hotkeys write the config
         // too, so this is the single place the live state follows.
@@ -474,10 +484,19 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                         }
                     }
                 } else {
-                    combat->keyboard.set_forwarding(false);
-                    ioctl(kb_fd, EVIOCGRAB, 0);
-                    kb_grabbed = false;
-                    printf("  Keyboard released\n");
+                    // Clear any release the kernel refused before handing the device back,
+                    // then confirm once more that nothing is down: a key pressed between the
+                    // outer check and here is still arriving through the grab.
+                    combat->keyboard.retry_owed();
+                    if (!any_key_down(kb_fd)) {
+                        combat->keyboard.set_forwarding(false);
+                        ioctl(kb_fd, EVIOCGRAB, 0);
+                        kb_grabbed = false;
+                        // The grab is gone, so bring the mirror back in line with the device
+                        // before the next grab decides what is held.
+                        sync_key_state(kb_fd, combat->keyboard);
+                        printf("  Keyboard released\n");
+                    }
                 }
             }
         }
@@ -635,6 +654,16 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
 
         if (fds[0].revents & POLLIN) {
             while (read(kb_fd, &ev, sizeof(ev)) == sizeof(ev)) {
+                // A dropped event cannot be recovered from the stream, but the device still
+                // knows which keys are down. Reconcile against that instead of trusting a
+                // half-delivered press/release pair: a missing release is a stuck key.
+                if (ev.type == EV_SYN) {
+                    if (ev.code == SYN_DROPPED && combat) {
+                        bool down[UInputKeyboard::MAX_CODE + 1] = {};
+                        if (read_key_state(kb_fd, down)) combat->keyboard.resync(down);
+                    }
+                    continue;
+                }
                 if (ev.type != EV_KEY) continue;
 
                 // Keep the physical-key mirror current and, while W-Tap has the keyboard
@@ -653,6 +682,11 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                 // Combat reset toggles. They write the config so the Settings checkbox and the
                 // next config save agree with the live state.
                 handle_reset_key(ev.code, ev.value);
+                // A toggle press is a good moment to clear a movement key the game may still
+                // hold after missing its release (a common start-of-match hitch).
+                if ((left_key || right_key || jump_key || sprint_key) &&
+                    ev.value == 1 && combat)
+                    combat->keyboard.release_unheld();
                 // A key that belongs to a clicker or a combat reset is not also a macro key.
                 if (!left_key && !right_key && !jump_key && !sprint_key && ev.value == 1 &&
                     config.macros_enabled && !gui_state.in_menu) {
@@ -684,6 +718,10 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                     // Mouse buttons can toggle the resets too, whether or not the device is
                     // grabbed; the grab only decides forwarding below.
                     handle_reset_key(ev.code, ev.value);
+                    // Same as the keyboard path: a toggle is a safe point to clear a movement
+                    // key the game kept down after missing its release.
+                    if (is_bound_toggle && ev.value == 1 && combat)
+                        combat->keyboard.release_unheld();
 
                     // Hotkey-only session (device not grabbed): the compositor already
                     // delivers these events, so never forward or re-inject them — doing so

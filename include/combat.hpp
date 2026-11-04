@@ -108,12 +108,55 @@ class VirtualKeyboard {
     bool physical_[N] = {};
     bool virtual_[N] = {};
     bool masked_[N] = {};
+    // A release that could not be queued. The key stays marked down in virtual_ and is retried
+    // until the kernel accepts it: a lost release is exactly what leaves a movement key stuck.
+    bool owed_release_[N] = {};
+    int owed_count_ = 0;
+    // Keys this layer has pressed at least once. Used to re-assert key-up without spraying
+    // releases for the whole 255-key range.
+    bool ever_down_[N] = {};
     bool forwarding_ = false;
 
-    void set(int code, bool down) {
-        if (virtual_[code] == down) return;
-        dev_.key(code, down ? 1 : 0);
+    // Must be called with mu_ held.
+    bool set(int code, bool down) {
+        if (virtual_[code] == down) {
+            // Pressing a key supersedes a release that was still owed for it.
+            if (down && owed_release_[code]) {
+                owed_release_[code] = false;
+                owed_count_--;
+            }
+            return true;
+        }
+        if (!dev_.key(code, down ? 1 : 0)) {
+            if (!down && !owed_release_[code]) {
+                owed_release_[code] = true;
+                owed_count_++;
+            }
+            return false;
+        }
         virtual_[code] = down;
+        if (down) ever_down_[code] = true;
+        if (owed_release_[code]) {
+            // The key is now in the state we wanted, so the release debt is settled.
+            owed_release_[code] = false;
+            owed_count_--;
+        }
+        return true;
+    }
+
+    // Must be called with mu_ held.
+    void flush_owed_locked() {
+        if (owed_count_ == 0) return;
+        for (int i = 1; i < N; i++) {
+            if (!owed_release_[i]) continue;
+            if (virtual_[i]) set(i, false);
+            else if (dev_.key(i, 0)) {
+                // A phantom release (release_unheld) is not tracked in virtual_, so clear
+                // the debt here once the kernel accepts it.
+                owed_release_[i] = false;
+                owed_count_--;
+            }
+        }
     }
 
 public:
@@ -121,9 +164,18 @@ public:
         if (code <= 0 || code >= N) return;
         std::lock_guard<std::mutex> lock(mu_);
         physical_[code] = value != 0;
+        if (value != 0 && owed_release_[code]) {
+            // The key is held again, so a release that was still owed is stale.
+            owed_release_[code] = false;
+            owed_count_--;
+        }
         if (!forwarding_ || masked_[code]) return;
         if (value == 2) {
+            // A repeat means the key is still held. If the original press never made it out
+            // (a full queue), use the repeat to try again rather than leaving the game deaf
+            // to a key that is still down.
             if (virtual_[code]) dev_.key(code, 2);
+            else set(code, true);
         } else {
             set(code, value != 0);
         }
@@ -134,15 +186,58 @@ public:
         for (int i = 1; i < N; i++) physical_[i] = down[i];
     }
 
+    // The kernel's event queue overflowed (SYN_DROPPED), so events between the last one read
+    // and now are gone. The device's key state is still authoritative: mirror it and make the
+    // virtual keyboard agree again, because a missed release would leave the key held and a
+    // missed press would leave the game deaf to a key that is still down.
+    void resync(const bool* down) {
+        std::lock_guard<std::mutex> lock(mu_);
+        for (int i = 1; i < N; i++) {
+            physical_[i] = down[i];
+            if (!forwarding_ || masked_[i]) continue;
+            if (virtual_[i] != down[i]) set(i, down[i]);
+        }
+    }
+
     bool physical(int code) {
         std::lock_guard<std::mutex> lock(mu_);
         return code > 0 && code < N && physical_[code];
     }
 
+    // Retry any release the kernel refused earlier. Called between polls, so a transient full
+    // uinput queue costs at most one iteration instead of a permanently stuck key.
+    void retry_owed() {
+        std::lock_guard<std::mutex> lock(mu_);
+        flush_owed_locked();
+    }
+
+    // Re-send key-up for keys this layer has forwarded and no longer holds anything on. A game
+    // can lose a release during a hitch and keep moving on a key that is already up; a
+    // redundant release is harmless, so a toggle press is a safe moment to clear that phantom.
+    // A key the user is still holding (physical_) and a key a module is holding (virtual_) are
+    // left alone.
+    void release_unheld() {
+        std::lock_guard<std::mutex> lock(mu_);
+        if (!forwarding_) return;
+        for (int i = 1; i < N; i++) {
+            if (!ever_down_[i] || physical_[i] || virtual_[i]) continue;
+            if (!dev_.key(i, 0) && !owed_release_[i]) {
+                owed_release_[i] = true;
+                owed_count_++;
+            }
+        }
+    }
+
     void set_forwarding(bool v) {
         std::lock_guard<std::mutex> lock(mu_);
-        if (!v)
-            for (int i = 1; i < N; i++) set(i, false);
+        if (!v) {
+            // A mask hides a key from the game, so it must not survive the handover: the next
+            // grab starts from the physical state again.
+            for (int i = 1; i < N; i++) masked_[i] = false;
+            for (int i = 1; i < N; i++)
+                if (virtual_[i]) set(i, false);
+            flush_owed_locked();
+        }
         forwarding_ = v;
     }
 

@@ -206,7 +206,10 @@ private:
                 next_press = press_at + std::chrono::nanoseconds(interval_ns);
                 click_count_++;
                 wait_ns(hold_ns);
-                device_.click(profile_.mouse_button, 0);
+                // Release the button that was pressed. Reading the live profile here would
+                // send the release to a different button if the setting changed mid-click,
+                // leaving the pressed one held down forever.
+                device_.click(cfg->mouse_button, 0);
 
                 // Real press-to-press rate. The first click after a start, pause or break has
                 // no predecessor, so it reports the target instead of a multi-second gap.
@@ -234,7 +237,7 @@ private:
                         last_press = clock::now();
                         click_count_++;
                         wait_ns(dbl_hold);
-                        device_.click(profile_.mouse_button, 0);
+                        device_.click(cfg->mouse_button, 0);
                         // The second click starts its own cycle, so it does not turn the next
                         // scheduled click into a burst.
                         next_press = last_press + std::chrono::nanoseconds(interval_ns);
