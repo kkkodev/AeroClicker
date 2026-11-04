@@ -1242,10 +1242,12 @@ bool row_check(const char* label, bool* v, bool disabled) {
     // sat 5 px closer to the text above than to the text below. A few pixels reserved at the
     // top of the row balance the two gaps. Only a text line gets it: after a framed control the
     // usual spacing is already right, and checkboxes stacked under each other stay compact.
+    // A zero-height item is the spacer that ends a panel header, so the first checkbox in a
+    // card is treated the same way instead of sitting tight under the header icon.
     // Checkboxes placed at a fixed position (the slot grid) or on a SameLine go through
     // oxygen_checkbox directly and must keep their exact top edge.
     ImVec2 prev = ImGui::GetItemRectSize();
-    if (prev.y > 0.0f && prev.y <= ImGui::GetFontSize() + 1.0f) {
+    if (prev.y <= ImGui::GetFontSize() + 1.0f) {
         ImVec2 p = ImGui::GetCursorScreenPos();
         ImGui::SetCursorScreenPos(ImVec2(p.x, p.y + CHECK_TOP_PAD));
     }
@@ -1447,27 +1449,34 @@ void begin_panel(const char* label, float width, int status, OxIcon icon) {
         float r = 5.0f;
         ImVec2 c(start.x + panel_w - PANEL_PAD - r, (hmn.y + hmx.y) * 0.5f);
         const bool L = ox_is_light();
-        if (status == 2) {
-            // Paused: switched on, but not clicking (pointer on this window, or a game screen
-            // is open). Amber, so it cannot be mistaken for the green running dot.
-            dl->AddCircleFilled(c, r + 3.5f, IM_COL32(214, 158, 46, L ? 20 : 38));
-            dl->AddCircleFilled(c, r + 1.5f, IM_COL32(232, 176, 64, L ? 38 : 66));
-            dl->AddCircleFilled(c, r,        IM_COL32(214, 158, 46, 255));
-            dl->AddCircle(c, r, L ? IM_COL32(140, 100, 24, 210) : IM_COL32(246, 214, 140, 200), 0, 1.0f);
-            dl->AddCircleFilled(ImVec2(c.x - r * 0.30f, c.y - r * 0.35f), r * 0.45f, IM_COL32(255, 255, 255, L ? 110 : 90));
-        } else if (status) {
-            // Softer halo in light mode: the old 40/70 alpha rings smear into a green blur.
-            dl->AddCircleFilled(c, r + 3.5f, IM_COL32(46, 148, 84, L ? 22 : 40));
-            dl->AddCircleFilled(c, r + 1.5f, IM_COL32(70, 190, 110, L ? 40 : 70));
-            dl->AddCircleFilled(c, r,        IM_COL32(52, 168, 96, 255));
-            dl->AddCircle(c, r, L ? IM_COL32(28, 104, 58, 210) : IM_COL32(150, 230, 180, 200), 0, 1.0f);
-            dl->AddCircleFilled(ImVec2(c.x - r * 0.30f, c.y - r * 0.35f), r * 0.45f, IM_COL32(255, 255, 255, L ? 110 : 90));
-        } else {
-            // White alpha rings are invisible on a light panel — use a grey ring instead.
-            dl->AddCircleFilled(c, r, L ? OxCol(lerp4(g_body_color, g_text_color, 0.18f), 70) : IM_COL32(255, 255, 255, 26));
-            dl->AddCircle(c, r, L ? OxCol(lerp4(g_body_color, g_text_color, 0.45f), 190) : IM_COL32(255, 255, 255, 70), 0, 1.0f);
-            dl->AddCircleFilled(ImVec2(c.x - r * 0.30f, c.y - r * 0.35f), r * 0.45f, IM_COL32(255, 255, 255, L ? 70 : 24));
-        }
+        // Ease between off, running and paused like the click pills: the dot is the at-a-glance
+        // state of the whole card, so it must not snap while everything around it is catching up.
+        const ImGuiID dot = ImGui::GetID("##panel_status");
+        const float t_on = widget_anim(dot, status == 1);
+        const float t_amb = widget_anim(dot + 1, status == 2);
+        auto mix3 = [](ImU32 off, ImU32 on_c, ImU32 amb, float a, float b) {
+            return lerp_u32(lerp_u32(off, on_c, a), amb, b);
+        };
+        const ImU32 halo1 = mix3(IM_COL32(46, 148, 84, 0), IM_COL32(46, 148, 84, L ? 22 : 40),
+                                 IM_COL32(214, 158, 46, L ? 20 : 38), t_on, t_amb);
+        const ImU32 halo2 = mix3(IM_COL32(70, 190, 110, 0), IM_COL32(70, 190, 110, L ? 40 : 70),
+                                 IM_COL32(232, 176, 64, L ? 38 : 66), t_on, t_amb);
+        const ImU32 core = mix3(L ? OxCol(lerp4(g_body_color, g_text_color, 0.18f), 70)
+                                  : IM_COL32(255, 255, 255, 26),
+                                IM_COL32(52, 168, 96, 255), IM_COL32(214, 158, 46, 255), t_on, t_amb);
+        const ImU32 rim = mix3(L ? OxCol(lerp4(g_body_color, g_text_color, 0.45f), 190)
+                                 : IM_COL32(255, 255, 255, 70),
+                               L ? IM_COL32(28, 104, 58, 210) : IM_COL32(150, 230, 180, 200),
+                               L ? IM_COL32(140, 100, 24, 210) : IM_COL32(246, 214, 140, 200),
+                               t_on, t_amb);
+        const ImU32 shine = mix3(IM_COL32(255, 255, 255, L ? 70 : 24),
+                                 IM_COL32(255, 255, 255, L ? 110 : 90),
+                                 IM_COL32(255, 255, 255, L ? 110 : 90), t_on, t_amb);
+        dl->AddCircleFilled(c, r + 3.5f, halo1);
+        dl->AddCircleFilled(c, r + 1.5f, halo2);
+        dl->AddCircleFilled(c, r, core);
+        dl->AddCircle(c, r, rim, 0, 1.0f);
+        dl->AddCircleFilled(ImVec2(c.x - r * 0.30f, c.y - r * 0.35f), r * 0.45f, shine);
     }
 
     ImGui::Dummy(ImVec2(s_panel_inner, 0.0f));
