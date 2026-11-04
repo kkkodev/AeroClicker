@@ -839,6 +839,53 @@ bool oxygen_field_button(const char* label, ImVec2 size_arg, bool armed) {
     return clicked;
 }
 
+bool oxygen_disclosure(const char* label, bool default_open) {
+    const float R = OXY_R;
+    const char* tend = strstr(label, "##");
+    ImGuiID id = ImGui::GetID(label);
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+    bool open = storage->GetBool(id, default_open);
+
+    const float h = ImGui::GetFrameHeight();
+    // Panels give this row their full inner width so it reads as the section's own header
+    // rather than a small button floating above the controls.
+    float w = s_panel_inner > 0.0f ? s_panel_inner : ImGui::GetContentRegionAvail().x;
+    if (w < 1.0f) w = 1.0f;
+    ImVec2 mn = ImGui::GetCursorScreenPos();
+    ImVec2 mx(mn.x + w, mn.y + h);
+    if (ImGui::InvisibleButton(label, ImVec2(w, h))) {
+        open = !open;
+        storage->SetBool(id, open);
+    }
+
+    const bool hov = ImGui::IsItemHovered();
+    const float t_h = widget_anim(id + 1, hov);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    field_background(dl, mn, mx, R, true);
+    if (t_h > 0.01f)
+        ox_outline(dl, mn, mx, R,
+                   lerp_u32(IM_COL32(0, 0, 0, 0), ox_accent_rim(), t_h));
+
+    ImVec2 a = crisp_min(mn), b = crisp_max(mx);
+    const float cy = (a.y + b.y) * 0.5f;
+    const float ax = a.x + ImGui::GetStyle().FramePadding.x + 5.0f;
+    const ImU32 arrow = lerp_u32(ox_text_dim(), ImGui::GetColorU32(ImGuiCol_Text), t_h);
+    const float as = 4.5f;
+    // Closed points right, open points down, like the combos elsewhere.
+    if (open)
+        dl->AddTriangleFilled(ImVec2(ax - as, cy - as * 0.55f),
+                              ImVec2(ax + as, cy - as * 0.55f),
+                              ImVec2(ax, cy + as * 0.75f), arrow);
+    else
+        dl->AddTriangleFilled(ImVec2(ax - as * 0.55f, cy - as),
+                              ImVec2(ax - as * 0.55f, cy + as),
+                              ImVec2(ax + as * 0.75f, cy), arrow);
+
+    dl->AddText(ImVec2(ax + as + 7.0f, vcenter_top(a.y, b.y)),
+                ImGui::GetColorU32(ImGuiCol_Text), label, tend ? tend : nullptr);
+    return open;
+}
+
 // ---------- checkbox ----------
 
 bool oxygen_checkbox(const char* label, bool* v, bool label_clickable, bool disabled) {

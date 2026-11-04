@@ -34,6 +34,9 @@ bool combo_framed(const char* id, int* idx, const char* items);
 void field_background(ImDrawList* dl, ImVec2 r0, ImVec2 r1, float rounding, bool border = true, int fill_alpha = 230);
 void field_gloss_last_item();
 bool oxygen_field_button(const char* label, ImVec2 size_arg = ImVec2(0, 0), bool armed = false);
+// Full-width disclosure row ("Advanced"): returns the open state and toggles it when clicked.
+// The state lives in ImGui's storage, so a collapsible section keeps its open/closed state.
+bool oxygen_disclosure(const char* label, bool default_open = false);
 ImVec2 click_indicator_size(const char* label);
 
 // table-style rows (label left, control right) — for wide panels
