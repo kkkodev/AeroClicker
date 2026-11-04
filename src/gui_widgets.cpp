@@ -870,15 +870,16 @@ bool oxygen_disclosure(const char* label, bool default_open) {
     const float cy = (a.y + b.y) * 0.5f;
     const float ax = a.x + ImGui::GetStyle().FramePadding.x + 8.0f;
     const ImU32 arrow = lerp_u32(ox_text_dim(), ImGui::GetColorU32(ImGuiCol_Text), t_h);
-    // Both states use a triangle inscribed in the same square, so expanding the section does
-    // not make the arrow look any wider than it does closed.
-    const float aw = 3.5f, ah = 3.5f;
+    // Both states are horizontal triangles of the same width, so the arrow never changes size
+    // when the section expands (a rotated icon is always wider on one axis). The shallow angle
+    // also rasterizes cleanly, unlike a tall narrow triangle.
+    const float aw = 6.0f, ah = 3.0f;
     if (open)
         dl->AddTriangleFilled(ImVec2(ax - aw, cy + ah), ImVec2(ax + aw, cy + ah),
                               ImVec2(ax, cy - ah), arrow);
     else
-        dl->AddTriangleFilled(ImVec2(ax - aw, cy - ah), ImVec2(ax - aw, cy + ah),
-                              ImVec2(ax + aw, cy), arrow);
+        dl->AddTriangleFilled(ImVec2(ax - aw, cy - ah), ImVec2(ax + aw, cy - ah),
+                              ImVec2(ax, cy + ah), arrow);
 
     dl->AddText(ImVec2(ax + aw + 7.0f, vcenter_top(a.y, b.y)),
                 ImGui::GetColorU32(ImGuiCol_Text), label, tend ? tend : nullptr);

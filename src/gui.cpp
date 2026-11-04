@@ -338,14 +338,17 @@ static void draw_home_tab(GuiState& state) {
     }
 
     // Combat resets get their own row of cards, matching the clickers. They are driven by the
-    // bridge mod's hurt and attack events, so they stay off (and inert) when it is not running.
-    ImGui::SetCursorScreenPos(ImVec2(c0.x, y));
-    draw_combat_card(state, true, card_w);
-    float y_jump = ImGui::GetCursorScreenPos().y;
-    ImGui::SetCursorScreenPos(ImVec2(c0.x + card_w + gap, y));
-    draw_combat_card(state, false, card_w);
-    float y_sprint = ImGui::GetCursorScreenPos().y;
-    y = y_jump > y_sprint ? y_jump : y_sprint;
+    // bridge mod's hurt and attack events, so the whole row is hidden until the link is live:
+    // without it the cards could only ever say "waiting" and could not fire.
+    if (state.mc_linked.load()) {
+        ImGui::SetCursorScreenPos(ImVec2(c0.x, y));
+        draw_combat_card(state, true, card_w);
+        float y_jump = ImGui::GetCursorScreenPos().y;
+        ImGui::SetCursorScreenPos(ImVec2(c0.x + card_w + gap, y));
+        draw_combat_card(state, false, card_w);
+        float y_sprint = ImGui::GetCursorScreenPos().y;
+        y = y_jump > y_sprint ? y_jump : y_sprint;
+    }
 
     const char* tip = "Tip: press the toggle key anywhere in-game to start or stop clicking.";
     ImVec2 ts = ImGui::CalcTextSize(tip, nullptr, true);
