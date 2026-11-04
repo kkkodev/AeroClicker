@@ -678,6 +678,18 @@ static void draw_mod_tab(GuiState& state) {
     }
     if (state.config.jump_reset_enabled) {
         JumpResetProfile& j = state.config.jump_reset;
+        // A movement filter is an alternative, not a layer: "forward" already implies moving,
+        // so ticking one clears the other instead of leaving a redundant pair checked.
+        if (row_check("Only while moving (WASD)", &j.moving_only) && j.moving_only)
+            j.forward_only = false;
+        if (row_check("Only while moving forward (W)", &j.forward_only) && j.forward_only)
+            j.moving_only = false;
+        row_check("Allow while a game menu is open", &j.allow_in_menu);
+        row_check("Respect the slot filter", &j.use_slot_filter);
+        row_check("Do not jump while in water", &j.disable_in_water);
+        row_check("Only jump while on the ground", &j.require_on_ground);
+        // The tuning numbers are the only part that belongs behind Advanced; the filters above
+        // stay visible because they change what the module does, not just how it feels.
         if (oxygen_disclosure("Advanced##jump_reset")) {
             row_slider("Chance", &j.chance, 0.0, 1.0, "%.2f");
             row_slider("Delay Mean (ms)", &j.delay_ms_mean, 0.0, 300.0, "%.0f");
@@ -689,26 +701,15 @@ static void draw_mod_tab(GuiState& state) {
             row_slider("Hold Min (ms)", &j.hold_ms_min, 10.0, 150.0, "%.0f");
             row_slider("Hold Max (ms)", &j.hold_ms_max, 20.0, 300.0, "%.0f");
             row_slider("Cooldown (ms)", &j.cooldown_ms, 0.0, 2000.0, "%.0f");
-            // A movement filter is an alternative, not a layer: "forward" already implies
-            // moving, so ticking one clears the other instead of leaving a redundant pair
-            // checked.
-            if (row_check("Only while moving (WASD)", &j.moving_only) && j.moving_only)
-                j.forward_only = false;
-            if (row_check("Only while moving forward (W)", &j.forward_only) && j.forward_only)
-                j.moving_only = false;
-            row_check("Allow while a game menu is open", &j.allow_in_menu);
-            row_check("Respect the slot filter", &j.use_slot_filter);
-            row_check("Do not jump while in water", &j.disable_in_water);
-            row_check("Only jump while on the ground", &j.require_on_ground);
             if (j.require_on_ground) {
                 row_slider("Jump Grace (ms)", &j.ground_grace_ms, 0.0, 300.0, "%.0f");
                 ImGui::TextDisabled("Still counts a hit that lifted you off the floor this recently");
             }
-            if (live && !state.mc_water_known.load())
-                ImGui::TextDisabled("This mod build cannot report water");
-            else if (live && !state.mc_ground_known.load())
-                ImGui::TextDisabled("This mod build cannot report the ground");
         }
+        if (live && !state.mc_water_known.load())
+            ImGui::TextDisabled("This mod build cannot report water");
+        else if (live && !state.mc_ground_known.load())
+            ImGui::TextDisabled("This mod build cannot report the ground");
     }
     end_panel();
 
@@ -751,6 +752,10 @@ static void draw_mod_tab(GuiState& state) {
         } else {
             ImGui::TextDisabled("Release every key once so W-Tap can take over the keyboard");
         }
+        row_check("Only while moving forward", &s.forward_only);
+        row_check("Respect the slot filter", &s.use_slot_filter);
+        // Only the tap tuning is advanced; the filters above stay visible because they change
+        // whether the reset applies at all.
         if (oxygen_disclosure("Advanced##sprint_reset")) {
             row_slider("Chance", &s.chance, 0.0, 1.0, "%.2f");
             row_slider("Delay Min (ms)", &s.delay_ms_min, 0.0, 100.0, "%.0f");
@@ -761,8 +766,6 @@ static void draw_mod_tab(GuiState& state) {
             row_slider("Ticks Max", &s.duration_ticks_max, 1.0, 3.0, "%.0f");
             row_slider("Tap Jitter (ms)", &s.tap_jitter_ms, 0.0, 40.0, "%.0f");
             row_slider("Cooldown (ms)", &s.cooldown_ms, 0.0, 2000.0, "%.0f");
-            row_check("Only while moving forward", &s.forward_only);
-            row_check("Respect the slot filter", &s.use_slot_filter);
         }
     }
     end_panel();

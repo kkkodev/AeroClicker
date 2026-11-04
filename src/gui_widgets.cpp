@@ -868,20 +868,19 @@ bool oxygen_disclosure(const char* label, bool default_open) {
 
     ImVec2 a = crisp_min(mn), b = crisp_max(mx);
     const float cy = (a.y + b.y) * 0.5f;
-    const float ax = a.x + ImGui::GetStyle().FramePadding.x + 5.0f;
+    const float ax = a.x + ImGui::GetStyle().FramePadding.x + 8.0f;
     const ImU32 arrow = lerp_u32(ox_text_dim(), ImGui::GetColorU32(ImGuiCol_Text), t_h);
-    const float as = 4.5f;
-    // Closed points right, open points down, like the combos elsewhere.
+    // Same proportions as the combo arrows: a wide, flat triangle reads cleanly at this size,
+    // while a tall narrow one only fills a few pixels and looks clipped.
+    const float aw = 5.5f, ah = 2.75f;
     if (open)
-        dl->AddTriangleFilled(ImVec2(ax - as, cy - as * 0.55f),
-                              ImVec2(ax + as, cy - as * 0.55f),
-                              ImVec2(ax, cy + as * 0.75f), arrow);
+        dl->AddTriangleFilled(ImVec2(ax - aw, cy + ah), ImVec2(ax + aw, cy + ah),
+                              ImVec2(ax, cy - ah), arrow);
     else
-        dl->AddTriangleFilled(ImVec2(ax - as * 0.55f, cy - as),
-                              ImVec2(ax - as * 0.55f, cy + as),
-                              ImVec2(ax + as * 0.75f, cy), arrow);
+        dl->AddTriangleFilled(ImVec2(ax - aw, cy - ah), ImVec2(ax + aw, cy - ah),
+                              ImVec2(ax, cy + ah), arrow);
 
-    dl->AddText(ImVec2(ax + as + 7.0f, vcenter_top(a.y, b.y)),
+    dl->AddText(ImVec2(ax + aw + 7.0f, vcenter_top(a.y, b.y)),
                 ImGui::GetColorU32(ImGuiCol_Text), label, tend ? tend : nullptr);
     return open;
 }
