@@ -53,11 +53,37 @@ static ImGuiID s_panel_hid = 0;
 
 void set_big_font(ImFont* font) { g_font_big = font; }
 
-// Control placement for row layout. The control follows the label on that row, and both stay
-// inside the panel's padded content box.
+// Control placement for row layout. Every row in a panel uses one shared column, sized to the
+// widest label in that panel plus COL_GAP. The width is the previous frame's maximum, so the
+// column is uniform while it grows to fit a label that is shown for the first time (rather than
+// dropping back to the old fixed 118 px and leaving a hole after short labels).
 static float ctrl_right() { return s_panel_x + PANEL_PAD + s_panel_inner; }
+static float row_label_col(const char* label) {
+    const float tw = ImGui::CalcTextSize(label, nullptr, true).x;
+    ImGuiStorage* st = ImGui::GetStateStorage();
+    const ImGuiID key  = ImGui::GetID("##row_label_col");
+    const ImGuiID k_nx = ImGui::GetID("##row_label_next");
+    const ImGuiID k_fr = ImGui::GetID("##row_label_frame");
+    const int frame = ImGui::GetFrameCount();
+    const int seen = st->GetInt(k_fr, -1);
+    float width, next;
+    if (seen != frame) {
+        // First row of this panel this frame: use what the whole panel measured last frame.
+        width = st->GetFloat(k_nx, tw);
+        next = tw;
+        st->SetInt(k_fr, frame);
+    } else {
+        width = st->GetFloat(key, tw);
+        next = st->GetFloat(k_nx, tw);
+    }
+    if (tw > next) next = tw;
+    if (tw > width) width = tw;   // a newly revealed longer label never runs under the control
+    st->SetFloat(key, width);
+    st->SetFloat(k_nx, next);
+    return width;
+}
 static float ctrl_x_for(const char* label, float start_x) {
-    return start_x + ImGui::CalcTextSize(label, nullptr, true).x + COL_GAP;
+    return start_x + row_label_col(label) + COL_GAP;
 }
 
 // ---------- low-level draw helpers ----------
@@ -1352,9 +1378,8 @@ void keybind_row(const char* label, int& key_code) {
     ImGui::AlignTextToFramePadding();
     ImVec2 start = ImGui::GetCursorScreenPos();
     ImGui::TextUnformatted(label);
-    float lw = ImGui::CalcTextSize(label, nullptr, true).x;
-    // button sits right after the label text instead of at the fixed 118px column
-    ImGui::SetCursorScreenPos(ImVec2(start.x + lw + ImGui::GetStyle().ItemSpacing.x, start.y));
+    // Same column as the sliders and combos in this panel, so the whole card lines up.
+    ImGui::SetCursorScreenPos(ImVec2(ctrl_x_for(label, start.x), start.y));
     char buf[64]; keybind_label_buf(buf, sizeof(buf), label, key_code);
     if (oxygen_field_button(buf, ImVec2(140, 0), g_binding_target == &key_code)) begin_binding(key_code);
 }
@@ -1582,45 +1607,55 @@ bool click_indicator(const char* label, bool on, bool paused) {
     ImGui::PushID(label);
     bool clicked = ImGui::InvisibleButton("##pill", sz);
     const bool hov = ImGui::IsItemHovered();
-    float t_h = widget_anim(ImGui::GetID("##pill"), hov);
+    const ImGuiID pid = ImGui::GetID("##pill");
+    const float t_h = widget_anim(pid, hov);
+    // The state colours ease instead of snapping: these pills are read at a glance, and an
+    // instant jump between off, on and paused reads as a glitch even when the click landed.
+    const float t_on = widget_anim(pid + 1, on);
+    const bool amber = on && paused;
+    const float t_amb = widget_anim(pid + 2, amber);
     ImGui::PopID();
     const bool L = ox_is_light();
     // Amber means "on but held back": an open game screen or the pointer on this window. The
     // same colour as the paused dot on the cards, so the top bar and the card agree.
-    const bool amber = on && paused;
-    // Dark-theme fills; the light theme draws a vertical ramp in both states (a flat pale
-    // fill plus a white gloss reads as "no gradient" on an already light background).
-    const ImU32 fill_on  = amber ? IM_COL32(190, 136, 34, 235) : IM_COL32(46, 148, 84, 235);
-    const ImU32 rim_on   = amber ? (L ? IM_COL32(104, 70, 10, 230) : IM_COL32(248, 212, 132, 165))
-                                 : (L ? IM_COL32(24, 86, 48, 230) : IM_COL32(150, 230, 180, 160));
-    const ImU32 text_on  = amber ? IM_COL32(255, 248, 228, 255)
-                                 : (L ? IM_COL32(245, 255, 248, 255) : IM_COL32(235, 255, 242, 255));
-    const ImU32 rim_off  = L ? OxCol(lerp4(g_body_color, g_text_color, 0.42f), 200) : IM_COL32(255, 255, 255, 45);
-    const ImU32 text_off = L ? OxCol(lerp4(g_body_color, g_text_color, 0.68f)) : IM_COL32(200, 212, 228, 150);
-    ImVec2 cmn = crisp_min(mn), cmx = crisp_max(mx);
+    auto mix3 = [](ImU32 off, ImU32 on_c, ImU32 amb, float a, float b) {
+        return lerp_u32(lerp_u32(off, on_c, a), amb, b);
+    };
+    // A vertical ramp in every state: a flat fill plus the white gloss read as "no gradient" on
+    // a light background, and the dark off pill needs the ramp not to look like a dead slab.
+    ImU32 fill_top, fill_bot, rim, text;
+    float gloss_a;
     if (L) {
-        ImU32 top_c = on ? (amber ? IM_COL32(226, 176, 66, 255) : IM_COL32(80, 186, 120, 255))
-                         : OxCol(ox_tint(g_body_color, 0.80f));
-        ImU32 bot_c = on ? (amber ? IM_COL32(162, 108, 16, 255) : IM_COL32(32, 118, 62, 255))
-                         : OxCol(ox_tint(g_body_color, 0.14f));
-        AddRoundedRectFilledGradV(dl, cmn, cmx, top_c, bot_c, r);
-        glass_gloss(dl, cmn, cmx, r, cmn.y + sz.y * 0.55f, on ? 84 : 64);
-    } else if (on) {
-        dl->AddRectFilled(cmn, cmx, fill_on, r);
-        glass_gloss(dl, cmn, cmx, r, cmn.y + sz.y * 0.55f, 70);
+        fill_top = mix3(OxCol(ox_tint(g_body_color, 0.80f)), IM_COL32(80, 186, 120, 255),
+                        IM_COL32(226, 176, 66, 255), t_on, t_amb);
+        fill_bot = mix3(OxCol(ox_tint(g_body_color, 0.14f)), IM_COL32(32, 118, 62, 255),
+                        IM_COL32(162, 108, 16, 255), t_on, t_amb);
+        gloss_a = 64.0f + 20.0f * t_on;
+        rim = mix3(OxCol(lerp4(g_body_color, g_text_color, 0.42f), 200), IM_COL32(24, 86, 48, 230),
+                   IM_COL32(104, 70, 10, 230), t_on, t_amb);
+        text = mix3(OxCol(lerp4(g_body_color, g_text_color, 0.68f)), IM_COL32(245, 255, 248, 255),
+                    IM_COL32(255, 248, 228, 255), t_on, t_amb);
     } else {
-        // White-at-low-alpha over a near-black panel; a single flat alpha (no gloss) read as a
-        // dead grey slab, so ramp it top->bottom like the other pills.
-        AddRoundedRectFilledGradV(dl, cmn, cmx, IM_COL32(255, 255, 255, 34),
-                                  IM_COL32(255, 255, 255, 6), r);
-        glass_gloss(dl, cmn, cmx, r, cmn.y + sz.y * 0.55f, 42);
+        fill_top = mix3(IM_COL32(255, 255, 255, 34), IM_COL32(46, 148, 84, 235),
+                        IM_COL32(190, 136, 34, 235), t_on, t_amb);
+        fill_bot = mix3(IM_COL32(255, 255, 255, 6), IM_COL32(46, 148, 84, 235),
+                        IM_COL32(190, 136, 34, 235), t_on, t_amb);
+        gloss_a = 42.0f + 28.0f * t_on;
+        rim = mix3(IM_COL32(255, 255, 255, 45), IM_COL32(150, 230, 180, 160),
+                   IM_COL32(248, 212, 132, 165), t_on, t_amb);
+        text = mix3(IM_COL32(200, 212, 228, 150), IM_COL32(235, 255, 242, 255),
+                    IM_COL32(255, 248, 228, 255), t_on, t_amb);
     }
+    ImVec2 cmn = crisp_min(mn), cmx = crisp_max(mx);
+    AddRoundedRectFilledGradV(dl, cmn, cmx, fill_top, fill_bot, r);
+    glass_gloss(dl, cmn, cmx, r, cmn.y + sz.y * 0.55f, (int)gloss_a);
     if (t_h > 0.01f)
         dl->AddRectFilled(cmn, cmx, IM_COL32(255, 255, 255, (int)((L ? 26.0f : 20.0f) * t_h)), r);
-    ImU32 rim = on ? rim_on : rim_off;
-    if (t_h > 0.01f) rim = lerp_u32(rim, ox_accent_rim(), t_h);
+    // Hovering an ON pill used to repaint its rim with the accent, which hid the green/amber
+    // state cue. The fill overlay already shows hover, so an on pill keeps its state colour.
+    if (t_h > 0.01f && t_on < 0.5f) rim = lerp_u32(rim, ox_accent_rim(), t_h);
     ox_outline(dl, cmn, cmx, r, rim);
-    dl->AddText(ImVec2(mn.x + pad.x, vcenter_top(mn.y, mx.y)), on ? text_on : text_off, display);
+    dl->AddText(ImVec2(mn.x + pad.x, vcenter_top(mn.y, mx.y)), text, display);
     return clicked;
 }
 
