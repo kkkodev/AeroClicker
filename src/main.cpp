@@ -535,7 +535,7 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
         gui_state.mc_target_known = mc_live && mc.target >= 0;
         gui_state.mc_bed_known = mc_live && mc.bed >= 0;
         gui_state.mc_look_known = mc_live && mc.look >= 0;
-        gui_state.mc_menu_known = mc_live && mc.menu >= 0;
+        gui_state.mc_interactive_known = mc_live && mc.interactive >= 0;
         gui_state.mc_water_known = mc_live && mc.water >= 0;
         gui_state.mc_ground_known = mc_live && mc.ground >= 0;
         gui_state.mc_water = mc_live ? mc.water : -1;
@@ -645,11 +645,11 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                                 mc_live && mc.bed == 1);
         right_clicker.set_pause(Clicker::PAUSE_NO_BLOCK,
                                 config.right_look_block && mc_live && mc.look == 0);
-        // Container blocks: a right click here opens a chest / crafting table / furnace
-        // instead of placing the held block. Pausing keeps the clicker from throwing the
-        // screen open; a physical press is still forwarded, so opening one by hand works.
-        right_clicker.set_pause(Clicker::PAUSE_MENU_BLOCK,
-                                config.right_skip_menu_blocks && mc_live && mc.menu == 1);
+        // Interactive blocks: a right click here opens a chest / crafting table, or toggles a
+        // door / trapdoor, instead of placing the held block. Pausing keeps the clicker from
+        // interacting; a physical press is still forwarded, so using one by hand works.
+        right_clicker.set_pause(Clicker::PAUSE_INTERACTIVE,
+                                config.right_skip_interactive && mc_live && mc.interactive == 1);
         const int left_gate = config.left_gate;
         left_clicker.set_pause(Clicker::PAUSE_NO_SWORD,
                                mc_live && (left_gate & 1) && mc.sword == 0);

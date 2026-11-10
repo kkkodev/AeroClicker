@@ -41,9 +41,9 @@ struct GuiState {
     std::atomic<bool> mc_target_known{false};
     std::atomic<bool> mc_bed_known{false};
     std::atomic<bool> mc_look_known{false};
-    // The live bridge build reports whether the crosshair block opens a menu. False means the
-    // right clicker's container gate cannot run, and its card says so.
-    std::atomic<bool> mc_menu_known{false};
+    // The live bridge build reports whether the crosshair block reacts to a use. False means
+    // the right clicker's interactive-block gate cannot run, and its card says so.
+    std::atomic<bool> mc_interactive_known{false};
     std::atomic<bool> mc_water_known{false};
     std::atomic<bool> mc_ground_known{false};
     // 1 = the Minecraft window has focus, 0 = another window does, and "known" is false when

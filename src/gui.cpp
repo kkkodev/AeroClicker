@@ -113,7 +113,7 @@ static const char* pause_reason_text(uint32_t mask) {
     if (mask & Clicker::PAUSE_HELD_BED)  return "holding a bed";
     if (mask & Clicker::PAUSE_HELD_ITEM) return "held item is not a block";
     if (mask & Clicker::PAUSE_NO_BLOCK)  return "crosshair is not on a block";
-    if (mask & Clicker::PAUSE_MENU_BLOCK) return "block opens a menu";
+    if (mask & Clicker::PAUSE_INTERACTIVE) return "block is interactive";
     if (mask & Clicker::PAUSE_NO_TARGET) return "no target in crosshair";
     if (mask & Clicker::PAUSE_NO_SWORD)  return "no sword in hand";
     return "paused";
@@ -696,16 +696,16 @@ static void draw_mod_tab(GuiState& state) {
     else
         ImGui::TextDisabled("Stops while the crosshair is on air or an entity");
 
-    // A click on a container opens its screen instead of placing the held block, so the
-    // clicker stays off it. Sneaking bypasses the gate in the game too: a sneak-use places
-    // the block, which is exactly what a bridging clicker wants.
-    row_check("Pause on blocks that open a menu", &state.config.right_skip_menu_blocks);
-    if (in_world && state.config.right_skip_menu_blocks && !state.mc_menu_known.load())
-        ImGui::TextDisabled("This mod build cannot report menu blocks");
-    else if (state.config.right_skip_menu_blocks)
-        ImGui::TextDisabled("Chests, crafting tables, furnaces and similar; sneak to place on them");
+    // A click on an interactive block opens a screen or toggles the block instead of placing
+    // the held one, so the clicker stays off it. Sneaking bypasses the gate in the game too:
+    // a sneak-use places the block, which is exactly what a bridging clicker wants.
+    row_check("Pause on interactive blocks", &state.config.right_skip_interactive);
+    if (in_world && state.config.right_skip_interactive && !state.mc_interactive_known.load())
+        ImGui::TextDisabled("This mod build cannot report interactive blocks");
+    else if (state.config.right_skip_interactive)
+        ImGui::TextDisabled("Chests, doors, trapdoors, beds and similar; sneak to place on them");
     else
-        ImGui::TextDisabled("A click on a chest or crafting table opens its screen");
+        ImGui::TextDisabled("A click on a chest, door or bed interacts with it");
     end_panel();
     ImGui::PopID();
 

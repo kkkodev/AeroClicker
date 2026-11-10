@@ -50,7 +50,7 @@ See [Credits](#credits).
 - **Menu pause** — clicking stops while the game has a screen open (inventory, chat, chests, NPC menus) and resumes when it closes
 - **Minecraft-window only** — optional: clicking also stops while another window has focus, so alt-tabbing never sends clicks to whatever is in front. The bridge mod reports the focus; without a mod build that does, the option stays inert
 - **Left gate** — the **Left clicker** card on the Mod tab: the left clicker can require a mob, player or fireball in the crosshair, a sword in hand, or both, so it does not fire while you mine or build; the default is target-in-crosshair, and the target check reaches about half a block past vanilla reach so an incoming player or fireball becomes a target just before it can hit you
-- **Right gate** — the **Right clicker** card on the Mod tab: the right clicker can require a placeable block in hand, so right-click actions never fire on a sword, a pearl or an empty hand; **Placeable blocks only** and **Only while looking at a block** are on by default, **Skip beds** is on by default and greys out while the block gate is off, and **Pause on blocks that open a menu** keeps a click from opening a chest, crafting table or furnace (sneak to place on one)
+- **Right gate** — the **Right clicker** card on the Mod tab: the right clicker can require a placeable block in hand, so right-click actions never fire on a sword, a pearl or an empty hand; **Placeable blocks only** and **Only while looking at a block** are on by default, **Skip beds** is on by default and greys out while the block gate is off, and **Pause on interactive blocks** keeps a click from opening a chest or toggling a door, trapdoor or bed (sneak to place on one)
 - **Jump reset / Sprint reset** — optional and off by default: both fire from the bridge mod's game events, not from the app's own clicks. Jump reset presses Space when an entity hurts the player (fall, fire and other environmental damage are ignored); sprint reset breaks sprint after a hit on a living entity, with randomized chance, delay and W-/S-/Shift-tap duration. Jump reset stays quiet when the damage came from behind. Each reset has its own toggle key, and binding both to one key toggles both together, exactly like the two clickers
 - **Macros** — optional, off by default: sequences of left clicks, right clicks, delays and slot switches, with looping and a keybind
 - **Headless mode** — run the clicker with no window
@@ -208,7 +208,7 @@ and an amber dot instead of a running CPS figure:
 | `held item is not a block` | **Placeable blocks only** is on and the held item cannot be placed |
 | `holding a bed` | **Placeable blocks only** and **Skip beds** are on and the held item is a bed |
 | `crosshair is not on a block` | **Only while looking at a block** is on and the crosshair is on air or an entity |
-| `block opens a menu` | **Pause on blocks that open a menu** is on and the crosshair is on a chest, crafting table, furnace or similar |
+| `block is interactive` | **Pause on interactive blocks** is on and the crosshair is on a chest, door, trapdoor, bed or similar |
 | `no target in crosshair` | the left gate is set to target in crosshair (or sword + target) and you are not looking at a mob, player or fireball |
 | `no sword in hand` | the left gate is set to holding a sword (or sword + target) and the held item is not a sword |
 
@@ -231,22 +231,24 @@ Minecraft-window-only option do nothing, both gates stay inert, and the combat r
 
 The mod is read-only. Every 50 ms it writes the selected slot, whether a screen is open, whether
 the held item is a block, whether it is a sword or a bed, whether the crosshair is on a living
-entity, a fireball or a block, whether the player is in water or on the ground, whether the game
+entity, a fireball or a block, whether the targeted block is interactive, whether the player is in water or on the ground, whether the game
 window has focus, and three event counters to
 `$XDG_RUNTIME_DIR/aeroclicker-mc.state` as a single line:
 
 ```
-slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch ms> block=<0|1|-1> sword=<0|1|-1> target=<0-3|-1> bed=<0|1|-1> look=<0|1|-1> water=<0|1|-1> ground=<0|1|-1> hurt=<counter> hit=<counter> back=<counter> hground=<0|1|-1> hwater=<0|1|-1> focus=<0|1|-1> menu=<0|1|-1>
+slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch ms> block=<0|1|-1> sword=<0|1|-1> target=<0-3|-1> bed=<0|1|-1> look=<0|1|-1> water=<0|1|-1> ground=<0|1|-1> hurt=<counter> hit=<counter> back=<counter> hground=<0|1|-1> hwater=<0|1|-1> focus=<0|1|-1> interactive=<0|1|-1>
 ```
 
 `block`, `sword`, `bed`, `look`, `water` and `ground` are `1` for yes, `0` for no and `-1` for
 "this mod build cannot tell". `focus` is `1` while the Minecraft window has focus, `0` while
 another window does and `-1` when the build cannot tell; the **Only click inside the Minecraft
-window** option uses it and stays inert on `-1`. `menu` is `1` when the block under the
-crosshair would open a screen when used (a chest, crafting table, furnace, ...), `0` when it
-would not and `-1` when the build cannot tell; the right clicker's **Pause on blocks that open
-a menu** option uses it. Sneaking is reported as `0`, because the game then places the held
-block instead of opening the screen. `target` is a bitmask: `1` for a mob or player, `2` for a fireball,
+window** option uses it and stays inert on `-1`. `interactive` is `1` when the block under the
+crosshair would react to a use instead of taking a placed block — a menu block such as a chest,
+crafting table or furnace, but also a door, trapdoor, fence gate, bed, button or lever — `0`
+when it would accept the placement and `-1` when the build cannot tell; the right clicker's
+**Pause on interactive blocks** option uses it. Sneaking is reported as `0`, because the game
+then places the held block instead of interacting. An older bridge jar reports the narrower
+`menu` field instead, which the app still reads. `target` is a bitmask: `1` for a mob or player, `2` for a fireball,
 `3` for both, `0` for neither and `-1` for unknown. They come after `ms` so an older app build still parses the
 prefix, and an older mod build's `player` field is read as `target`. `hurt` goes up when an
 entity hurts the local player (melee, arrows and fireballs count; fall, fire and other
@@ -354,12 +356,15 @@ build that reports `bed`; an older jar leaves it inert.
 cannot keep using an item or hitting an NPC when you are not aiming at something to place on. It
 needs a bridge build that reports `look`; an older jar leaves that half inert.
 
-**Pause on blocks that open a menu** is on by default. A right click on a chest, crafting table,
-furnace or any other container opens its screen instead of placing the held block, so the clicker
-pauses with `block opens a menu` while the crosshair is on one. The game decides which blocks
-qualify (the same check vanilla runs before opening a screen), not a fixed list, so modded
-containers work too. Hold sneak to place a block on one anyway: vanilla skips the screen then, and
-so does this gate. It needs a bridge build that reports `menu`; an older jar leaves it inert.
+**Pause on interactive blocks** is on by default. A right click on a chest, crafting table or
+furnace opens its screen instead of placing the held block, and a click on a door, trapdoor,
+fence gate, bed, button or lever toggles it; the clicker pauses with `block is interactive`
+while the crosshair is on one. Menu blocks are found with the same check vanilla runs before
+opening a screen, so modded containers work too; the other kinds are matched by their block
+class, which also covers modded doors and similar that extend the vanilla classes. Hold sneak to
+place a block on one anyway: vanilla treats a sneak-use as a placement, and so does this gate. It
+needs a bridge build that reports `interactive`; an older jar reports only menu blocks, and one
+older still leaves it inert.
 
 ### Combat resets
 

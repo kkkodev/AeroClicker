@@ -416,7 +416,7 @@ public:
             else if (!strcmp(key, "right_placeable_only")) cfg.right_placeable_only = (int)val != 0;
             else if (!strcmp(key, "right_gate_no_bed")) cfg.right_gate_no_bed = (int)val != 0;
             else if (!strcmp(key, "right_look_block")) cfg.right_look_block = (int)val != 0;
-            else if (!strcmp(key, "right_skip_menu_blocks")) cfg.right_skip_menu_blocks = (int)val != 0;
+            else if (!strcmp(key, "right_skip_interactive")) cfg.right_skip_interactive = (int)val != 0;
             else if (!strcmp(key, "key_jump_reset")) cfg.key_jump_reset = (int)val;
             else if (!strcmp(key, "key_sprint_reset")) cfg.key_sprint_reset = (int)val;
             else if (!strcmp(key, "jump_reset_enabled")) cfg.jump_reset_enabled = (int)val != 0;
@@ -596,7 +596,7 @@ public:
         fprintf(f, "right_placeable_only %d\n", cfg.right_placeable_only ? 1 : 0);
         fprintf(f, "right_gate_no_bed %d\n", cfg.right_gate_no_bed ? 1 : 0);
         fprintf(f, "right_look_block %d\n", cfg.right_look_block ? 1 : 0);
-        fprintf(f, "right_skip_menu_blocks %d\n", cfg.right_skip_menu_blocks ? 1 : 0);
+        fprintf(f, "right_skip_interactive %d\n", cfg.right_skip_interactive ? 1 : 0);
         fprintf(f, "left_gate %d\n", cfg.left_gate);
         fprintf(f, "left_gate_fireball %d\n", cfg.left_gate_fireball ? 1 : 0);
 
