@@ -15,14 +15,16 @@
 //     slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch milliseconds>
 //     block=<0|1|-1> sword=<0|1|-1> target=<0|1|-1> bed=<0|1|-1>
 //     look=<0|1|-1> water=<0|1|-1> ground=<0|1|-1> hurt=<counter> hit=<counter>
-//     back=<counter> focus=<0|1|-1>
+//     back=<counter> focus=<0|1|-1> menu=<0|1|-1>
 //
 // `block` says whether the held item is a block (placeable), `sword` whether it is a sword,
 // `target` is a bitmask of what the crosshair ray found (1 = a mob or player, 2 = a fireball,
 // 3 = both), and `bed` says whether the held item is a bed. The app decides whether fireballs
 // count; an older mod that only reports 0/1 simply leaves that option inert. `look` is set
 // while the crosshair is on a block, `water` while the local player is in water, and `ground`
-// while the player stands on the ground.
+// while the player stands on the ground. `menu` says the block under the crosshair would open
+// a screen when used (chest, crafting table, furnace, ...), so the right clicker can stay off
+// it; -1 means the mod build cannot tell and the option stays inert.
 // `hurt` and `hit` are counters: hurt goes up when the local player takes damage, hit when the
 // local player attacks a living entity, and `back` goes up alongside hurt when the attacker was
 // behind the player (for an arrow, snowball or egg: when it came from behind, judged by its
@@ -71,6 +73,8 @@ struct State {
     // 1 while the Minecraft window has focus, 0 while another window does, -1 when this mod
     // build cannot tell. The app only uses it for the "only click inside Minecraft" option.
     int focus = -1;
+    // 1 when the crosshair block would open a menu on use, 0 when it would not, -1 unknown.
+    int menu = -1;
     long long hurt = 0;
     long long hit = 0;
     long long back = 0;
@@ -131,6 +135,7 @@ inline bool poll(State& out) {
     out.hwater = int_field("hwater", -1);
     out.hground = int_field("hground", -1);
     out.focus = int_field("focus", -1);
+    out.menu = int_field("menu", -1);
     out.hurt = long_field("hurt");
     out.hit = long_field("hit");
     out.back = long_field("back");

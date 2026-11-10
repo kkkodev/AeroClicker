@@ -278,6 +278,11 @@ struct Config {
     // quiet while aiming at air or an entity. This is the build/bridge filter; it is separate
     // from the held-item gate and needs a mod build that reports `look`.
     bool right_look_block = true;
+    // Right clicker: pause while the crosshair is on a block that opens a menu when used (a
+    // chest, crafting table, furnace, ...). On by default: a click there opens the screen
+    // instead of placing the block, and then the menu pause takes over anyway. Needs a mod
+    // build that reports `menu`; an older jar leaves it inert.
+    bool right_skip_menu_blocks = true;
     // Left clicker, GhostTap-style gate. Value 1 = a sword must be held, 2 = a target (mob,
     // player or fireball) must be in the crosshair, 3 = both. 0 is off. Inert without the mod.
     // Default: only click at targets, which is what keeps a clicker from firing at blocks.

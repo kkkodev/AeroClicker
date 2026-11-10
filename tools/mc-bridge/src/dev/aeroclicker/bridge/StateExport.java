@@ -15,20 +15,22 @@ import net.fabricmc.api.ClientModInitializer;
 /**
  * Publishes the client state AeroClicker cannot observe from outside the game: the selected
  * hotbar slot, whether any screen (inventory, chat, chest, NPC dialog, ...) is open, whether the
- * held item is a block, whether it is a sword or a bed, and whether the crosshair is on a living
- * entity (a mob or another player). It only ever reads; nothing is sent to the server and no
- * input is changed.
+ * held item is a block, whether it is a sword or a bed, whether the crosshair is on a living
+ * entity (a mob or another player), and whether the crosshair block opens a menu when used.
+ * It only ever reads; nothing is sent to the server and no input is changed.
  *
  * <p>The state goes to {@code $XDG_RUNTIME_DIR/aeroclicker-mc.state} as one line:
  * {@code slot=<0-8 or -1> screen=<0|1> ms=<epoch milliseconds> block=<0|1|-1>
  * sword=<0|1|-1> target=<0|1|-1> bed=<0|1|-1> look=<0|1|-1> water=<0|1|-1>
  * ground=<0|1|-1> hurt=<counter> hit=<counter> back=<counter> hground=<0|1|-1> hwater=<0|1|-1>
- * focus=<0|1|-1>}. The app treats a file whose timestamp is a
+ * focus=<0|1|-1> menu=<0|1|-1>}. The app treats a file whose timestamp is a
  * couple of seconds old as absent, so a crashed game cannot leave the clicker stuck. The
  * optional fields are last so an older app build still parses the line, and -1 means this build
  * cannot tell (the app then leaves the matching gate inert). {@code focus} says whether the
  * game window owns the input focus, which is what the "only click inside Minecraft" option
- * uses to stay quiet in another window.</p>
+ * uses to stay quiet in another window. {@code menu} says whether the block under the
+ * crosshair would open a screen when used, so the right clicker can stay off chests,
+ * crafting tables and other container blocks.</p>
  *
  * <p>The counters make the combat resets reliable: {@code hurt} goes up when the local
  * player's {@code hurtTime} rises from an attack (an entity dealt the damage), and {@code hit}
@@ -89,7 +91,7 @@ public final class StateExport implements ClientModInitializer {
                              + " hurt=" + snap.hurt + " hit=" + snap.hit
                              + " back=" + snap.back + " seen=" + snap.seen
                              + " hground=" + snap.hground + " hwater=" + snap.hwater
-                             + " focus=" + snap.focus;
+                             + " focus=" + snap.focus + " menu=" + snap.menu;
                 long now = System.currentTimeMillis();
                 if (!state.equals(last) || now - lastWrite >= HEARTBEAT_MS) {
                     // `ms` goes before the optional fields so an app build without them still
@@ -101,7 +103,7 @@ public final class StateExport implements ClientModInitializer {
                           + " hurt=" + snap.hurt + " hit=" + snap.hit
                           + " back=" + snap.back + " seen=" + snap.seen
                           + " hground=" + snap.hground + " hwater=" + snap.hwater
-                          + " focus=" + snap.focus);
+                          + " focus=" + snap.focus + " menu=" + snap.menu);
                     last = state;
                     lastWrite = now;
                 }
@@ -114,7 +116,7 @@ public final class StateExport implements ClientModInitializer {
                 try {
                     write("slot=-1 screen=1 ms=" + System.currentTimeMillis()
                           + " block=-1 sword=-1 target=-1 bed=-1 look=-1 water=-1 ground=-1"
-                          + " hurt=-1 hit=-1 back=-1 seen=-1 hground=-1 hwater=-1 focus=-1");
+                          + " hurt=-1 hit=-1 back=-1 seen=-1 hground=-1 hwater=-1 focus=-1 menu=-1");
                     Thread.sleep(HEARTBEAT_MS);
                 } catch (Throwable ignored) {
                     return;
@@ -133,7 +135,7 @@ public final class StateExport implements ClientModInitializer {
             b.prevWater = -1;
             return new Snapshot("slot=-1 screen=1", -1, -1, -1, -1, -1, -1, -1,
                                 b.hurtCounter, b.seenCounter, b.hitCounter, b.backCounter,
-                                b.hurtGround, b.hurtWater, b.focusState(mc));
+                                b.hurtGround, b.hurtWater, b.focusState(mc), b.menuState(mc, player));
         }
         if (player != b.lastPlayer) {
             // A new world or respawn: hurtTime and the swing object belong to the old player.
@@ -170,7 +172,7 @@ public final class StateExport implements ClientModInitializer {
                             b.bedState(inventory, slot), b.lookState(mc),
                             water, ground,
                             hurt, b.seenCounter, hit, b.backCounter,
-                            b.hurtGround, b.hurtWater, b.focusState(mc));
+                            b.hurtGround, b.hurtWater, b.focusState(mc), b.menuState(mc, player));
     }
 
     /** Logical state without the timestamp: compared to decide when to rewrite the file. */
@@ -186,6 +188,7 @@ public final class StateExport implements ClientModInitializer {
         final int hground;
         final int hwater;
         final int focus;
+        final int menu;
         final long hurt;
         final long seen;
         final long hit;
@@ -193,7 +196,7 @@ public final class StateExport implements ClientModInitializer {
 
         Snapshot(String line, int block, int sword, int target, int bed, int look, int water,
                  int ground, long hurt, long seen, long hit, long back, int hground,
-                 int hwater, int focus) {
+                 int hwater, int focus, int menu) {
             this.line = line;
             this.block = block;
             this.sword = sword;
@@ -205,6 +208,7 @@ public final class StateExport implements ClientModInitializer {
             this.hground = hground;
             this.hwater = hwater;
             this.focus = focus;
+            this.menu = menu;
             this.hurt = hurt;
             this.seen = seen;
             this.hit = hit;
@@ -220,6 +224,21 @@ public final class StateExport implements ClientModInitializer {
         } catch (ReflectiveOperationException | RuntimeException e) {
             return true;   // cannot tell -> pause rather than click blindly
         }
+    }
+
+    /** First public method named {@code name} whose parameters accept the given types. */
+    private static Method findMethod(Class<?> type, String name, Class<?>... args) {
+        for (Method m : type.getMethods()) {
+            if (!m.getName().equals(name)) continue;
+            Class<?>[] p = m.getParameterTypes();
+            if (p.length != args.length) continue;
+            boolean ok = true;
+            for (int i = 0; i < p.length; i++) {
+                if (args[i] != null && !p[i].isAssignableFrom(args[i])) { ok = false; break; }
+            }
+            if (ok) return m;
+        }
+        return null;
     }
 
     /** Write through a temporary file so the app never sees a half-written line. */
@@ -267,6 +286,14 @@ public final class StateExport implements ClientModInitializer {
         final Method isWindowActive;
         final Field windowField;
         final Method windowFocused;
+        // Menu-block gate: whether the crosshair block would open a menu when used. All
+        // optional; a mapping without them reports -1 and the app leaves the gate inert.
+        final Method hitBlockPos;
+        final Method levelBlockState;
+        final Method stateMenuProvider;
+        final Method stateBlockGetter;
+        final Method blockMenuProvider;
+        final Method isShiftKeyDown;
         // Posture from the sample before the newest hurt tick. The poll that detects a hit runs
         // up to 50 ms after it, and the knockback from that hit has usually lifted the player by
         // then, so reading the ground at that moment reports "mid-air" for grounded hits.
@@ -550,6 +577,46 @@ public final class StateExport implements ClientModInitializer {
             vecZ = vz;
             vec3Ctor = vecCtor;
             vec3Class = vecType;
+
+            // Menu-block gate. The client knows which blocks offer a menu: vanilla asks
+            // BlockState#getMenuProvider before it opens a screen, so the same call answers
+            // "would a right click here open a chest / crafting table / furnace". Sneaking is
+            // checked too, because then the game places the held block instead.
+            Method hitPos = null, stateAt = null, stateMenu = null, stateBlock = null,
+                   blockMenu = null, shiftDown = null;
+            try {
+                if (blockHit != null && lvl != null) {
+                    hitPos = blockHit.getMethod("getBlockPos");
+                    Class<?> posType = hitPos.getReturnType();
+                    stateAt = lvl.getType().getMethod("getBlockState", posType);
+                    Class<?> stateType = stateAt.getReturnType();
+                    // The declaring type may be a superclass or interface (BlockBehaviour),
+                    // so match by assignability instead of an exact getMethod signature.
+                    stateMenu = findMethod(stateType, "getMenuProvider", lvl.getType(), posType);
+                    if (stateMenu == null) {
+                        stateBlock = stateType.getMethod("getBlock");
+                        blockMenu = findMethod(stateBlock.getReturnType(), "getMenuProvider",
+                                               stateType, lvl.getType(), posType);
+                    }
+                }
+            } catch (ReflectiveOperationException | RuntimeException ignored) {
+                hitPos = null;
+                stateAt = null;
+                stateMenu = null;
+                stateBlock = null;
+                blockMenu = null;
+            }
+            try {
+                shiftDown = Class.forName("net.minecraft.world.entity.Entity")
+                                  .getMethod("isShiftKeyDown");
+            } catch (ReflectiveOperationException | RuntimeException ignored) {
+            }
+            hitBlockPos = hitPos;
+            levelBlockState = stateAt;
+            stateMenuProvider = stateMenu;
+            stateBlockGetter = stateBlock;
+            blockMenuProvider = blockMenu;
+            isShiftKeyDown = shiftDown;
         }
 
         /** 1 = a block (placeable), 0 = anything else or an empty hand, -1 = cannot tell. */
@@ -617,6 +684,42 @@ public final class StateExport implements ClientModInitializer {
             if (hitResult == null || (blockHitClass == null && hitType == null)) return -1;
             try {
                 return isBlockHit(hitResult.get(mc)) ? 1 : 0;
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                return -1;
+            }
+        }
+
+        /**
+         * 1 when the crosshair is on a block that would open a menu when used (a chest, a
+         * crafting table, a furnace, ...), 0 when it would not, -1 when this mapping cannot
+         * tell. Sneaking is excluded because vanilla then places the held block instead of
+         * opening the screen; without a sneak mapping the conservative answer is reported.
+         */
+        int menuState(Object mc, Object player) {
+            if (hitResult == null || hitBlockPos == null || levelBlockState == null ||
+                level == null || (stateMenuProvider == null && blockMenuProvider == null))
+                return -1;
+            try {
+                Object hit = hitResult.get(mc);
+                if (!isBlockHit(hit)) return 0;
+                Object world = level.get(mc);
+                if (world == null) return 0;
+                Object pos = hitBlockPos.invoke(hit);
+                if (pos == null) return 0;
+                Object state = levelBlockState.invoke(world, pos);
+                if (state == null) return 0;
+                Object provider;
+                if (stateMenuProvider != null) {
+                    provider = stateMenuProvider.invoke(state, world, pos);
+                } else {
+                    Object block = stateBlockGetter.invoke(state);
+                    provider = block == null ? null
+                                             : blockMenuProvider.invoke(block, state, world, pos);
+                }
+                if (provider == null) return 0;
+                if (isShiftKeyDown != null && player != null &&
+                    Boolean.TRUE.equals(isShiftKeyDown.invoke(player))) return 0;
+                return 1;
             } catch (ReflectiveOperationException | RuntimeException e) {
                 return -1;
             }
