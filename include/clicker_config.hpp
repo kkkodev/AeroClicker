@@ -263,6 +263,10 @@ struct Config {
     bool right_slots[9] = {false, false, false, false, false, false, false, false, true};
     // Screens include the inventory, chat, chests and NPC menus: clicking them is never wanted.
     bool pause_in_menu = true;
+    // Only click while the Minecraft window has focus. Off by default: without it the clicker
+    // keeps running in whatever window is focused, which is what someone alt-tabbing to a
+    // browser expects. The bridge mod reports the focus, so this is inert without it.
+    bool only_in_mc_window = false;
     // Right clicker: click only while the held item is a block. On by default, so a right
     // clicker cannot throw a pearl or drink a potion by accident. The bridge mod reports the
     // held item, so this is inert without it (and with an older mod build).

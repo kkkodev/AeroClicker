@@ -43,6 +43,10 @@ struct GuiState {
     std::atomic<bool> mc_look_known{false};
     std::atomic<bool> mc_water_known{false};
     std::atomic<bool> mc_ground_known{false};
+    // 1 = the Minecraft window has focus, 0 = another window does, and "known" is false when
+    // the live bridge build has no focus field. The Global card explains both cases.
+    std::atomic<bool> mc_focus_known{false};
+    std::atomic<bool> mc_focused{false};
     std::atomic<int> mc_water{-1};
     std::atomic<int> mc_ground{-1};
     // Cumulative bridge event counters, shown in the debug readout so a combat reset that does

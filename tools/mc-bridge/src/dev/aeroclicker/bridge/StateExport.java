@@ -22,10 +22,13 @@ import net.fabricmc.api.ClientModInitializer;
  * <p>The state goes to {@code $XDG_RUNTIME_DIR/aeroclicker-mc.state} as one line:
  * {@code slot=<0-8 or -1> screen=<0|1> ms=<epoch milliseconds> block=<0|1|-1>
  * sword=<0|1|-1> target=<0|1|-1> bed=<0|1|-1> look=<0|1|-1> water=<0|1|-1>
- * ground=<0|1|-1> hurt=<counter> hit=<counter> back=<counter> hground=<0|1|-1> hwater=<0|1|-1>}. The app treats a file whose timestamp is a
+ * ground=<0|1|-1> hurt=<counter> hit=<counter> back=<counter> hground=<0|1|-1> hwater=<0|1|-1>
+ * focus=<0|1|-1>}. The app treats a file whose timestamp is a
  * couple of seconds old as absent, so a crashed game cannot leave the clicker stuck. The
  * optional fields are last so an older app build still parses the line, and -1 means this build
- * cannot tell (the app then leaves the matching gate inert).</p>
+ * cannot tell (the app then leaves the matching gate inert). {@code focus} says whether the
+ * game window owns the input focus, which is what the "only click inside Minecraft" option
+ * uses to stay quiet in another window.</p>
  *
  * <p>The counters make the combat resets reliable: {@code hurt} goes up when the local
  * player's {@code hurtTime} rises from an attack (an entity dealt the damage), and {@code hit}
@@ -85,7 +88,8 @@ public final class StateExport implements ClientModInitializer {
                              + " water=" + snap.water + " ground=" + snap.ground
                              + " hurt=" + snap.hurt + " hit=" + snap.hit
                              + " back=" + snap.back + " seen=" + snap.seen
-                             + " hground=" + snap.hground + " hwater=" + snap.hwater;
+                             + " hground=" + snap.hground + " hwater=" + snap.hwater
+                             + " focus=" + snap.focus;
                 long now = System.currentTimeMillis();
                 if (!state.equals(last) || now - lastWrite >= HEARTBEAT_MS) {
                     // `ms` goes before the optional fields so an app build without them still
@@ -96,7 +100,8 @@ public final class StateExport implements ClientModInitializer {
                           + " water=" + snap.water + " ground=" + snap.ground
                           + " hurt=" + snap.hurt + " hit=" + snap.hit
                           + " back=" + snap.back + " seen=" + snap.seen
-                          + " hground=" + snap.hground + " hwater=" + snap.hwater);
+                          + " hground=" + snap.hground + " hwater=" + snap.hwater
+                          + " focus=" + snap.focus);
                     last = state;
                     lastWrite = now;
                 }
@@ -109,7 +114,7 @@ public final class StateExport implements ClientModInitializer {
                 try {
                     write("slot=-1 screen=1 ms=" + System.currentTimeMillis()
                           + " block=-1 sword=-1 target=-1 bed=-1 look=-1 water=-1 ground=-1"
-                          + " hurt=-1 hit=-1 back=-1 seen=-1 hground=-1 hwater=-1");
+                          + " hurt=-1 hit=-1 back=-1 seen=-1 hground=-1 hwater=-1 focus=-1");
                     Thread.sleep(HEARTBEAT_MS);
                 } catch (Throwable ignored) {
                     return;
@@ -128,7 +133,7 @@ public final class StateExport implements ClientModInitializer {
             b.prevWater = -1;
             return new Snapshot("slot=-1 screen=1", -1, -1, -1, -1, -1, -1, -1,
                                 b.hurtCounter, b.seenCounter, b.hitCounter, b.backCounter,
-                                b.hurtGround, b.hurtWater);
+                                b.hurtGround, b.hurtWater, b.focusState(mc));
         }
         if (player != b.lastPlayer) {
             // A new world or respawn: hurtTime and the swing object belong to the old player.
@@ -165,7 +170,7 @@ public final class StateExport implements ClientModInitializer {
                             b.bedState(inventory, slot), b.lookState(mc),
                             water, ground,
                             hurt, b.seenCounter, hit, b.backCounter,
-                            b.hurtGround, b.hurtWater);
+                            b.hurtGround, b.hurtWater, b.focusState(mc));
     }
 
     /** Logical state without the timestamp: compared to decide when to rewrite the file. */
@@ -180,6 +185,7 @@ public final class StateExport implements ClientModInitializer {
         final int ground;
         final int hground;
         final int hwater;
+        final int focus;
         final long hurt;
         final long seen;
         final long hit;
@@ -187,7 +193,7 @@ public final class StateExport implements ClientModInitializer {
 
         Snapshot(String line, int block, int sword, int target, int bed, int look, int water,
                  int ground, long hurt, long seen, long hit, long back, int hground,
-                 int hwater) {
+                 int hwater, int focus) {
             this.line = line;
             this.block = block;
             this.sword = sword;
@@ -198,6 +204,7 @@ public final class StateExport implements ClientModInitializer {
             this.ground = ground;
             this.hground = hground;
             this.hwater = hwater;
+            this.focus = focus;
             this.hurt = hurt;
             this.seen = seen;
             this.hit = hit;
@@ -255,6 +262,11 @@ public final class StateExport implements ClientModInitializer {
         final Field hurtTime;
         final Method isInWater;
         final Method onGround;
+        // Window focus for the app's "only click inside Minecraft" option. Both mappings are
+        // optional: a missing one leaves focus at -1, which the app draws as unsupported.
+        final Method isWindowActive;
+        final Field windowField;
+        final Method windowFocused;
         // Posture from the sample before the newest hurt tick. The poll that detects a hit runs
         // up to 50 ms after it, and the knockback from that hit has usually lifted the player by
         // then, so reading the ground at that moment reports "mid-air" for grounded hits.
@@ -329,6 +341,30 @@ public final class StateExport implements ClientModInitializer {
             }
             guiScreen = screen;
             mcScreen = screen == null ? mc.getField("screen") : null;
+
+            // Focus is optional in both directions: some mappings expose a ready-made
+            // isWindowActive(), others only the Window field. Either one works, and neither
+            // being available just leaves the option unsupported.
+            Method active = null;
+            try {
+                active = mc.getMethod("isWindowActive");
+            } catch (ReflectiveOperationException | RuntimeException ignored) {
+            }
+            Field window = null;
+            Method focused = null;
+            try {
+                Field w = mc.getDeclaredField("window");
+                w.setAccessible(true);
+                Method f = w.getType().getMethod("isFocused");
+                window = w;
+                focused = f;
+            } catch (ReflectiveOperationException | RuntimeException ignored) {
+                window = null;
+                focused = null;
+            }
+            isWindowActive = active;
+            windowField = window;
+            windowFocused = focused;
 
             // Optional: a mapping that renames the item API must not take slot and menu down
             // with it. When this fails, block is reported as -1 and the app's gate is inert.
@@ -604,6 +640,26 @@ public final class StateExport implements ClientModInitializer {
             } catch (ReflectiveOperationException | RuntimeException e) {
                 return -1;
             }
+        }
+
+        /** 1 while the game window has focus, 0 while another window does, -1 unknown. */
+        int focusState(Object mc) {
+            if (isWindowActive != null) {
+                try {
+                    return (Boolean) isWindowActive.invoke(mc) ? 1 : 0;
+                } catch (ReflectiveOperationException | RuntimeException ignored) {
+                    // Fall through to the window handle; a failure here is not fatal.
+                }
+            }
+            if (windowField != null && windowFocused != null) {
+                try {
+                    Object window = windowField.get(mc);
+                    if (window != null) return (Boolean) windowFocused.invoke(window) ? 1 : 0;
+                } catch (ReflectiveOperationException | RuntimeException ignored) {
+                    // Unknown.
+                }
+            }
+            return -1;
         }
 
         /** 1 only for an exact crosshair hit on a living entity, 0 otherwise, -1 unknown. */

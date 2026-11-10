@@ -48,6 +48,7 @@ See [Credits](#credits).
 - **Activation modes** — Toggle, Hold, and Mouse (arm with a key, then hold your real mouse button)
 - **Slot activation** — optional and off by default: a Minecraft hotbar slot switches each clicker on and off, with a per-clicker set of slots (default: slot 1 left, slot 9 right); turn on **Follow hotbar slots** on the Mod tab to use it (the slot boxes grey out while it is off, keeping their stored mapping). It reads the game through the [bridge mod](#minecraft-mod)
 - **Menu pause** — clicking stops while the game has a screen open (inventory, chat, chests, NPC menus) and resumes when it closes
+- **Minecraft-window only** — optional: clicking also stops while another window has focus, so alt-tabbing never sends clicks to whatever is in front. The bridge mod reports the focus; without a mod build that does, the option stays inert
 - **Left gate** — the **Left clicker** card on the Mod tab: the left clicker can require a mob, player or fireball in the crosshair, a sword in hand, or both, so it does not fire while you mine or build; the default is target-in-crosshair, and the target check reaches about half a block past vanilla reach so an incoming player or fireball becomes a target just before it can hit you
 - **Right gate** — the **Right clicker** card on the Mod tab: the right clicker can require a placeable block in hand, so right-click actions never fire on a sword, a pearl or an empty hand; **Placeable blocks only** and **Only while looking at a block** are on by default, and **Skip beds** is on by default and greys out while the block gate is off
 - **Jump reset / Sprint reset** — optional and off by default: both fire from the bridge mod's game events, not from the app's own clicks. Jump reset presses Space when an entity hurts the player (fall, fire and other environmental damage are ignored); sprint reset breaks sprint after a hit on a living entity, with randomized chance, delay and W-/S-/Shift-tap duration. Jump reset stays quiet when the damage came from behind. Each reset has its own toggle key, and binding both to one key toggles both together, exactly like the two clickers
@@ -68,7 +69,8 @@ beats — and always land inside the current one, so they add clicks instead of 
 Fatigue breaks are short and infrequent: 0.25–0.6 s of rest every 30–75 s, and the break clock
 restarts whenever clicking is paused, so resuming never begins with a break. Hold times follow the
 rate and drift slowly around their mean, as a real hand's grip does, rather than being independent
-random draws. Every value is editable on the **Left**/**Right** tabs, and **Normal**, **Butterfly**
+random draws. Every value is editable in the **Advanced** tab's **Left clicker** and
+**Right clicker** dropdowns, and **Normal**, **Butterfly**
 and **Drag Click** raise the double-click chance as the click rate rises.
 
 ---
@@ -202,6 +204,7 @@ and an amber dot instead of a running CPS figure:
 | --- | --- |
 | `cursor over app` | the pointer is over AeroClicker's own window |
 | `menu is open` | the game reports an open screen |
+| `Minecraft is not focused` | **Only click inside the Minecraft window** is on and another window has focus |
 | `held item is not a block` | **Placeable blocks only** is on and the held item cannot be placed |
 | `holding a bed` | **Placeable blocks only** and **Skip beds** are on and the held item is a bed |
 | `crosshair is not on a block` | **Only while looking at a block** is on and the crosshair is on air or an entity |
@@ -222,20 +225,23 @@ held item and the crosshair are invisible from outside. The companion mod in `to
 publishes those facts, and the app uses them for slot activation, the menu pause, both gates and
 the two combat resets.
 
-Nothing falls back to key guessing: without the mod, slot activation and the menu pause do
-nothing, both gates stay inert, and the combat resets cannot fire.
+Nothing falls back to key guessing: without the mod, slot activation, the menu pause and the
+Minecraft-window-only option do nothing, both gates stay inert, and the combat resets cannot fire.
 
 The mod is read-only. Every 50 ms it writes the selected slot, whether a screen is open, whether
 the held item is a block, whether it is a sword or a bed, whether the crosshair is on a living
-entity, a fireball or a block, whether the player is in water or on the ground, and three event counters to
+entity, a fireball or a block, whether the player is in water or on the ground, whether the game
+window has focus, and three event counters to
 `$XDG_RUNTIME_DIR/aeroclicker-mc.state` as a single line:
 
 ```
-slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch ms> block=<0|1|-1> sword=<0|1|-1> target=<0-3|-1> bed=<0|1|-1> look=<0|1|-1> water=<0|1|-1> ground=<0|1|-1> hurt=<counter> hit=<counter> back=<counter> hground=<0|1|-1> hwater=<0|1|-1>
+slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch ms> block=<0|1|-1> sword=<0|1|-1> target=<0-3|-1> bed=<0|1|-1> look=<0|1|-1> water=<0|1|-1> ground=<0|1|-1> hurt=<counter> hit=<counter> back=<counter> hground=<0|1|-1> hwater=<0|1|-1> focus=<0|1|-1>
 ```
 
 `block`, `sword`, `bed`, `look`, `water` and `ground` are `1` for yes, `0` for no and `-1` for
-"this mod build cannot tell". `target` is a bitmask: `1` for a mob or player, `2` for a fireball,
+"this mod build cannot tell". `focus` is `1` while the Minecraft window has focus, `0` while
+another window does and `-1` when the build cannot tell; the **Only click inside the Minecraft
+window** option uses it and stays inert on `-1`. `target` is a bitmask: `1` for a mob or player, `2` for a fireball,
 `3` for both, `0` for neither and `-1` for unknown. They come after `ms` so an older app build still parses the
 prefix, and an older mod build's `player` field is read as `target`. `hurt` goes up when an
 entity hurts the local player (melee, arrows and fireballs count; fall, fire and other
@@ -424,9 +430,9 @@ rules.
 | Tab | What it does |
 | --- | --- |
 | **Home** | Both clickers at a glance, with live CPS, click counts, on/off switches, Jump/Sprint reset cards with their toggle keys, and the slot activation readout |
-| **Mod** | Bridge link status, the **Global** card (hotbar slots, menu pause), the **Left clicker** and **Right clicker** gates, and the jump/sprint resets — everything that needs the game |
+| **Mod** | Bridge link status, the **Global** card (menu pause, Minecraft-window-only), the **Hotbar** card, the **Left clicker** and **Right clicker** gates, and the jump/sprint resets — everything that needs the game |
 | **Settings** | Audio, profiles and accent — everything that works without the mod |
-| **Left / Right** | Presets, speed, distribution, humanization, hold timing, spikes, breaks, hotkey and activation mode |
+| **Advanced** | One dropdown per clicker with its presets, speed, distribution, humanization, hold timing, spikes, breaks, hotkey and activation mode |
 | **Macros** | Build macro sequences and bind them to a key |
 | **Analytics** | Measured CPS graphs, session statistics, jump/sprint reset fire counts, recording and CSV export |
 

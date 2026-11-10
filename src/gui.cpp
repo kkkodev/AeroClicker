@@ -14,11 +14,12 @@
 #include <cmath>
 #include <cstdlib>
 
-static const char* TAB_NAMES[] = { "Home", "Mod", "Settings", "Left", "Right", "Macros", "Analytics" };
+// Left and Right used to be two tabs distinguished only by an arrow. Their controls are now two
+// dropdowns inside Advanced, which frees the row and gives the icon a meaning of its own.
+static const char* TAB_NAMES[] = { "Home", "Mod", "Settings", "Advanced", "Macros", "Analytics" };
 static const OxIcon TAB_ICONS[] = { OxIcon::Home, OxIcon::Globe, OxIcon::Sliders,
-                                    OxIcon::ArrowLeft, OxIcon::ArrowRight, OxIcon::List,
-                                    OxIcon::Chart };
-static const int TAB_COUNT = 7;
+                                    OxIcon::Terminal, OxIcon::List, OxIcon::Chart };
+static const int TAB_COUNT = 6;
 
 static char s_font_path[256]   = "";
 static float s_font_scale      = 0.0f;
@@ -108,6 +109,7 @@ static ActivationMode idx_to_mode(int i) { return i == 0 ? ActivationMode::TOGGL
 static const char* pause_reason_text(uint32_t mask) {
     if (mask & Clicker::PAUSE_INVENTORY) return "menu is open";
     if (mask & Clicker::PAUSE_POINTER)   return "cursor over app";
+    if (mask & Clicker::PAUSE_OTHER_WINDOW) return "Minecraft is not focused";
     if (mask & Clicker::PAUSE_HELD_BED)  return "holding a bed";
     if (mask & Clicker::PAUSE_HELD_ITEM) return "held item is not a block";
     if (mask & Clicker::PAUSE_NO_BLOCK)  return "crosshair is not on a block";
@@ -358,9 +360,10 @@ static void draw_home_tab(GuiState& state) {
     ImGui::TextDisabled("%s", tip);
 }
 
-// ---------------- Left / Right (advanced) ----------------
+// ---------------- Advanced ----------------
 
-static void draw_side_tab(ClickerProfile& p, ActivationMode mode) {
+// One clicker's full timing controls. Drawn inside the Advanced tab's Left/Right dropdowns.
+static void draw_side_controls(ClickerProfile& p, ActivationMode mode) {
     ImGui::Spacing();
     begin_panel("Rate", -1.0f, -1, OxIcon::Gauge);
     row_slider("Speed (CPS)", &p.cps_mean, CPS_MEAN_LO, CPS_MEAN_HI, "%.1f");
@@ -418,6 +421,28 @@ static void draw_side_tab(ClickerProfile& p, ActivationMode mode) {
         row_slider("Duration Max (s)", &p.break_duration_max, 0.1, 5.0, "%.1f");
     }
     end_panel();
+}
+
+static void draw_advanced_tab(GuiState& state) {
+    ImGui::Spacing();
+    // Separate scope: these disclosures and their panels reuse labels from other tabs, and the
+    // panel-height cache is keyed by title.
+    ImGui::PushID("advanced_tab");
+    // One dropdown per clicker instead of one tab each. The two sets of controls are
+    // identical, so the old tabs differed only by their icon. Each side gets its own ID
+    // scope: the cards share titles, and their cached heights must not follow each other
+    // when both dropdowns are open and only one side has, say, fatigue breaks enabled.
+    if (oxygen_disclosure("Left clicker##advanced_left", true)) {
+        ImGui::PushID("advanced_left");
+        draw_side_controls(state.config.left, state.config.left_mode);
+        ImGui::PopID();
+    }
+    if (oxygen_disclosure("Right clicker##advanced_right", false)) {
+        ImGui::PushID("advanced_right");
+        draw_side_controls(state.config.right, state.config.right_mode);
+        ImGui::PopID();
+    }
+    ImGui::PopID();
 }
 
 // ---------------- Macros ----------------
@@ -579,6 +604,17 @@ static void draw_mod_tab(GuiState& state) {
 
     row_check("Pause clicking while a game menu is open", &state.config.pause_in_menu);
     ImGui::TextDisabled("Covers the inventory, chat, chests and NPC menus");
+    row_check("Only click inside the Minecraft window", &state.config.only_in_mc_window);
+    if (!live)
+        ImGui::TextDisabled("Needs the bridge mod; otherwise clicks go to the focused window");
+    else if (!state.mc_focus_known.load())
+        ImGui::TextDisabled("This mod build cannot report the window focus");
+    else if (state.config.only_in_mc_window)
+        ImGui::TextDisabled(state.mc_focused.load()
+                                ? "Minecraft has focus: clicking stays on"
+                                : "Another window has focus: clickers are paused");
+    else
+        ImGui::TextDisabled("Clickers keep running when you alt-tab away");
     end_panel();
 
     // The hotbar rules are their own card: they are the only part of the tab that follows the
@@ -687,46 +723,47 @@ static void draw_mod_tab(GuiState& state) {
             if (skipped[0]) ImGui::TextDisabled("Skipped: %s", skipped);
         }
     }
-    if (state.config.jump_reset_enabled) {
-        JumpResetProfile& j = state.config.jump_reset;
-        // A movement filter is an alternative, not a layer: "forward" already implies moving,
-        // so ticking one clears the other instead of leaving a redundant pair checked.
-        if (row_check("Only while moving (WASD)", &j.moving_only) && j.moving_only)
-            j.forward_only = false;
-        if (row_check("Only while moving forward (W)", &j.forward_only) && j.forward_only)
-            j.moving_only = false;
-        row_check("Allow while a game menu is open", &j.allow_in_menu);
-        row_check("Respect the slot filter", &j.use_slot_filter);
-        row_check("Do not jump while in water", &j.disable_in_water);
-        row_check("Only jump while on the ground", &j.require_on_ground);
-        // The tuning numbers are the only part that belongs behind Advanced; the filters above
-        // stay visible because they change what the module does, not just how it feels.
-        if (oxygen_disclosure("Advanced##jump_reset")) {
-            row_slider("Chance", &j.chance, 0.0, 1.0, "%.2f");
-            row_slider("Delay Mean (ms)", &j.delay_ms_mean, 0.0, 300.0, "%.0f");
-            row_slider("Delay StdDev (ms)", &j.delay_ms_stddev, 0.0, 80.0, "%.0f");
-            row_slider("Delay Min (ms)", &j.delay_ms_min, 0.0, 200.0, "%.0f");
-            row_slider("Delay Max (ms)", &j.delay_ms_max, 0.0, 400.0, "%.0f");
-            row_slider("Hold Mean (ms)", &j.hold_ms_mean, 10.0, 200.0, "%.0f");
-            row_slider("Hold StdDev (ms)", &j.hold_ms_stddev, 0.0, 50.0, "%.0f");
-            row_slider("Hold Min (ms)", &j.hold_ms_min, 10.0, 150.0, "%.0f");
-            row_slider("Hold Max (ms)", &j.hold_ms_max, 20.0, 300.0, "%.0f");
-            row_slider("Cooldown (ms)", &j.cooldown_ms, 0.0, 2000.0, "%.0f");
-            if (j.require_on_ground) {
-                // The grace window only makes sense with the ground check, so it sits after a
-                // rule rather than looking like another timing value in the same block.
-                ImGui::Spacing();
-                ImGui::Separator();
-                ImGui::Spacing();
-                row_slider("Jump Grace (ms)", &j.ground_grace_ms, 0.0, 300.0, "%.0f");
-                ImGui::TextDisabled("Still counts a hit that lifted you off the floor this recently");
-            }
+    // The options are always visible: "Enable" is a switch for the module, not a gate on its
+    // settings. Tuning something before turning it on is normal, and hiding it made the card
+    // look empty whenever the module was off.
+    JumpResetProfile& j = state.config.jump_reset;
+    // A movement filter is an alternative, not a layer: "forward" already implies moving,
+    // so ticking one clears the other instead of leaving a redundant pair checked.
+    if (row_check("Only while moving (WASD)", &j.moving_only) && j.moving_only)
+        j.forward_only = false;
+    if (row_check("Only while moving forward (W)", &j.forward_only) && j.forward_only)
+        j.moving_only = false;
+    row_check("Allow while a game menu is open", &j.allow_in_menu);
+    row_check("Respect the slot filter", &j.use_slot_filter);
+    row_check("Do not jump while in water", &j.disable_in_water);
+    row_check("Only jump while on the ground", &j.require_on_ground);
+    // The tuning numbers are the only part that belongs behind Advanced; the filters above
+    // stay visible because they change what the module does, not just how it feels.
+    if (oxygen_disclosure("Advanced##jump_reset")) {
+        row_slider("Chance", &j.chance, 0.0, 1.0, "%.2f");
+        row_slider("Delay Mean (ms)", &j.delay_ms_mean, 0.0, 300.0, "%.0f");
+        row_slider("Delay StdDev (ms)", &j.delay_ms_stddev, 0.0, 80.0, "%.0f");
+        row_slider("Delay Min (ms)", &j.delay_ms_min, 0.0, 200.0, "%.0f");
+        row_slider("Delay Max (ms)", &j.delay_ms_max, 0.0, 400.0, "%.0f");
+        row_slider("Hold Mean (ms)", &j.hold_ms_mean, 10.0, 200.0, "%.0f");
+        row_slider("Hold StdDev (ms)", &j.hold_ms_stddev, 0.0, 50.0, "%.0f");
+        row_slider("Hold Min (ms)", &j.hold_ms_min, 10.0, 150.0, "%.0f");
+        row_slider("Hold Max (ms)", &j.hold_ms_max, 20.0, 300.0, "%.0f");
+        row_slider("Cooldown (ms)", &j.cooldown_ms, 0.0, 2000.0, "%.0f");
+        if (j.require_on_ground) {
+            // The grace window only makes sense with the ground check, so it sits after a
+            // rule rather than looking like another timing value in the same block.
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            row_slider("Jump Grace (ms)", &j.ground_grace_ms, 0.0, 300.0, "%.0f");
+            ImGui::TextDisabled("Still counts a hit that lifted you off the floor this recently");
         }
-        if (in_world && !state.mc_water_known.load())
-            ImGui::TextDisabled("This mod build cannot report water");
-        else if (in_world && !state.mc_ground_known.load())
-            ImGui::TextDisabled("This mod build cannot report the ground");
     }
+    if (in_world && !state.mc_water_known.load())
+        ImGui::TextDisabled("This mod build cannot report water");
+    else if (in_world && !state.mc_ground_known.load())
+        ImGui::TextDisabled("This mod build cannot report the ground");
     end_panel();
 
     begin_panel("Sprint reset", -1.0f, -1, OxIcon::Keyboard);
@@ -749,40 +786,39 @@ static void draw_mod_tab(GuiState& state) {
             if (skipped[0]) ImGui::TextDisabled("Skipped: %s", skipped);
         }
     }
-    if (state.config.sprint_reset_enabled) {
-        SprintResetProfile& s = state.config.sprint_reset;
-        int sm = static_cast<int>(s.mode);
-        if (row_combo("Mode", &sm, "W-Tap\0S-Tap\0Shift-Tap\0"))
-            s.mode = static_cast<SprintResetMode>(sm);
-        // W-Tap has to hide the W you keep holding, and it can only take the keyboard over at a
-        // moment when nothing is down: a key held across the grab would never deliver its
-        // release, so the game would keep it pressed. That is a property of the grab, not of the
-        // trigger - the tap itself runs while W stays held. Say which state applies so the
-        // module never looks like it is silently doing nothing.
-        if (!state.combat) {
-            // The lines above already say the module cannot run.
-        } else if (s.mode != SprintResetMode::W_TAP) {
-            ImGui::TextDisabled("S-Tap and Shift-Tap do not need the keyboard");
-        } else if (state.combat->keyboard.forwarding()) {
-            ImGui::TextDisabled("W-Tap is active: it releases W while you keep it held");
-        } else {
-            ImGui::TextDisabled("Release every key once so W-Tap can take over the keyboard");
-        }
-        row_check("Only while moving forward (W)", &s.forward_only);
-        row_check("Respect the slot filter", &s.use_slot_filter);
-        // Only the tap tuning is advanced; the filters above stay visible because they change
-        // whether the reset applies at all.
-        if (oxygen_disclosure("Advanced##sprint_reset")) {
-            row_slider("Chance", &s.chance, 0.0, 1.0, "%.2f");
-            row_slider("Delay Min (ms)", &s.delay_ms_min, 0.0, 100.0, "%.0f");
-            row_slider("Delay Max (ms)", &s.delay_ms_max, 0.0, 200.0, "%.0f");
-            row_slider("Ticks Mean", &s.duration_ticks_mean, 1.0, 3.0, "%.2f");
-            row_slider("Ticks StdDev", &s.duration_ticks_stddev, 0.0, 1.0, "%.2f");
-            row_slider("Ticks Min", &s.duration_ticks_min, 1.0, 3.0, "%.0f");
-            row_slider("Ticks Max", &s.duration_ticks_max, 1.0, 3.0, "%.0f");
-            row_slider("Tap Jitter (ms)", &s.tap_jitter_ms, 0.0, 40.0, "%.0f");
-            row_slider("Cooldown (ms)", &s.cooldown_ms, 0.0, 2000.0, "%.0f");
-        }
+    // Always visible, for the same reason as the Jump reset controls above.
+    SprintResetProfile& s = state.config.sprint_reset;
+    int sm = static_cast<int>(s.mode);
+    if (row_combo("Mode", &sm, "W-Tap\0S-Tap\0Shift-Tap\0"))
+        s.mode = static_cast<SprintResetMode>(sm);
+    // W-Tap has to hide the W you keep holding, and it can only take the keyboard over at a
+    // moment when nothing is down: a key held across the grab would never deliver its
+    // release, so the game would keep it pressed. That is a property of the grab, not of the
+    // trigger - the tap itself runs while W stays held. Say which state applies so the
+    // module never looks like it is silently doing nothing.
+    if (!state.combat) {
+        // The lines above already say the module cannot run.
+    } else if (s.mode != SprintResetMode::W_TAP) {
+        ImGui::TextDisabled("S-Tap and Shift-Tap do not need the keyboard");
+    } else if (state.combat->keyboard.forwarding()) {
+        ImGui::TextDisabled("W-Tap is active: it releases W while you keep it held");
+    } else {
+        ImGui::TextDisabled("Release every key once so W-Tap can take over the keyboard");
+    }
+    row_check("Only while moving forward (W)", &s.forward_only);
+    row_check("Respect the slot filter", &s.use_slot_filter);
+    // Only the tap tuning is advanced; the filters above stay visible because they change
+    // whether the reset applies at all.
+    if (oxygen_disclosure("Advanced##sprint_reset")) {
+        row_slider("Chance", &s.chance, 0.0, 1.0, "%.2f");
+        row_slider("Delay Min (ms)", &s.delay_ms_min, 0.0, 100.0, "%.0f");
+        row_slider("Delay Max (ms)", &s.delay_ms_max, 0.0, 200.0, "%.0f");
+        row_slider("Ticks Mean", &s.duration_ticks_mean, 1.0, 3.0, "%.2f");
+        row_slider("Ticks StdDev", &s.duration_ticks_stddev, 0.0, 1.0, "%.2f");
+        row_slider("Ticks Min", &s.duration_ticks_min, 1.0, 3.0, "%.0f");
+        row_slider("Ticks Max", &s.duration_ticks_max, 1.0, 3.0, "%.0f");
+        row_slider("Tap Jitter (ms)", &s.tap_jitter_ms, 0.0, 40.0, "%.0f");
+        row_slider("Cooldown (ms)", &s.cooldown_ms, 0.0, 2000.0, "%.0f");
     }
     end_panel();
     ImGui::PopID();
@@ -1236,10 +1272,9 @@ void gui_run(GuiState& state) {
                 case 0: draw_home_tab(state); break;
                 case 1: draw_mod_tab(state); break;
                 case 2: draw_settings_tab(state, profiles, selected_profile, profile_name_buf, status_msg, status_timer); break;
-                case 3: draw_side_tab(state.config.left, state.config.left_mode); break;
-                case 4: draw_side_tab(state.config.right, state.config.right_mode); break;
-                case 5: draw_macros_tab(state); break;
-                case 6: draw_analytics_tab(state, status_msg, status_timer); break;
+                case 3: draw_advanced_tab(state); break;
+                case 4: draw_macros_tab(state); break;
+                case 5: draw_analytics_tab(state, status_msg, status_timer); break;
             }
             ImGui::PopClipRect();
             oxygen_scrollbar(content_top);

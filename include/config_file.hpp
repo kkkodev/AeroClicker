@@ -412,6 +412,7 @@ public:
             else if (!strcmp(key, "right_mode")) cfg.right_mode = (int)val == 0 ? ActivationMode::TOGGLE : ((int)val == 1 ? ActivationMode::HOLD : ActivationMode::MOUSE);
             else if (!strcmp(key, "slot_auto_enabled")) cfg.slot_auto_enabled = (int)val != 0;
             else if (!strcmp(key, "pause_in_menu")) cfg.pause_in_menu = (int)val != 0;
+            else if (!strcmp(key, "only_in_mc_window")) cfg.only_in_mc_window = (int)val != 0;
             else if (!strcmp(key, "right_placeable_only")) cfg.right_placeable_only = (int)val != 0;
             else if (!strcmp(key, "right_gate_no_bed")) cfg.right_gate_no_bed = (int)val != 0;
             else if (!strcmp(key, "right_look_block")) cfg.right_look_block = (int)val != 0;
@@ -590,6 +591,7 @@ public:
         fprintf(f, "right_mode %d\n", cfg.right_mode == ActivationMode::TOGGLE ? 0 : (cfg.right_mode == ActivationMode::HOLD ? 1 : 2));
         fprintf(f, "slot_auto_enabled %d\n", cfg.slot_auto_enabled ? 1 : 0);
         fprintf(f, "pause_in_menu %d\n", cfg.pause_in_menu ? 1 : 0);
+        fprintf(f, "only_in_mc_window %d\n", cfg.only_in_mc_window ? 1 : 0);
         fprintf(f, "right_placeable_only %d\n", cfg.right_placeable_only ? 1 : 0);
         fprintf(f, "right_gate_no_bed %d\n", cfg.right_gate_no_bed ? 1 : 0);
         fprintf(f, "right_look_block %d\n", cfg.right_look_block ? 1 : 0);

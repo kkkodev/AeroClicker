@@ -72,6 +72,7 @@ public:
         PAUSE_NO_TARGET = 1u << 4,   // left clicker: the gate wants a mob, player or fireball in the crosshair
         PAUSE_HELD_BED  = 1u << 5,   // right clicker: the held item is a bed and the gate skips beds
         PAUSE_NO_BLOCK  = 1u << 6,   // right clicker: the crosshair is not on a block
+        PAUSE_OTHER_WINDOW = 1u << 7,   // "only click inside Minecraft" is on and it lost focus
     };
     // Pauses an explicit key press may override: the user asked to run now.
     static constexpr uint32_t PAUSE_AUTO = PAUSE_INVENTORY;
@@ -80,7 +81,7 @@ public:
     // left button, or placing water and throwing pearls with the right one.
     static constexpr uint32_t PAUSE_NO_TAKEOVER =
         PAUSE_INVENTORY | PAUSE_HELD_ITEM | PAUSE_NO_SWORD | PAUSE_NO_TARGET |
-        PAUSE_HELD_BED | PAUSE_NO_BLOCK;
+        PAUSE_HELD_BED | PAUSE_NO_BLOCK | PAUSE_OTHER_WINDOW;
 
     void set_enabled(bool v) {
         if (!v) gated_start_ = false;

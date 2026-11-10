@@ -15,7 +15,7 @@
 //     slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch milliseconds>
 //     block=<0|1|-1> sword=<0|1|-1> target=<0|1|-1> bed=<0|1|-1>
 //     look=<0|1|-1> water=<0|1|-1> ground=<0|1|-1> hurt=<counter> hit=<counter>
-//     back=<counter>
+//     back=<counter> focus=<0|1|-1>
 //
 // `block` says whether the held item is a block (placeable), `sword` whether it is a sword,
 // `target` is a bitmask of what the crosshair ray found (1 = a mob or player, 2 = a fireball,
@@ -68,6 +68,9 @@ struct State {
     // Posture latched by the bridge for the newest hurt tick (the sample before the damage).
     int hwater = -1;
     int hground = -1;
+    // 1 while the Minecraft window has focus, 0 while another window does, -1 when this mod
+    // build cannot tell. The app only uses it for the "only click inside Minecraft" option.
+    int focus = -1;
     long long hurt = 0;
     long long hit = 0;
     long long back = 0;
@@ -127,6 +130,7 @@ inline bool poll(State& out) {
     out.ground = int_field("ground", -1);
     out.hwater = int_field("hwater", -1);
     out.hground = int_field("hground", -1);
+    out.focus = int_field("focus", -1);
     out.hurt = long_field("hurt");
     out.hit = long_field("hit");
     out.back = long_field("back");

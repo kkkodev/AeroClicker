@@ -539,6 +539,8 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
         gui_state.mc_ground_known = mc_live && mc.ground >= 0;
         gui_state.mc_water = mc_live ? mc.water : -1;
         gui_state.mc_ground = mc_live ? mc.ground : -1;
+        gui_state.mc_focus_known = mc_live && mc.focus >= 0;
+        gui_state.mc_focused = mc_live && mc.focus == 1;
         if (mc_live) {
             gui_state.mc_hurt = mc.hurt;
             gui_state.mc_hit = mc.hit;
@@ -625,6 +627,13 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
         }
         apply_pauses(left_clicker);
         apply_pauses(right_clicker);
+        // "Only click inside Minecraft": pause both clickers when another window has focus.
+        // Only the bridge can see that, so an older mod build (focus == -1) leaves the option
+        // inert rather than stopping the clickers for a state it cannot observe.
+        const bool other_window = config.only_in_mc_window && mc_live && mc.focus >= 0 &&
+                                  mc.focus != 1;
+        left_clicker.set_pause(Clicker::PAUSE_OTHER_WINDOW, other_window);
+        right_clicker.set_pause(Clicker::PAUSE_OTHER_WINDOW, other_window);
         // Item/target gates. Both read only what the bridge mod publishes, and a field the
         // running mod build does not report (== -1) leaves that half of the gate inert rather
         // than blocking every click. With no link at all they are inert too.
