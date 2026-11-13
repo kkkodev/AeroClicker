@@ -174,18 +174,18 @@ struct Macro {
 // are deliberately human-paced and randomized; a jump reset 15 ms after a hit looks nothing
 // like a person reacting, while ~100 ms with a broad spread reads as a fast reaction.
 struct JumpResetProfile {
-    // 90 % keeps the reset reliable in a real fight while the occasional missed reaction is
+    // 92 % keeps the reset reliable in a real fight while the occasional missed reaction is
     // what a person looks like. Sprint reset keeps its own default.
     double chance = 0.92;
-    // A trained player reacts to a hit in roughly 90-130 ms, and strafing is as normal as
-    // running straight. The bridge has already spent up to one 50 ms tick reporting the hit
-    // before this delay starts, so 60 ms with a right-skewed 16 ms spread (clamped to 35-110)
-    // lands the jump around 60-110 ms after the damage: fast enough to read as a top player's
-    // anticipation, still above the frame-perfect range a script would use.
-    double delay_ms_mean = 60.0;
-    double delay_ms_stddev = 16.0;
-    double delay_ms_min = 35.0;
-    double delay_ms_max = 110.0;
+    // In-game clients react on the knockback packet itself (GhostTap defaults to about 15 ms,
+    // Arsenic to 0 ms). This app sits outside the game, so the bridge and the app poll add
+    // most of the latency before this delay even starts. 45 ms with a right-skewed 12 ms
+    // spread (clamped to 26-82) leaves a human-looking pause without pushing the press into
+    // the next knockback or skipping the useful window.
+    double delay_ms_mean = 45.0;
+    double delay_ms_stddev = 12.0;
+    double delay_ms_min = 26.0;
+    double delay_ms_max = 82.0;
 
     double hold_ms_mean = 65.0;
     double hold_ms_stddev = 7.0;

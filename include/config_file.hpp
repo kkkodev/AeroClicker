@@ -264,6 +264,20 @@ public:
                !j.forward_only && j.moving_only && !j.allow_in_menu &&
                j.use_slot_filter && j.disable_in_water && j.require_on_ground;
     }
+    // The 60 ms pass. Faster than the pro tuning before it, but still late next to an in-game
+    // client: the bridge and app polls already spend most of the reaction budget. A profile
+    // that still matches it exactly is moved to the 45 ms default once; edited tuning stays.
+    static bool is_previous_jump_v6_defaults(const JumpResetProfile& j) {
+        return close_to(j.chance, 0.92, 0.02) &&
+               close_to(j.delay_ms_mean, 60.0, 2.0) && close_to(j.delay_ms_stddev, 16.0, 2.0) &&
+               close_to(j.delay_ms_min, 35.0, 2.0) && close_to(j.delay_ms_max, 110.0, 2.0) &&
+               close_to(j.hold_ms_mean, 65.0, 2.0) && close_to(j.hold_ms_stddev, 7.0, 1.0) &&
+               close_to(j.hold_ms_min, 48.0, 2.0) && close_to(j.hold_ms_max, 85.0, 2.0) &&
+               close_to(j.cooldown_ms, 450.0, 20.0) &&
+               close_to(j.ground_grace_ms, 100.0, 10.0) &&
+               !j.forward_only && j.moving_only && !j.allow_in_menu &&
+               j.use_slot_filter && j.disable_in_water && j.require_on_ground;
+    }
     static bool is_previous_sprint_wtap_defaults(const SprintResetProfile& s) {
         return s.mode == SprintResetMode::W_TAP &&
                close_to(s.chance, 0.90, 0.02) &&
@@ -389,6 +403,7 @@ public:
         bool combat_v4_seen = false;      // file was saved after the reaction-time default
         bool combat_v5_seen = false;      // file was saved after the movement-aware pro default
         bool combat_v6_seen = false;      // file was saved after the balanced-pro default
+        bool combat_v7_seen = false;      // file was saved after the faster 45 ms default
         while (fgets(line, sizeof(line), f)) {
             char key[96];
             double val;
@@ -433,6 +448,7 @@ public:
             else if (!strcmp(key, "combat_v4_seen")) combat_v4_seen = true;
             else if (!strcmp(key, "combat_v5_seen")) combat_v5_seen = true;
             else if (!strcmp(key, "combat_v6_seen")) combat_v6_seen = true;
+            else if (!strcmp(key, "combat_v7_seen")) combat_v7_seen = true;
             else if (!strcmp(key, "macro_count")) { /* counted implicitly */ }
             else {
                 bool handled = false;
@@ -554,6 +570,19 @@ public:
                 cfg.sprint_reset = fresh;
             }
         }
+        // The faster jump delay. Outside the game the bridge and app polls already spend most
+        // of the reaction budget, so the 60 ms tune landed late; an untouched profile moves to
+        // 45 ms once, while any edited delay or filter is kept as it was.
+        if (!combat_v7_seen && is_previous_jump_v6_defaults(cfg.jump_reset)) {
+            JumpResetProfile fresh;
+            fresh.forward_only = cfg.jump_reset.forward_only;
+            fresh.moving_only = cfg.jump_reset.moving_only;
+            fresh.allow_in_menu = cfg.jump_reset.allow_in_menu;
+            fresh.use_slot_filter = cfg.jump_reset.use_slot_filter;
+            fresh.disable_in_water = cfg.jump_reset.disable_in_water;
+            fresh.require_on_ground = cfg.jump_reset.require_on_ground;
+            cfg.jump_reset = fresh;
+        }
         // The resets never come back enabled: the clickers start switched off after a restart
         // too, and a build that starts jumping the moment it launches is the surprise this
         // avoids. The toggle is a session choice, so the old keys are read and thrown away.
@@ -604,6 +633,7 @@ public:
         fprintf(f, "combat_v4_seen 1\n");
         fprintf(f, "combat_v5_seen 1\n");
         fprintf(f, "combat_v6_seen 1\n");
+        fprintf(f, "combat_v7_seen 1\n");
         const JumpResetProfile& j = cfg.jump_reset;
         fprintf(f, "jump_reset.chance %g\n", j.chance);
         fprintf(f, "jump_reset.delay_ms_mean %g\n", j.delay_ms_mean);

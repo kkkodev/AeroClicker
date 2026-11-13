@@ -392,8 +392,8 @@ reports the counters (the jar in `tools/mc-bridge` does).
   a jump. Projectiles are judged by the direction they were flying, so an arrow from behind is
   still a backstab. The defaults are
   tuned for a fast but human-looking
-  reaction: 92 % chance, a 60 ms reaction drawn from a right-skewed 16 ms spread (clamped to
-  35–110 ms), a 65 ms hold with a 7 ms spread (48–85 ms), and a 450 ms cooldown. It only fires
+  reaction: 92 % chance, a 45 ms reaction drawn from a right-skewed 12 ms spread (clamped to
+  26–82 ms), a 65 ms hold with a 7 ms spread (48–85 ms), and a 450 ms cooldown. It only fires
   while moving with any WASD key (**Only while moving (WASD)**, on by default); the stricter
   **Only while moving forward (W)** option narrows that to W. The two are alternatives: ticking
   one clears the other, because forward already implies moving. It respects the slot filter, stays
@@ -445,9 +445,9 @@ events makes them far less mechanical than pressing Space on every click. The ju
 right-skewed like a real reaction: most presses land just after the minimum and a few are slower.
 They are still not undetectable: a server sees the resulting movement and attack timing, and can
 compare it against what a human can react to. A 100 ms jump reaction is already fast for a
-person who is anticipating a hit; a 20 ms one would be impossible. Choose values you would
-plausibly produce yourself, and accept that using any automation can still be against a server's
-rules.
+person who is anticipating a hit; the 45 ms default is deliberately on the quick side, and a
+20 ms one would be impossible. Choose values you would plausibly produce yourself, and accept
+that using any automation can still be against a server's rules.
 
 ---
 
