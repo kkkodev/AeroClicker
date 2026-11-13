@@ -43,8 +43,9 @@ import net.fabricmc.api.ClientModInitializer;
  * fall damage is both useless and an obvious tell. When an older server protocol (1.8 through
  * ViaFabricPlus, or a server-side Via translation) sends no damage-event packet, the client only
  * sees the hurt animation (and the health update), so the attacker is inferred instead: an
- * arrow, snowball or egg that disappears next to the player, a living entity under the
- * crosshair, one that is still swinging, or the nearest one within melee reach. The app turns
+ * arrow, snowball or egg that disappears next to the player, or a living entity that is still
+ * swinging. A crosshair target or a nearby entity alone is not enough, because fall and burn
+ * ticks happen during fights too and must not look like hits. The app turns
  * those counters into one Jump Reset / Sprint Reset per step instead of firing on its own
  * clicks. {@code back} rises alongside {@code hurt} when the attacker was behind the player, so
  * the app can leave the jump reset alone after a backstab; the side is worked out the same way
@@ -78,7 +79,7 @@ public final class StateExport implements ClientModInitializer {
      * a player fades the clicker in rather than switching it on at the exact frame the crosshair
      * touches the box, which is what a real player's aim looks like.
      */
-    private static final double TARGET_NEAR_PAD = 0.35;
+    private static final double TARGET_NEAR_PAD = 0.25;
     /**
      * The look gate extends vanilla's block ray by half a block, so the right clicker starts
      * when a block is still just out of reach. This is the block-side counterpart of the target
@@ -1071,7 +1072,10 @@ public final class StateExport implements ClientModInitializer {
         private static final java.util.Set<String> ENVIRONMENTAL = java.util.Set.of(
             "fall", "lava", "inFire", "onFire", "hotFloor", "drown", "starve", "cactus",
             "outOfWorld", "flyIntoWall", "freeze", "sweetBerryBush", "stalagmite", "anvil",
-            "fallingBlock", "fallingAnvil", "inWall", "cramming", "outsideBorder");
+            "fallingBlock", "fallingAnvil", "inWall", "cramming", "outsideBorder",
+            "lightningBolt", "dry_out", "fallingStalactite", "sting", "campfire", "badRespawnPoint",
+            "windCharge", "sonicBoom", "explosion", "fireworks", "unattributedFireball",
+            "genericKill");
 
         /**
          * Names the attacker and the side the hit came from: 0 when nothing caused it, 1 when
@@ -1135,22 +1139,17 @@ public final class StateExport implements ClientModInitializer {
         }
 
         /**
-         * Best guess at what hurt the player when the server sent no attacker. The cues are
-         * ordered from strongest to weakest, and every one of them also says which side the
-         * hit came from:
-         *
-         * <ol>
-         *   <li>a projectile that was next to the player last poll and is gone now - arrows,
-         *       snowballs and eggs are removed the frame they land on an entity, so this is
-         *       what a bow or snowball hit looks like on a 1.8 server;</li>
-         *   <li>a living entity under the crosshair - you can see who hit you;</li>
-         *   <li>a living entity that is still swinging;</li>
-         *   <li>the nearest living entity within melee reach plus a little lag.</li>
-         * </ol>
+         * Best guess at what hurt the player when the server sent no attacker. The only local
+         * cues that may open the counter are a projectile that vanished next to the player and
+         * a living entity that is actually swinging. A crosshair target or merely being near an
+         * entity is not enough: both are present during an ordinary fight, and using them made
+         * a fall or burn tick look like a hit whenever someone happened to be close. Knockback
+         * only decides the side and, when this mapping cannot read swings at all, is the last
+         * signal left.
          *
          * <p>Nothing found means environmental damage, so the counter does not rise and the
          * module stays quiet. A health-only tick (the hurt animation was missed) needs a swing
-         * or a hit under the crosshair, which keeps starvation ticks out.</p>
+         * or a projectile too, which keeps starvation and fire ticks out.</p>
          */
         private int classifyLocally(Object mc, Object self, boolean strict) {
             if (pendingProjectilePolls > 0) {
@@ -1159,7 +1158,6 @@ public final class StateExport implements ClientModInitializer {
                 pendingProjectileSide = HIT_NONE;
                 if (side != HIT_NONE) return side;
             }
-            if (exactTargetState(mc, self) == 1) return HIT_FRONT;
 
             List<?> entities = nearbyLiving(mc, self);
             if (entities == null || entities.isEmpty()) return HIT_NONE;
@@ -1173,21 +1171,21 @@ public final class StateExport implements ClientModInitializer {
                     nearestDist = dist;
                     nearest = entity;
                 }
-                if (dist <= 6.0 && swinging(entity) && dist < swingerDist) {
+                if (dist <= 4.5 && swinging(entity) && dist < swingerDist) {
                     swingerDist = dist;
                     swinger = entity;
                 }
             }
             if (swinger != null) return sideOf(swinger, self);
-            // A hit also pushes the player away from the attacker, which is the one cue that
-            // still works when nothing identifiable is left nearby.
+            // No one is swinging, so this tick was environmental: fall, fire, drowning and
+            // starvation all raise hurtTime without an attacker. Without a swing mapping the
+            // old knockback/reach heuristic is still the only thing available.
+            if (isSwinging != null) return HIT_NONE;
             if (knockbackPolls > 0) {
                 knockbackPolls = 0;
                 return knockbackSide;
             }
-            // Swings are short; when this mapping cannot read them at all, reach is the only
-            // signal left, so it is allowed the full radius.
-            double reach = (strict && isSwinging != null) ? 3.0 : 4.5;
+            double reach = strict ? 3.0 : 4.5;
             if (nearest != null && nearestDist <= reach) return sideOf(nearest, self);
             return HIT_NONE;
         }

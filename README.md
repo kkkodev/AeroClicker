@@ -314,7 +314,7 @@ on it.
 The target check reaches 3.5 blocks from the eye, about half a block past vanilla attack reach.
 When a player runs at you, they become a target while still out of range, so clicking is already
 underway by the time they can be hit instead of starting a few milliseconds late. The check also
-pads a player's box by 0.35 blocks, so the gate opens while the cursor is just beside them rather
+pads a player's box by 0.25 blocks, so the gate opens while the cursor is just beside them rather
 than exactly on them: the first clicks can miss, and moving onto a player fades the clicker in
 instead of switching it on at the frame the crosshair touches the box. That imperfection is
 deliberate. This is only the app's target lead; the game's own reach is not changed. A block in the
@@ -386,9 +386,11 @@ reports the counters (the jar in `tools/mc-bridge` does).
   or one that lands while you are in water or in mid-air. When the server speaks an older protocol
   (Hypixel or Minemen's 1.8 through ViaFabricPlus, or server-side Via translation) the game sends
   no damage source at all, so the bridge infers the attacker from what it can see: an arrow,
-  snowball or egg that disappears right next to you, a living entity under the crosshair, one that
-  is still swinging, or the nearest one within melee reach. Projectiles are judged by the
-  direction they were flying, so an arrow from behind is still a backstab. The defaults are
+  snowball or egg that disappears right next to you, or a living entity that is still swinging.
+  It does **not** count a nearby entity or the entity under the crosshair by itself, because both
+  are present during an ordinary fight and they used to turn the occasional fall or burn tick into
+  a jump. Projectiles are judged by the direction they were flying, so an arrow from behind is
+  still a backstab. The defaults are
   tuned for a fast but human-looking
   reaction: 92 % chance, a 60 ms reaction drawn from a right-skewed 16 ms spread (clamped to
   35–110 ms), a 65 ms hold with a 7 ms spread (48–85 ms), and a 450 ms cooldown. It only fires
@@ -511,7 +513,8 @@ keybinds survive the rename.
   with WASD by default, on the ground and out of water; Sprint reset's W-Tap needs W held and
   its panel must say **W-Tap is active** (release every key once after enabling it, so the app
   can take the keyboard over). On a 1.8 server (ViaFabricPlus or a server-side Via translation)
-  the new bridge identifies the attacker from a nearby living entity, so update the jar there
+  the new bridge identifies the attacker from a nearby entity that is swinging or from a
+  projectile that vanishes next to you, so update the jar there
   too; an older jar only counts damage that carries a damage source, which 1.8 does not send.
   With **Settings → Show the debug readout** on, the `Bridge events` line tells you whether the
   game is reporting hurt/hit at all: a flat counter while you are being hit means the jar is old
