@@ -641,8 +641,10 @@ static void draw_mod_tab(GuiState& state) {
     ImGui::PushID("gate_cards");
     begin_panel("Left clicker", -1.0f, -1, OxIcon::MouseLeft);
     // GhostTap-style. The target-in-crosshair option also covers mining, because a block is in
-    // the crosshair instead of a target, so the click is passed through. Fireballs count too:
-    // a fireball flying at you is worth clicking at just like a player.
+    // the crosshair instead of a target, so the click is passed through. The check reaches a
+    // little past vanilla reach and accepts a cursor just beside a player: an incoming target
+    // starts the clicker early, and the first clicks may miss. Fireballs count too: a fireball
+    // flying at you is worth clicking at just like a player.
     if (state.config.left_gate < 0) state.config.left_gate = 0;
     if (state.config.left_gate > 3) state.config.left_gate = 3;
     row_combo("Click when", &state.config.left_gate,
@@ -650,8 +652,8 @@ static void draw_mod_tab(GuiState& state) {
     static const char* const LEFT_GATE_HINTS[] = {
         "Runs without asking the game anything",
         "Only clicks while holding a sword",
-        "Only clicks while a mob, player or fireball is in the crosshair",
-        "Only clicks at a mob, player or fireball while holding a sword",
+        "Only clicks at a mob, player or fireball near the crosshair",
+        "Only clicks at a near target while holding a sword",
     };
     const int gate = state.config.left_gate;
     const bool gate_known = (gate & 1 ? state.mc_sword_known.load() : true) &&
@@ -694,7 +696,7 @@ static void draw_mod_tab(GuiState& state) {
     if (in_world && state.config.right_look_block && !state.mc_look_known.load())
         ImGui::TextDisabled("This mod build cannot report the crosshair");
     else
-        ImGui::TextDisabled("Stops while the crosshair is on air or an entity");
+        ImGui::TextDisabled("Stops on air or an entity; starts half a block before a block is in reach");
 
     // A click on an interactive block opens a screen or toggles the block instead of placing
     // the held one, so the clicker stays off it. Sneaking bypasses the gate in the game too:

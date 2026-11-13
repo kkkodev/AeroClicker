@@ -15,9 +15,9 @@ import net.fabricmc.api.ClientModInitializer;
 /**
  * Publishes the client state AeroClicker cannot observe from outside the game: the selected
  * hotbar slot, whether any screen (inventory, chat, chest, NPC dialog, ...) is open, whether the
- * held item is a block, whether it is a sword or a bed, whether the crosshair is on a living
- * entity (a mob or another player), and whether the crosshair block is interactive (opens a
- * menu, a door, a bed, ...) instead of accepting a placed block.
+ * held item is a block, whether it is a sword or a bed, whether a living entity (a mob or
+ * another player) is under or just beside the crosshair, and whether the crosshair block is
+ * interactive (opens a menu, a door, a bed, ...) instead of accepting a placed block.
  * It only ever reads; nothing is sent to the server and no input is changed.
  *
  * <p>The state goes to {@code $XDG_RUNTIME_DIR/aeroclicker-mc.state} as one line:
@@ -31,7 +31,10 @@ import net.fabricmc.api.ClientModInitializer;
  * game window owns the input focus, which is what the "only click inside Minecraft" option
  * uses to stay quiet in another window. {@code interactive} says whether the block under the
  * crosshair would react to a use (a menu block such as a chest, or a door, trapdoor, bed,
- * button, ...), so the right clicker can stay off it instead of interacting.</p>
+ * button, ...), so the right clicker can stay off it instead of interacting. {@code target}
+ * reaches half a block past vanilla attack reach and accepts a ray that passes just beside a
+ * player, while {@code look} extends vanilla's block ray by half a block; both give their
+ * clicker an early start at the cost of the odd miss.</p>
  *
  * <p>The counters make the combat resets reliable: {@code hurt} goes up when the local
  * player's {@code hurtTime} rises from an attack (an entity dealt the damage), and {@code hit}
@@ -69,6 +72,21 @@ public final class StateExport implements ClientModInitializer {
     private static final double TARGET_REACH = 3.5;
     /** Numerical slack so a ray exactly on a box edge still counts. */
     private static final double TARGET_BOX_PAD = 0.02;
+    /**
+     * How far beside a player the cursor may be and still open the target gate. The click is
+     * then aimed next to the player instead of at them, so it can miss on purpose: moving onto
+     * a player fades the clicker in rather than switching it on at the exact frame the crosshair
+     * touches the box, which is what a real player's aim looks like.
+     */
+    private static final double TARGET_NEAR_PAD = 0.35;
+    /**
+     * The look gate extends vanilla's block ray by half a block, so the right clicker starts
+     * when a block is still just out of reach. This is the block-side counterpart of the target
+     * lead: the gate opens a little early and the first click may miss, exactly as the left
+     * clicker's clicks can miss a player who is still running in. The game's own reach is not
+     * changed.
+     */
+    private static final double BLOCK_LEAD = 0.5;
     /**
      * Block classes whose right click is an interaction instead of a placement. Names are the
      * lower-cased simple names, matched against the whole superclass chain so modded doors and
@@ -182,7 +200,7 @@ public final class StateExport implements ClientModInitializer {
         long hit = b.hitState(mc, player);
         return new Snapshot(line, b.blockState(inventory, slot),
                             b.swordState(inventory, slot), b.targetState(mc, player),
-                            b.bedState(inventory, slot), b.lookState(mc),
+                            b.bedState(inventory, slot), b.lookState(mc, player),
                             water, ground,
                             hurt, b.seenCounter, hit, b.backCounter,
                             b.hurtGround, b.hurtWater, b.focusState(mc), b.interactiveState(mc, player));
@@ -262,6 +280,23 @@ public final class StateExport implements ClientModInitializer {
                 if (known.equals(name)) return true;
         }
         return false;
+    }
+
+    /**
+     * A public static constant by name, whether the type models it as an enum or as a field
+     * (newer mappings turn some of the old enums into holders).
+     */
+    private static Object constant(Class<?> type, String name) {
+        if (type.isEnum()) {
+            for (Object c : type.getEnumConstants())
+                if (((Enum<?>) c).name().equals(name)) return c;
+            return null;
+        }
+        try {
+            return type.getField(name).get(null);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return null;
+        }
     }
 
     /** Write through a temporary file so the app never sees a half-written line. */
@@ -374,6 +409,15 @@ public final class StateExport implements ClientModInitializer {
         final Field vecX, vecY, vecZ;
         final java.lang.reflect.Constructor<?> vec3Ctor;
         final Class<?> vec3Class;
+        // Look-gate lead: the block ray extended by BLOCK_LEAD through the game's own clip call.
+        // Optional; when this mapping lacks it the look gate stays at vanilla reach.
+        final Method levelClip;
+        final java.lang.reflect.Constructor<?> clipCtor;
+        final Object clipBlockShape;
+        final Object clipFluidShape;
+        final Method clipCollisionOf;
+        final Method clipCollisionEmpty;
+        final Field crosshairEntity;
 
         Binding() throws ReflectiveOperationException {
             Class<?> mc = Class.forName("net.minecraft.client.Minecraft");
@@ -602,6 +646,70 @@ public final class StateExport implements ClientModInitializer {
             vec3Ctor = vecCtor;
             vec3Class = vecType;
 
+            // Look-gate lead. Vanilla stops its block ray at the block-interaction range, so a
+            // block just out of reach reports a MISS. Clipping the same ray BLOCK_LEAD further
+            // through the game tests exactly that block. ClipContext has had both an Entity and
+            // a CollisionContext as its last argument across versions, so the constructor is
+            // picked by shape and the last argument is built to match.
+            Method worldClip = null;
+            java.lang.reflect.Constructor<?> clipContextCtor = null;
+            Object blockShape = null, fluidShape = null;
+            Method collisionOf = null, collisionEmpty = null;
+            Field crosshair = null;
+            if (vecType != null) {
+                try {
+                    Class<?> clipContext = Class.forName("net.minecraft.world.level.ClipContext");
+                    worldClip = Class.forName("net.minecraft.world.level.Level")
+                                     .getMethod("clip", clipContext);
+                    for (java.lang.reflect.Constructor<?> ctor : clipContext.getConstructors()) {
+                        Class<?>[] p = ctor.getParameterTypes();
+                        if (p.length != 5 || p[0] != vecType || p[1] != vecType) continue;
+                        Object block = constant(p[2], "OUTLINE");
+                        if (block == null) block = constant(p[2], "COLLIDER");
+                        Object fluid = constant(p[3], "NONE");
+                        if (block == null || fluid == null) continue;
+                        clipContextCtor = ctor;
+                        blockShape = block;
+                        fluidShape = fluid;
+                        break;
+                    }
+                    // Newer versions pass the collision context instead of the entity, so
+                    // resolve both ways and let the constructor's last parameter decide.
+                    try {
+                        Class<?> collision =
+                            Class.forName("net.minecraft.world.phys.shapes.CollisionContext");
+                        try {
+                            collisionOf = collision.getMethod(
+                                "of", Class.forName("net.minecraft.world.entity.Entity"));
+                        } catch (ReflectiveOperationException | RuntimeException ignored) {
+                        }
+                        try {
+                            collisionEmpty = collision.getMethod("empty");
+                        } catch (ReflectiveOperationException | RuntimeException ignored) {
+                        }
+                    } catch (ReflectiveOperationException | RuntimeException ignored) {
+                    }
+                    // Vanilla keeps the entity under the crosshair separately from hitResult,
+                    // so an entity in the crosshair must not be mistaken for a block behind it.
+                    try {
+                        crosshair = mc.getField("crosshairPickEntity");
+                    } catch (ReflectiveOperationException | RuntimeException ignored) {
+                    }
+                } catch (ReflectiveOperationException | RuntimeException ignored) {
+                    worldClip = null;
+                    clipContextCtor = null;
+                    blockShape = null;
+                    fluidShape = null;
+                }
+            }
+            levelClip = worldClip;
+            clipCtor = clipContextCtor;
+            clipBlockShape = blockShape;
+            clipFluidShape = fluidShape;
+            clipCollisionOf = collisionOf;
+            clipCollisionEmpty = collisionEmpty;
+            crosshairEntity = crosshair;
+
             // Interactive-block gate. The game's own menu check answers "would a right click
             // open a chest / crafting table / furnace"; a class-name match adds the blocks
             // that react without a screen (doors, trapdoors, beds, buttons, ...). Sneaking is
@@ -708,13 +816,76 @@ public final class StateExport implements ClientModInitializer {
             return blockHitClass != null && blockHitClass.isInstance(hit);
         }
 
-        /** 1 = the crosshair is on a block, 0 = air or an entity, -1 = cannot tell. */
-        int lookState(Object mc) {
+        /**
+         * 1 = the crosshair is on a block (or within half a block of one), 0 = air or an
+         * entity, -1 = cannot tell. Vanilla only reports blocks inside the block-interaction
+         * range; the lead ray opens the gate just before the block is actually reachable, so
+         * the right clicker starts a little early - the same deal the target gate gives the
+         * left clicker.
+         */
+        int lookState(Object mc, Object self) {
             if (hitResult == null || (blockHitClass == null && hitType == null)) return -1;
             try {
-                return isBlockHit(hitResult.get(mc)) ? 1 : 0;
+                Object hit = hitResult.get(mc);
+                if (isBlockHit(hit)) return 1;
+                if (hit == null || self == null) return 0;
+                // Some mappings put the entity pick in hitResult itself; that is not a block.
+                if (entityHitClass != null && entityHitClass.isInstance(hit)) return 0;
+                // Aiming at an entity is not aiming at a block, even when a wall is right behind
+                // it. The block ray is a MISS then, so the separate entity pick has to be read.
+                if (crosshairEntity != null && crosshairEntity.get(mc) != null) return 0;
+                return blockJustBeyond(mc, self, hit) ? 1 : 0;
             } catch (ReflectiveOperationException | RuntimeException e) {
                 return -1;
+            }
+        }
+
+        /**
+         * True when the vanilla block ray missed only because the block is just outside reach,
+         * i.e. a block lies within BLOCK_LEAD of the ray end. The extension goes through the
+         * game's own clip call, so non-solid blocks do not count and a ray that passes a corner
+         * is judged the same way the game judges it.
+         */
+        private boolean blockJustBeyond(Object mc, Object self, Object hit) {
+            if (level == null || levelClip == null || clipCtor == null ||
+                clipBlockShape == null || clipFluidShape == null ||
+                hitLocation == null || vec3Ctor == null ||
+                vecX == null || vecY == null || vecZ == null ||
+                getX == null || getY == null || getZ == null || getEyeY == null) {
+                return false;
+            }
+            try {
+                Object world = level.get(mc);
+                Object loc = hitLocation.invoke(hit);
+                if (world == null || loc == null) return false;
+                double x = (Double) getX.invoke(self);
+                double y = (Double) getEyeY.invoke(self);
+                double z = (Double) getZ.invoke(self);
+                double dx = vecX.getDouble(loc) - x;
+                double dy = vecY.getDouble(loc) - y;
+                double dz = vecZ.getDouble(loc) - z;
+                double len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                if (len < 1.0e-4) return false;
+                // Extend along the actual pick ray rather than the look vector: they agree on a
+                // normal miss, and this also stays right when the game nudged or clipped it.
+                double scale = (len + BLOCK_LEAD) / len;
+                Object from = vec3Ctor.newInstance(x, y, z);
+                Object to = vec3Ctor.newInstance(x + dx * scale, y + dy * scale, z + dz * scale);
+                Class<?>[] p = clipCtor.getParameterTypes();
+                Object last;
+                if (p[4].isInstance(self)) {
+                    last = self;
+                } else if (clipCollisionOf != null) {
+                    last = clipCollisionOf.invoke(null, self);
+                } else if (clipCollisionEmpty != null) {
+                    last = clipCollisionEmpty.invoke(null);
+                } else {
+                    return false;
+                }
+                Object context = clipCtor.newInstance(from, to, clipBlockShape, clipFluidShape, last);
+                return isBlockHit(levelClip.invoke(world, context));
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                return false;
             }
         }
 
@@ -1257,7 +1428,8 @@ public final class StateExport implements ClientModInitializer {
         /** Bitmask of what the gate can see: 1 = a mob/player, 2 = a fireball, 3 = both,
          *  0 = a block or nothing, -1 = cannot tell. Keeping the two apart lets the app's
          *  "Click at fireballs" option decide whether fireballs count. The ray keeps going
-         *  half a block past vanilla reach, so the gate opens as a target runs in. */
+         *  half a block past vanilla reach and tolerates a cursor just beside a player, so the
+         *  gate opens as a target runs in and the first clicks can miss. */
         int targetState(Object mc, Object self) {
             if (hitResult == null || hitEntity == null || livingClass == null) return -1;
             try {
@@ -1331,7 +1503,12 @@ public final class StateExport implements ClientModInitializer {
                 boolean living = false, fireball = false;
                 for (Object entity : entities) {
                     Object box = getBoundingBox.invoke(entity);
-                    Object padded = inflate.invoke(box, TARGET_BOX_PAD);
+                    // The near pad is for players and mobs only: it is what makes the gate
+                    // start while the cursor is just beside one, so the first clicks can miss.
+                    // A fireball keeps the numerical slack, since aiming at one is more exact.
+                    double pad = livingClass.isInstance(entity)
+                                     ? TARGET_BOX_PAD + TARGET_NEAR_PAD : TARGET_BOX_PAD;
+                    Object padded = inflate.invoke(box, pad);
                     Optional<?> hit = (Optional<?>) clip.invoke(padded, eye, end);
                     if (hit != null && hit.isPresent()) {
                         if (livingClass.isInstance(entity)) living = true;

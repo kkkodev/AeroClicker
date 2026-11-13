@@ -275,8 +275,10 @@ struct Config {
     // PvP, accidental placement). On by default so the right gate skips them.
     bool right_gate_no_bed = true;
     // Right clicker: only click while the crosshair is on a block. On by default, so it stays
-    // quiet while aiming at air or an entity. This is the build/bridge filter; it is separate
-    // from the held-item gate and needs a mod build that reports `look`.
+    // quiet while aiming at air or an entity. The bridge extends its block ray half a block
+    // past vanilla reach, so the clicker starts just before the block is reachable (the first
+    // click can miss, like the left clicker's target lead). This is the build/bridge filter;
+    // it is separate from the held-item gate and needs a mod build that reports `look`.
     bool right_look_block = true;
     // Right clicker: pause while the crosshair is on a block that reacts to a use instead of
     // taking a placed block: a menu block (chest, crafting table, furnace, ...), a door,

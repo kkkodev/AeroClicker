@@ -49,8 +49,8 @@ See [Credits](#credits).
 - **Slot activation** — optional and off by default: a Minecraft hotbar slot switches each clicker on and off, with a per-clicker set of slots (default: slot 1 left, slot 9 right); turn on **Follow hotbar slots** on the Mod tab to use it (the slot boxes grey out while it is off, keeping their stored mapping). It reads the game through the [bridge mod](#minecraft-mod)
 - **Menu pause** — clicking stops while the game has a screen open (inventory, chat, chests, NPC menus) and resumes when it closes
 - **Minecraft-window only** — optional: clicking also stops while another window has focus, so alt-tabbing never sends clicks to whatever is in front. The bridge mod reports the focus; without a mod build that does, the option stays inert
-- **Left gate** — the **Left clicker** card on the Mod tab: the left clicker can require a mob, player or fireball in the crosshair, a sword in hand, or both, so it does not fire while you mine or build; the default is target-in-crosshair, and the target check reaches about half a block past vanilla reach so an incoming player or fireball becomes a target just before it can hit you
-- **Right gate** — the **Right clicker** card on the Mod tab: the right clicker can require a placeable block in hand, so right-click actions never fire on a sword, a pearl or an empty hand; **Placeable blocks only** and **Only while looking at a block** are on by default, **Skip beds** is on by default and greys out while the block gate is off, and **Pause on interactive blocks** keeps a click from opening a chest or toggling a door, trapdoor or bed (sneak to place on one)
+- **Left gate** — the **Left clicker** card on the Mod tab: the left clicker can require a mob, player or fireball in the crosshair, a sword in hand, or both, so it does not fire while you mine or build; the default is target-in-crosshair, and the target check reaches about half a block past vanilla reach and accepts a cursor just beside a player, so an incoming player or fireball becomes a target just before it can hit you
+- **Right gate** — the **Right clicker** card on the Mod tab: the right clicker can require a placeable block in hand, so right-click actions never fire on a sword, a pearl or an empty hand; **Placeable blocks only** and **Only while looking at a block** are on by default, the block check starts half a block before the block is in reach, **Skip beds** is on by default and greys out while the block gate is off, and **Pause on interactive blocks** keeps a click from opening a chest or toggling a door, trapdoor or bed (sneak to place on one)
 - **Jump reset / Sprint reset** — optional and off by default: both fire from the bridge mod's game events, not from the app's own clicks. Jump reset presses Space when an entity hurts the player (fall, fire and other environmental damage are ignored); sprint reset breaks sprint after a hit on a living entity, with randomized chance, delay and W-/S-/Shift-tap duration. Jump reset stays quiet when the damage came from behind. Each reset has its own toggle key, and binding both to one key toggles both together, exactly like the two clickers
 - **Macros** — optional, off by default: sequences of left clicks, right clicks, delays and slot switches, with looping and a keybind
 - **Headless mode** — run the clicker with no window
@@ -240,7 +240,9 @@ slot=<0-8, or -1 outside a world> screen=<0|1> ms=<epoch ms> block=<0|1|-1> swor
 ```
 
 `block`, `sword`, `bed`, `look`, `water` and `ground` are `1` for yes, `0` for no and `-1` for
-"this mod build cannot tell". `focus` is `1` while the Minecraft window has focus, `0` while
+"this mod build cannot tell". `look` is `1` while the crosshair is on a block or within half a
+block of one, since the bridge extends the vanilla block ray for the right clicker's early start.
+`focus` is `1` while the Minecraft window has focus, `0` while
 another window does and `-1` when the build cannot tell; the **Only click inside the Minecraft
 window** option uses it and stays inert on `-1`. `interactive` is `1` when the block under the
 crosshair would react to a use instead of taking a placed block — a menu block such as a chest,
@@ -311,13 +313,16 @@ on it.
 
 The target check reaches 3.5 blocks from the eye, about half a block past vanilla attack reach.
 When a player runs at you, they become a target while still out of range, so clicking is already
-underway by the time they can be hit instead of starting a few milliseconds late. This is only the
-app's target lead; the game's own reach is not changed. A block in the crosshair still wins: the
-gate pauses while you mine even if a mob is just behind the block. Fireballs count as targets
-too: one flying at you is found by the same 3.5-block ray, so the clicker starts on it and the
-press is taken over just as it would be for a player. **Click at fireballs** under the gate is on
-by default; clear it to ignore them and let only mobs and players count. The box greys out when
-the selected mode does not require a target at all.
+underway by the time they can be hit instead of starting a few milliseconds late. The check also
+pads a player's box by 0.35 blocks, so the gate opens while the cursor is just beside them rather
+than exactly on them: the first clicks can miss, and moving onto a player fades the clicker in
+instead of switching it on at the frame the crosshair touches the box. That imperfection is
+deliberate. This is only the app's target lead; the game's own reach is not changed. A block in the
+crosshair still wins: the gate pauses while you mine even if a mob is just behind the block.
+Fireballs count as targets too: one flying at you is found by the same 3.5-block ray, so the
+clicker starts on it and the press is taken over just as it would be for a player. **Click at
+fireballs** under the gate is on by default; clear it to ignore them and let only mobs and players
+count. The box greys out when the selected mode does not require a target at all.
 
 In Mouse mode this also works mid-press: press and hold while the crosshair is on a block, then
 move it onto a mob, player or fireball, and clicking starts without letting go of the button (the press
@@ -353,8 +358,10 @@ build that reports `bed`; an older jar leaves it inert.
 
 **Only while looking at a block** is on by default. The right clicker pauses with
 `crosshair is not on a block` while the crosshair is on air or on an entity, so a right clicker
-cannot keep using an item or hitting an NPC when you are not aiming at something to place on. It
-needs a bridge build that reports `look`; an older jar leaves that half inert.
+cannot keep using an item or hitting an NPC when you are not aiming at something to place on. The
+check extends vanilla's block ray by half a block, so it starts just before the block is actually
+in reach: the first click can miss, like the left clicker's first swing at a player who is still
+running in. It needs a bridge build that reports `look`; an older jar leaves that half inert.
 
 **Pause on interactive blocks** is on by default. A right click on a chest, crafting table or
 furnace opens its screen instead of placing the held block, and a click on a door, trapdoor,
