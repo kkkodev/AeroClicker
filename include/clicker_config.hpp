@@ -206,9 +206,10 @@ struct JumpResetProfile {
     bool require_on_ground = true;
     // The bridge latches the posture before the hit, but that sample is still up to one poll
     // old: a hit that lands just after the player leaves the floor would look airborne. If the
-    // last on-ground sample is inside this window, the hit still counts as grounded. 0 keeps
-    // the strict "ground now" check.
-    double ground_grace_ms = 100.0;
+    // last on-ground sample is inside this window, the hit still counts as grounded. The full
+    // ground state is written on the bridge's 50 ms pass, so 60 ms covers one pass plus the
+    // app's wake-up without letting a real takeoff through. 0 keeps the strict "ground now" check.
+    double ground_grace_ms = 60.0;
 };
 
 struct SprintResetProfile {
