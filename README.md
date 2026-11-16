@@ -394,8 +394,8 @@ reports the counters (the jar in `tools/mc-bridge` does).
   a jump. Projectiles are judged by the direction they were flying, so an arrow from behind is
   still a backstab. The defaults are
   tuned for a fast but human-looking
-  reaction: 92 % chance, a 60 ms reaction drawn from a right-skewed 12 ms spread (clamped to
-  38–100 ms), a 65 ms hold with a 7 ms spread (48–85 ms), and a 450 ms cooldown. It only fires
+  reaction: 92 % chance, a 55 ms reaction drawn from a right-skewed 12 ms spread (clamped to
+  35–92 ms), a 65 ms hold with a 7 ms spread (48–85 ms), and a 450 ms cooldown. It only fires
   while moving with any WASD key (**Only while moving (WASD)**, on by default); the stricter
   **Only while moving forward (W)** option narrows that to W. The two are alternatives: ticking
   one clears the other, because forward already implies moving. It respects the slot filter, stays
@@ -406,7 +406,7 @@ reports the counters (the jar in `tools/mc-bridge` does).
   it to 0 for the strict "ground now" rule.
 - **Sprint reset** briefly breaks sprint after the game reports a hit on a mob or player so the
   next hit deals full sprint knockback. It can use **W-Tap** (release W), **S-Tap** (tap S) or
-  **Shift-Tap** (tap Shift). Defaults: 90 % chance, a 15–65 ms delay, 1.15 ± 0.28 ticks clamped to
+  **Shift-Tap** (tap Shift). Defaults: 90 % chance, a 13–60 ms delay, 1.15 ± 0.28 ticks clamped to
   1–2 ticks, a 15 ms per-tap jitter so the key is not held for exactly 50 or 100 ms every time,
   and a 220 ms cooldown. W-Tap fires while W is held, like every other mode: the "no key held"
   rule is only about the one-time moment the app takes the keyboard over. Hiding a W you are
@@ -447,7 +447,7 @@ events makes them far less mechanical than pressing Space on every click. The ju
 right-skewed like a real reaction: most presses land just after the minimum and a few are slower.
 They are still not undetectable: a server sees the resulting movement and attack timing, and can
 compare it against what a human can react to. A 100 ms jump reaction is already fast for a
-person who is anticipating a hit; the 60 ms default is deliberately on the quick side, and a
+person who is anticipating a hit; the 55 ms default is deliberately on the quick side, and a
 20 ms one would be impossible. Choose values you would plausibly produce yourself, and accept
 that using any automation can still be against a server's rules.
 

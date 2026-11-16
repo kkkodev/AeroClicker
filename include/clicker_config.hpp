@@ -178,13 +178,13 @@ struct JumpResetProfile {
     // what a person looks like. Sprint reset keeps its own default.
     double chance = 0.92;
     // The bridge reports a damage tick within one 10 ms fast pass and the app wakes on the
-    // state write, so much less of the reaction is spent outside this timer than before. 60 ms
-    // with a right-skewed 12 ms spread (clamped to 38-100) keeps the whole path human-paced
+    // state write, so much less of the reaction is spent outside this timer than before. 55 ms
+    // with a right-skewed 12 ms spread (clamped to 35-92) keeps the whole path human-paced
     // without landing in the next knockback or skipping the useful window.
-    double delay_ms_mean = 60.0;
+    double delay_ms_mean = 55.0;
     double delay_ms_stddev = 12.0;
-    double delay_ms_min = 38.0;
-    double delay_ms_max = 100.0;
+    double delay_ms_min = 35.0;
+    double delay_ms_max = 92.0;
 
     double hold_ms_mean = 65.0;
     double hold_ms_stddev = 7.0;
@@ -215,10 +215,10 @@ struct JumpResetProfile {
 struct SprintResetProfile {
     SprintResetMode mode = SprintResetMode::W_TAP;
     double chance = 0.90;
-    // A random delay keeps the tap from landing on the exact tick of every hit; 15-65 ms still
+    // A random delay keeps the tap from landing on the exact tick of every hit; 13-60 ms still
     // breaks sprint before the next swing without looking frame-perfect.
-    double delay_ms_min = 15.0;
-    double delay_ms_max = 65.0;
+    double delay_ms_min = 13.0;
+    double delay_ms_max = 60.0;
 
     double duration_ticks_mean = 1.15;
     double duration_ticks_stddev = 0.28;
