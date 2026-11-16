@@ -180,117 +180,6 @@ public:
         return true;
     }
 
-    static bool near(double a, double b) {
-        const double d = a - b;
-        return d < 1e-6 && d > -1e-6;
-    }
-    // A slider leaves values like 512.17 where the shipped default was 500. Match the previous
-    // default within a small tolerance so those configs are still recognised as untouched.
-    static bool close_to(double a, double b, double tol) {
-        const double d = a - b;
-        return d < tol && d > -tol;
-    }
-
-    // The combat resets used to fire from the app's own clicks and shipped with a near-instant
-    // jump. A profile that still holds every old default is upgraded once to the event-driven,
-    // human-paced defaults; a profile with any edited value is left alone.
-    static bool is_old_jump_defaults(const JumpResetProfile& j) {
-        return near(j.chance, 0.85) &&
-               near(j.delay_ms_mean, 15.0) && near(j.delay_ms_stddev, 10.0) &&
-               near(j.delay_ms_min, 5.0) && near(j.delay_ms_max, 50.0) &&
-               near(j.hold_ms_mean, 75.0) && near(j.hold_ms_stddev, 15.0) &&
-               near(j.hold_ms_min, 50.0) && near(j.hold_ms_max, 100.0) &&
-               near(j.cooldown_ms, 600.0);
-    }
-    static bool is_old_sprint_defaults(const SprintResetProfile& s) {
-        return near(s.chance, 1.0) &&
-               near(s.delay_ms_min, 0.0) && near(s.delay_ms_max, 0.0) &&
-               near(s.duration_ticks_mean, 1.0) && near(s.duration_ticks_stddev, 0.35) &&
-               near(s.duration_ticks_min, 1.0) && near(s.duration_ticks_max, 2.0) &&
-               near(s.cooldown_ms, 450.0);
-    }
-
-    // Jump Reset as it shipped just before the chance became 85 %. A profile with every other
-    // value untouched is moved to the new default once; an edited one is left alone.
-    static bool is_previous_jump_chance_default(const JumpResetProfile& j) {
-        return near(j.chance, 0.90) &&
-               near(j.delay_ms_mean, 45.0) && near(j.delay_ms_stddev, 15.0) &&
-               near(j.delay_ms_min, 20.0) && near(j.delay_ms_max, 90.0) &&
-               near(j.hold_ms_mean, 80.0) && near(j.hold_ms_stddev, 12.0) &&
-               near(j.hold_ms_min, 55.0) && near(j.hold_ms_max, 120.0) &&
-               near(j.cooldown_ms, 500.0) && j.forward_only && !j.allow_in_menu &&
-               j.use_slot_filter && j.disable_in_water && j.require_on_ground;
-    }
-
-    // Jump Reset after its first human-paced pass: 90 ms mean with a 45 ms floor. The floor was
-    // still inside the range a script would use, and the Gaussian head put values right at it.
-    // A profile whose every value still matches that set is upgraded to the slower, right-
-    // skewed reaction defaults; an edited one keeps the user's tuning.
-    static bool is_previous_jump_human_defaults(const JumpResetProfile& j) {
-        return near(j.chance, 0.85) &&
-               near(j.delay_ms_mean, 90.0) && near(j.delay_ms_stddev, 30.0) &&
-               near(j.delay_ms_min, 45.0) && near(j.delay_ms_max, 170.0) &&
-               near(j.hold_ms_mean, 80.0) && near(j.hold_ms_stddev, 12.0) &&
-               near(j.hold_ms_min, 55.0) && near(j.hold_ms_max, 120.0) &&
-               near(j.cooldown_ms, 500.0) && j.forward_only && !j.allow_in_menu &&
-               j.use_slot_filter && j.disable_in_water && j.require_on_ground;
-    }
-
-    // The reaction-time pass that shipped right before the movement-aware/pro tuning. Its
-    // forward-only filter missed every strafe, and its delay still had a script-like floor.
-    static bool is_previous_jump_pro_defaults(const JumpResetProfile& j) {
-        return near(j.chance, 0.85) &&
-               near(j.delay_ms_mean, 110.0) && near(j.delay_ms_stddev, 32.0) &&
-               near(j.delay_ms_min, 65.0) && near(j.delay_ms_max, 200.0) &&
-               near(j.hold_ms_mean, 75.0) && near(j.hold_ms_stddev, 10.0) &&
-               near(j.hold_ms_min, 55.0) && near(j.hold_ms_max, 105.0) &&
-               near(j.cooldown_ms, 600.0) && j.forward_only && j.moving_only &&
-               !j.allow_in_menu && j.use_slot_filter &&
-               j.disable_in_water && j.require_on_ground;
-    }
-
-    // The balanced-pro pass: a 60 ms reaction with a 16 ms spread, a slightly shorter hold,
-    // a 450 ms cooldown and a tighter one-tick W-Tap. A profile that still matches the
-    // previous shipped defaults (including the small drift a slider leaves behind) is moved
-    // over once; an edited profile keeps its tuning.
-    static bool is_previous_jump_balanced_defaults(const JumpResetProfile& j) {
-        return close_to(j.chance, 0.90, 0.02) &&
-               close_to(j.delay_ms_mean, 80.0, 2.0) && close_to(j.delay_ms_stddev, 20.0, 2.0) &&
-               close_to(j.delay_ms_min, 45.0, 2.0) && close_to(j.delay_ms_max, 140.0, 2.0) &&
-               close_to(j.hold_ms_mean, 70.0, 2.0) && close_to(j.hold_ms_stddev, 8.0, 1.0) &&
-               close_to(j.hold_ms_min, 50.0, 2.0) && close_to(j.hold_ms_max, 95.0, 2.0) &&
-               close_to(j.cooldown_ms, 500.0, 20.0) &&
-               close_to(j.ground_grace_ms, 100.0, 10.0) &&
-               !j.forward_only && j.moving_only && !j.allow_in_menu &&
-               j.use_slot_filter && j.disable_in_water && j.require_on_ground;
-    }
-    // The 60 ms pass. Faster than the pro tuning before it, but still late next to an in-game
-    // client: the bridge and app polls already spend most of the reaction budget. A profile
-    // that still matches it exactly is moved to the 45 ms default once; edited tuning stays.
-    static bool is_previous_jump_v6_defaults(const JumpResetProfile& j) {
-        return close_to(j.chance, 0.92, 0.02) &&
-               close_to(j.delay_ms_mean, 60.0, 2.0) && close_to(j.delay_ms_stddev, 16.0, 2.0) &&
-               close_to(j.delay_ms_min, 35.0, 2.0) && close_to(j.delay_ms_max, 110.0, 2.0) &&
-               close_to(j.hold_ms_mean, 65.0, 2.0) && close_to(j.hold_ms_stddev, 7.0, 1.0) &&
-               close_to(j.hold_ms_min, 48.0, 2.0) && close_to(j.hold_ms_max, 85.0, 2.0) &&
-               close_to(j.cooldown_ms, 450.0, 20.0) &&
-               close_to(j.ground_grace_ms, 100.0, 10.0) &&
-               !j.forward_only && j.moving_only && !j.allow_in_menu &&
-               j.use_slot_filter && j.disable_in_water && j.require_on_ground;
-    }
-    static bool is_previous_sprint_wtap_defaults(const SprintResetProfile& s) {
-        return s.mode == SprintResetMode::W_TAP &&
-               close_to(s.chance, 0.90, 0.02) &&
-               close_to(s.delay_ms_min, 15.0, 2.0) && close_to(s.delay_ms_max, 65.0, 2.0) &&
-               close_to(s.duration_ticks_mean, 1.25, 0.02) &&
-               close_to(s.duration_ticks_stddev, 0.40, 0.02) &&
-               close_to(s.duration_ticks_min, 1.0, 0.01) &&
-               close_to(s.duration_ticks_max, 2.0, 0.01) &&
-               close_to(s.tap_jitter_ms, 12.0, 1.0) &&
-               close_to(s.cooldown_ms, 250.0, 20.0) &&
-               s.forward_only && s.use_slot_filter;
-    }
-
     // Values from disk and from the command line are untrusted. A hand-edited profile could
     // hold a negative stddev (undefined for std::normal_distribution), a break window that
     // never ends, or a key code outside the keyboard; clamp everything that reaches the model.
@@ -397,29 +286,16 @@ public:
         if (!f) return false;
 
         char line[256];
-        bool accent_order_seen = false;   // file was written with the current accent list
-        bool combat_v2_seen = false;      // file already has the event-driven reset fields
-        bool combat_v3_seen = false;      // file was saved after the 85 % chance default
-        bool combat_v4_seen = false;      // file was saved after the reaction-time default
-        bool combat_v5_seen = false;      // file was saved after the movement-aware pro default
-        bool combat_v6_seen = false;      // file was saved after the balanced-pro default
-        bool combat_v7_seen = false;      // file was saved after the faster 45 ms default
         while (fgets(line, sizeof(line), f)) {
             char key[96];
             double val;
             if (sscanf(line, "%95s %lf", key, &val) != 2) continue;
-            if (!strcmp(key, "jump_reset.disable_in_water") ||
-                !strcmp(key, "jump_reset.require_on_ground") ||
-                !strcmp(key, "right_look_block")) {
-                combat_v2_seen = true;
-            }
             read_profile_key(key, val, "left", cfg.left);
             read_profile_key(key, val, "right", cfg.right);
 
             if (!strcmp(key, "key_left")) cfg.key_left = (int)val;
             else if (!strcmp(key, "key_right")) cfg.key_right = (int)val;
             else if (!strcmp(key, "accent_preset")) cfg.accent_preset = (int)val;
-            else if (!strcmp(key, "accent_order")) accent_order_seen = true;
             else if (!strcmp(key, "accent_r")) cfg.accent_r = val;
             else if (!strcmp(key, "accent_g")) cfg.accent_g = val;
             else if (!strcmp(key, "accent_b")) cfg.accent_b = val;
@@ -444,11 +320,6 @@ public:
             }
             else if (!strcmp(key, "left_gate_fireball")) cfg.left_gate_fireball = (int)val != 0;
             else if (!strcmp(key, "audio_enabled")) cfg.audio_enabled = (int)val != 0;
-            else if (!strcmp(key, "combat_v3_seen")) combat_v3_seen = true;
-            else if (!strcmp(key, "combat_v4_seen")) combat_v4_seen = true;
-            else if (!strcmp(key, "combat_v5_seen")) combat_v5_seen = true;
-            else if (!strcmp(key, "combat_v6_seen")) combat_v6_seen = true;
-            else if (!strcmp(key, "combat_v7_seen")) combat_v7_seen = true;
             else if (!strcmp(key, "macro_count")) { /* counted implicitly */ }
             else {
                 bool handled = false;
@@ -493,96 +364,11 @@ public:
                 }
             }
         }
-        // accent_preset used to be Oxygen Blue, Red, Green, Purple, Custom, Follow KDE; it is
-        // now Follow KDE, Blue, Red, Green, Purple, Orange, Custom. Saved files carry an order
-        // marker, so a file without one still holds old numbers and is remapped exactly once.
-        if (!accent_order_seen) {
-            static const int legacy_to_current[6] = { 1, 2, 3, 4, 6, 0 };
-            cfg.accent_preset = (cfg.accent_preset >= 0 && cfg.accent_preset < 6)
-                              ? legacy_to_current[cfg.accent_preset] : 0;
-        }
         if (cfg.accent_preset < 0 || cfg.accent_preset > 6) cfg.accent_preset = 0;
         // A hand-edited sprint mode must stay inside the enum.
         int sm = static_cast<int>(cfg.sprint_reset.mode);
         if (sm < 0 || sm > 2) sm = 0;
         cfg.sprint_reset.mode = static_cast<SprintResetMode>(sm);
-        // One-time upgrade for configs written before the resets became event-driven. The
-        // marker keeps a deliberate old-style tune from being overwritten on every load.
-        if (!combat_v2_seen) {
-            if (is_old_jump_defaults(cfg.jump_reset)) {
-                JumpResetProfile fresh;
-                fresh.forward_only = cfg.jump_reset.forward_only;
-                fresh.allow_in_menu = cfg.jump_reset.allow_in_menu;
-                fresh.use_slot_filter = cfg.jump_reset.use_slot_filter;
-                cfg.jump_reset = fresh;
-            }
-            if (is_old_sprint_defaults(cfg.sprint_reset)) {
-                SprintResetProfile fresh;
-                fresh.mode = cfg.sprint_reset.mode;
-                fresh.forward_only = cfg.sprint_reset.forward_only;
-                fresh.use_slot_filter = cfg.sprint_reset.use_slot_filter;
-                cfg.sprint_reset = fresh;
-            }
-        }
-        // Jump Reset's default chance moved from 90 % to 85 %. An untouched profile is nudged
-        // once; the marker saved below then keeps a deliberate 0.90 from being overwritten on
-        // every later load.
-        if (!combat_v3_seen && is_previous_jump_chance_default(cfg.jump_reset))
-            cfg.jump_reset.chance = 0.85;
-        // The reaction floor and mean moved again, and the delay is now drawn from a right-
-        // skewed distribution. Upgrade an untouched copy of the previous default once.
-        if (!combat_v4_seen && is_previous_jump_human_defaults(cfg.jump_reset)) {
-            JumpResetProfile fresh;
-            fresh.allow_in_menu = cfg.jump_reset.allow_in_menu;
-            fresh.use_slot_filter = cfg.jump_reset.use_slot_filter;
-            fresh.disable_in_water = cfg.jump_reset.disable_in_water;
-            fresh.require_on_ground = cfg.jump_reset.require_on_ground;
-            cfg.jump_reset = fresh;
-        }
-        // The movement filter and the faster pro-facing timings. This also catches a config
-        // that was already saved by the reaction-time build above.
-        if (!combat_v5_seen && is_previous_jump_pro_defaults(cfg.jump_reset)) {
-            JumpResetProfile fresh;
-            fresh.allow_in_menu = cfg.jump_reset.allow_in_menu;
-            fresh.use_slot_filter = cfg.jump_reset.use_slot_filter;
-            fresh.disable_in_water = cfg.jump_reset.disable_in_water;
-            fresh.require_on_ground = cfg.jump_reset.require_on_ground;
-            cfg.jump_reset = fresh;
-        }
-        // The balanced-pro pass: faster reaction, shorter hold, tighter cooldown, and a
-        // one-tick W-Tap. Upgrade untouched previous defaults once; keep edited tuning.
-        if (!combat_v6_seen) {
-            if (is_previous_jump_balanced_defaults(cfg.jump_reset)) {
-                JumpResetProfile fresh;
-                fresh.forward_only = cfg.jump_reset.forward_only;
-                fresh.moving_only = cfg.jump_reset.moving_only;
-                fresh.allow_in_menu = cfg.jump_reset.allow_in_menu;
-                fresh.use_slot_filter = cfg.jump_reset.use_slot_filter;
-                fresh.disable_in_water = cfg.jump_reset.disable_in_water;
-                fresh.require_on_ground = cfg.jump_reset.require_on_ground;
-                cfg.jump_reset = fresh;
-            }
-            if (is_previous_sprint_wtap_defaults(cfg.sprint_reset)) {
-                SprintResetProfile fresh;
-                fresh.mode = cfg.sprint_reset.mode;
-                fresh.forward_only = cfg.sprint_reset.forward_only;
-                fresh.use_slot_filter = cfg.sprint_reset.use_slot_filter;
-                cfg.sprint_reset = fresh;
-            }
-        }
-        // The faster jump delay. Outside the game the bridge and app polls already spend most
-        // of the reaction budget, so the 60 ms tune landed late; an untouched profile moves to
-        // 45 ms once, while any edited delay or filter is kept as it was.
-        if (!combat_v7_seen && is_previous_jump_v6_defaults(cfg.jump_reset)) {
-            JumpResetProfile fresh;
-            fresh.forward_only = cfg.jump_reset.forward_only;
-            fresh.moving_only = cfg.jump_reset.moving_only;
-            fresh.allow_in_menu = cfg.jump_reset.allow_in_menu;
-            fresh.use_slot_filter = cfg.jump_reset.use_slot_filter;
-            fresh.disable_in_water = cfg.jump_reset.disable_in_water;
-            fresh.require_on_ground = cfg.jump_reset.require_on_ground;
-            cfg.jump_reset = fresh;
-        }
         // The resets never come back enabled: the clickers start switched off after a restart
         // too, and a build that starts jumping the moment it launches is the surprise this
         // avoids. The toggle is a session choice, so the old keys are read and thrown away.
@@ -613,7 +399,6 @@ public:
         fprintf(f, "key_jump_reset %d\n", cfg.key_jump_reset);
         fprintf(f, "key_sprint_reset %d\n", cfg.key_sprint_reset);
         fprintf(f, "accent_preset %d\n", cfg.accent_preset);
-        fprintf(f, "accent_order 1\n");
         fprintf(f, "accent_r %f\n", cfg.accent_r);
         fprintf(f, "accent_g %f\n", cfg.accent_g);
         fprintf(f, "accent_b %f\n", cfg.accent_b);
@@ -629,11 +414,6 @@ public:
         fprintf(f, "left_gate %d\n", cfg.left_gate);
         fprintf(f, "left_gate_fireball %d\n", cfg.left_gate_fireball ? 1 : 0);
 
-        fprintf(f, "combat_v3_seen 1\n");
-        fprintf(f, "combat_v4_seen 1\n");
-        fprintf(f, "combat_v5_seen 1\n");
-        fprintf(f, "combat_v6_seen 1\n");
-        fprintf(f, "combat_v7_seen 1\n");
         const JumpResetProfile& j = cfg.jump_reset;
         fprintf(f, "jump_reset.chance %g\n", j.chance);
         fprintf(f, "jump_reset.delay_ms_mean %g\n", j.delay_ms_mean);

@@ -61,8 +61,14 @@ public final class StateExport implements ClientModInitializer {
             System.getenv().getOrDefault("XDG_RUNTIME_DIR", "/tmp"), "aeroclicker-mc.state");
     private static final Path TEMP = STATE.resolveSibling(STATE.getFileName() + ".tmp");
 
-    /** Poll interval: the app polls at 50 ms too, so this keeps the two in step. */
-    private static final long INTERVAL_MS = 50;
+    /**
+     * The loop wakes often enough to catch a damage tick promptly, but the expensive part (the
+     * crosshair rays, the entity scans and the item checks) still runs only every fifth pass.
+     * Reading hurtTime and health is two reflection calls, so the fast pass costs almost
+     * nothing and removes up to 40 ms from a reset's reaction time.
+     */
+    private static final long FAST_INTERVAL_MS = 10;
+    private static final int FULL_EVERY = 5;
     /** Unchanged state is still rewritten this often, so the timestamp never goes stale. */
     private static final long HEARTBEAT_MS = 500;
     /**
@@ -112,34 +118,62 @@ public final class StateExport implements ClientModInitializer {
         String last = "";
         long lastWrite = 0;
         Binding binding = null;
+        Snapshot lastSnap = null;
+        long lastHurt = -2;
+        long lastHit = -2;
+        int tick = 0;
         while (true) {
             try {
                 if (binding == null) binding = new Binding();
-                Snapshot snap = snapshot(binding);
-                String state = snap.line + " block=" + snap.block
-                             + " sword=" + snap.sword + " target=" + snap.target
-                             + " bed=" + snap.bed + " look=" + snap.look
-                             + " water=" + snap.water + " ground=" + snap.ground
-                             + " hurt=" + snap.hurt + " hit=" + snap.hit
-                             + " back=" + snap.back + " seen=" + snap.seen
-                             + " hground=" + snap.hground + " hwater=" + snap.hwater
-                             + " focus=" + snap.focus + " interactive=" + snap.interactive;
-                long now = System.currentTimeMillis();
-                if (!state.equals(last) || now - lastWrite >= HEARTBEAT_MS) {
-                    // `ms` goes before the optional fields so an app build without them still
-                    // parses slot and screen from the same line.
-                    write(snap.line + " ms=" + now + " block=" + snap.block
-                          + " sword=" + snap.sword + " target=" + snap.target
-                          + " bed=" + snap.bed + " look=" + snap.look
-                          + " water=" + snap.water + " ground=" + snap.ground
-                          + " hurt=" + snap.hurt + " hit=" + snap.hit
-                          + " back=" + snap.back + " seen=" + snap.seen
-                          + " hground=" + snap.hground + " hwater=" + snap.hwater
-                          + " focus=" + snap.focus + " interactive=" + snap.interactive);
-                    last = state;
-                    lastWrite = now;
+                Object mc = binding.getInstance.invoke(null);
+                Object player = mc == null ? null : binding.player.get(mc);
+
+                // Fast pass: only the two counters that drive the combat resets. The snapshot
+                // below has already run once, so lastPlayer/lastHurtTime/lastHealth are seeded.
+                if (player != null && player == binding.lastPlayer) {
+                    binding.sampleMotion(player);
+                    int ground = binding.groundState(player);
+                    int water = binding.waterState(player);
+                    long hurt = binding.hurtState(mc, player, ground, water);
+                    long hit = binding.hitState(mc, player);
+                    long back = binding.backCounter;
+                    long seen = binding.seenCounter;
+                    int hground = binding.hurtGround;
+                    int hwater = binding.hurtWater;
+                    boolean changed = (hurt >= 0 && hurt != lastHurt) ||
+                                      (hit >= 0 && hit != lastHit);
+                    if (changed && lastSnap != null) {
+                        long outHurt = hurt >= 0 ? hurt : lastHurt;
+                        long outHit = hit >= 0 ? hit : lastHit;
+                        long now = System.currentTimeMillis();
+                        write(wire(lastSnap, now, outHurt, outHit, back, seen, hground, hwater));
+                        last = stateString(lastSnap, outHurt, outHit, back, seen, hground, hwater);
+                        lastWrite = now;
+                    }
+                    if (hurt >= 0) lastHurt = hurt;
+                    if (hit >= 0) lastHit = hit;
                 }
-                Thread.sleep(INTERVAL_MS);
+
+                // Full pass: the gates and the item/window state. This is the part that costs
+                // real work, so it keeps the old 50 ms cadence.
+                if (tick++ % FULL_EVERY == 0) {
+                    Snapshot snap = snapshot(binding);
+                    lastSnap = snap;
+                    if (snap.hurt >= 0) lastHurt = snap.hurt;
+                    if (snap.hit >= 0) lastHit = snap.hit;
+                    String state = stateString(snap, snap.hurt, snap.hit, snap.back,
+                                               snap.seen, snap.hground, snap.hwater);
+                    long now = System.currentTimeMillis();
+                    if (!state.equals(last) || now - lastWrite >= HEARTBEAT_MS) {
+                        // `ms` goes before the optional fields so an app build without them
+                        // still parses slot and screen from the same line.
+                        write(wire(snap, now, snap.hurt, snap.hit, snap.back,
+                                   snap.seen, snap.hground, snap.hwater));
+                        last = state;
+                        lastWrite = now;
+                    }
+                }
+                Thread.sleep(FAST_INTERVAL_MS);
             } catch (InterruptedException e) {
                 return;
             } catch (Throwable t) {
@@ -155,6 +189,26 @@ public final class StateExport implements ClientModInitializer {
                 }
             }
         }
+    }
+
+    /** Everything except the timestamp: compared between passes to avoid a needless write. */
+    private static String stateString(Snapshot s, long hurt, long hit, long back, long seen,
+                                      int hground, int hwater) {
+        return s.line + " block=" + s.block
+             + " sword=" + s.sword + " target=" + s.target
+             + " bed=" + s.bed + " look=" + s.look
+             + " water=" + s.water + " ground=" + s.ground
+             + " hurt=" + hurt + " hit=" + hit
+             + " back=" + back + " seen=" + seen
+             + " hground=" + hground + " hwater=" + hwater
+             + " focus=" + s.focus + " interactive=" + s.interactive;
+    }
+
+    /** The same fields with the timestamp inserted right after slot/screen. */
+    private static String wire(Snapshot s, long now, long hurt, long hit, long back, long seen,
+                               int hground, int hwater) {
+        String body = stateString(s, hurt, hit, back, seen, hground, hwater);
+        return s.line + " ms=" + now + body.substring(s.line.length());
     }
 
     private static Snapshot snapshot(Binding b) throws ReflectiveOperationException {
@@ -174,6 +228,8 @@ public final class StateExport implements ClientModInitializer {
             b.lastPlayer = player;
             b.lastHurtTime = -1;
             b.lastHealth = -1.0f;
+            b.lastHurtRiseMs = -1_000_000L;
+            b.lastHealthDropMs = -1_000_000L;
             b.lastSwing = null;
             b.lastExactTarget = 0;
             b.lastProjectiles = new java.util.ArrayList<>();
@@ -376,6 +432,10 @@ public final class StateExport implements ClientModInitializer {
         Object lastPlayer;
         int lastHurtTime = -1;
         float lastHealth = -1.0f;
+        // One damage tick can surface as a hurtTime rise and a health drop in different polls.
+        // Remember when each signal was last seen so the second one is not counted twice.
+        long lastHurtRiseMs = -1_000_000L;
+        long lastHealthDropMs = -1_000_000L;
         Object lastSwing;
         int lastExactTarget;
         long hurtCounter;
@@ -1000,19 +1060,34 @@ public final class StateExport implements ClientModInitializer {
         long hurtState(Object mc, Object self, int nowGround, int nowWater) {
             if (hurtTime == null) return -1;
             try {
-                int now = hurtTime.getInt(self);
+                int hurtNow = hurtTime.getInt(self);
                 float health = healthOf(self);
                 if (lastHurtTime < 0) {
                     // First look at this player: remember the value, do not replay old damage.
-                    lastHurtTime = now;
+                    lastHurtTime = hurtNow;
                 } else {
-                    boolean hurtRose = now > lastHurtTime;
+                    long wallNow = System.nanoTime() / 1_000_000L;
+                    boolean hurtRose = hurtNow > lastHurtTime;
                     // Health updates can arrive a poll before or after the animation. A drop
                     // is only a damage tick when it is more than float noise.
                     boolean healthFell = health >= 0.0f && lastHealth >= 0.0f &&
                                          health < lastHealth - 0.01f;
-                    if (hurtRose || healthFell) {
+                    // The animation and the health update describe the same damage tick when
+                    // they land close together. Count it once: a later health drop after a
+                    // hurtTime rise (or the other way around) must not fire a second reset.
+                    boolean newTick;
+                    if (hurtRose && healthFell) newTick = true;
+                    else if (hurtRose) newTick = wallNow - lastHealthDropMs > 100;
+                    else if (healthFell) newTick = wallNow - lastHurtRiseMs > 100;
+                    else newTick = false;
+                    if (hurtRose) lastHurtRiseMs = wallNow;
+                    if (healthFell) lastHealthDropMs = wallNow;
+                    if (newTick) {
                         seenCounter++;
+                        // The fast pass can see a damage tick between two full snapshots, so
+                        // refresh the projectile list here before naming the attacker: an
+                        // arrow that vanished this pass is the strongest 1.8 hit cue.
+                        trackProjectiles(mc, self);
                         // Fall, fire, lava, drowning and starvation raise hurtTime too, but no
                         // entity dealt them. classifyHit names the attacker and its side, or
                         // returns none, so those ticks never bump either counter.
@@ -1028,7 +1103,7 @@ public final class StateExport implements ClientModInitializer {
                             if (side == HIT_BEHIND) backCounter++;
                         }
                     }
-                    lastHurtTime = now;
+                    lastHurtTime = hurtNow;
                 }
                 lastHealth = health;
                 prevGround = nowGround;
@@ -1343,7 +1418,9 @@ public final class StateExport implements ClientModInitializer {
                 speed - lastHorizontalSpeed > 0.12) {
                 knockbackSide = horizontalDot(motion[0], motion[2], self) > 0.25
                                 ? HIT_BEHIND : HIT_FRONT;
-                knockbackPolls = 2;
+                // The fast pass samples five times as often as the old loop, so the counter is
+                // scaled to keep the same ~100 ms side window for the legacy fallback below.
+                knockbackPolls = 10;
             }
             lastHorizontalSpeed = speed;
             if (knockbackPolls > 0) knockbackPolls--;

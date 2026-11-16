@@ -20,6 +20,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <sys/inotify.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <linux/input.h>
@@ -407,7 +408,30 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
         set_slot_master(false, slot >= 0 && config.right_slots[slot]);
     };
 
-    struct pollfd fds[2] = {};
+    // The bridge rewrites the state file only when something changes. Waking on that write
+    // (instead of reading the file on every mouse event) keeps the reset reaction quick and
+    // the idle cost near zero. The timeout below is a fallback for a missing watch or a mod
+    // that stopped writing, and the app still checks the file every 250 ms either way.
+    int state_watch = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
+    std::string state_base;
+    if (state_watch >= 0) {
+        const std::string state_path = McLink::path();
+        const size_t slash = state_path.find_last_of('/');
+        const std::string state_dir = slash == std::string::npos
+                                    ? std::string(".") : state_path.substr(0, slash);
+        state_base = slash == std::string::npos ? state_path : state_path.substr(slash + 1);
+        if (inotify_add_watch(state_watch, state_dir.c_str(),
+                              IN_MOVED_TO | IN_CREATE | IN_CLOSE_WRITE) < 0) {
+            close(state_watch);
+            state_watch = -1;
+        }
+    }
+    McLink::State mc;
+    bool read_mc = true;
+    auto last_mc_read = Clock::now();
+    const auto mc_fallback = std::chrono::milliseconds(state_watch >= 0 ? 250 : 0);
+
+    struct pollfd fds[3] = {};
     struct input_event ev;
 
     while (g_running) {
@@ -523,9 +547,14 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
         }
 
         // The bridge mod, when it runs, is ground truth: the slot survives the wheel and
-        // pick-block, and "in menu" covers chat, chests and NPC dialogs.
-        McLink::State mc;
-        mc_live = McLink::poll(mc);
+        // pick-block, and "in menu" covers chat, chests and NPC dialogs. Read it on the
+        // bridge's write or on the fallback timer, not on every mouse event.
+        const auto mc_now = Clock::now();
+        if (read_mc || mc_now - last_mc_read >= mc_fallback) {
+            mc_live = McLink::poll(mc);
+            last_mc_read = mc_now;
+            read_mc = false;
+        }
         gui_state.mc_linked = mc_live;
         // A valid hotbar slot means the mod found a player in a world. Outside one it writes -1
         // for every world field, which must not be read as "this build cannot report it".
@@ -687,9 +716,15 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
             fds[1].events = POLLIN;
             nfds = 2;
         }
+        if (state_watch >= 0) {
+            fds[nfds].fd = state_watch;
+            fds[nfds].events = POLLIN;
+            nfds++;
+        }
 
-        int ret = poll(fds, nfds, 50);
-        if (ret <= 0) continue;
+        const int ret = poll(fds, nfds, state_watch >= 0 ? 250 : 50);
+        if (ret < 0) continue;
+        if (ret == 0) { read_mc = true; continue; }
 
         if (fds[0].revents & POLLIN) {
             while (read(kb_fd, &ev, sizeof(ev)) == sizeof(ev)) {
@@ -741,7 +776,7 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
             }
         }
 
-        if (nfds > 1 && (fds[1].revents & POLLIN)) {
+        if (mouse_fd >= 0 && (fds[1].revents & POLLIN)) {
             while (read(mouse_fd, &ev, sizeof(ev)) == sizeof(ev)) {
                 if (ev.type == EV_KEY) {
                     // Same as the keyboard path: both clickers may be bound to this one
@@ -871,6 +906,24 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
             }
         }
 
+        if (state_watch >= 0) {
+            for (int i = 0; i < nfds; i++) {
+                if (fds[i].fd != state_watch || !(fds[i].revents & POLLIN)) continue;
+                char buf[4096];
+                for (;;) {
+                    const ssize_t got = read(state_watch, buf, sizeof(buf));
+                    if (got <= 0) break;
+                    ssize_t off = 0;
+                    while (off + static_cast<ssize_t>(sizeof(struct inotify_event)) <= got) {
+                        const auto* event =
+                            reinterpret_cast<const struct inotify_event*>(buf + off);
+                        if (event->len > 0 && state_base == event->name) read_mc = true;
+                        off += static_cast<ssize_t>(sizeof(struct inotify_event)) + event->len;
+                    }
+                }
+            }
+        }
+
         if (chime_pending) {
             chime_pending = false;
             if (config.audio_enabled) {
@@ -885,6 +938,7 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
         if (mouse_grabbed) ioctl(mouse_fd, EVIOCGRAB, 0);
         close(mouse_fd);
     }
+    if (state_watch >= 0) close(state_watch);
     if (kb_grabbed) {
         if (combat) combat->keyboard.set_forwarding(false);
         ioctl(kb_fd, EVIOCGRAB, 0);

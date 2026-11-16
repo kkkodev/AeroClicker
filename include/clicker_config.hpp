@@ -177,15 +177,14 @@ struct JumpResetProfile {
     // 92 % keeps the reset reliable in a real fight while the occasional missed reaction is
     // what a person looks like. Sprint reset keeps its own default.
     double chance = 0.92;
-    // In-game clients react on the knockback packet itself (GhostTap defaults to about 15 ms,
-    // Arsenic to 0 ms). This app sits outside the game, so the bridge and the app poll add
-    // most of the latency before this delay even starts. 45 ms with a right-skewed 12 ms
-    // spread (clamped to 26-82) leaves a human-looking pause without pushing the press into
-    // the next knockback or skipping the useful window.
-    double delay_ms_mean = 45.0;
+    // The bridge reports a damage tick within one 10 ms fast pass and the app wakes on the
+    // state write, so much less of the reaction is spent outside this timer than before. 60 ms
+    // with a right-skewed 12 ms spread (clamped to 38-100) keeps the whole path human-paced
+    // without landing in the next knockback or skipping the useful window.
+    double delay_ms_mean = 60.0;
     double delay_ms_stddev = 12.0;
-    double delay_ms_min = 26.0;
-    double delay_ms_max = 82.0;
+    double delay_ms_min = 38.0;
+    double delay_ms_max = 100.0;
 
     double hold_ms_mean = 65.0;
     double hold_ms_stddev = 7.0;
@@ -215,10 +214,10 @@ struct JumpResetProfile {
 struct SprintResetProfile {
     SprintResetMode mode = SprintResetMode::W_TAP;
     double chance = 0.90;
-    // A random delay keeps the tap from landing on the exact tick of every hit; 10-55 ms still
+    // A random delay keeps the tap from landing on the exact tick of every hit; 15-65 ms still
     // breaks sprint before the next swing without looking frame-perfect.
-    double delay_ms_min = 10.0;
-    double delay_ms_max = 55.0;
+    double delay_ms_min = 15.0;
+    double delay_ms_max = 65.0;
 
     double duration_ticks_mean = 1.15;
     double duration_ticks_stddev = 0.28;
