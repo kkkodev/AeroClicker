@@ -178,13 +178,13 @@ struct JumpResetProfile {
     // what a person looks like. Sprint reset keeps its own default.
     double chance = 0.92;
     // The bridge reports a damage tick within one 10 ms fast pass and the app wakes on the
-    // state write, so much less of the reaction is spent outside this timer than before. 55 ms
-    // with a right-skewed 12 ms spread (clamped to 35-92) keeps the whole path human-paced
-    // without landing in the next knockback or skipping the useful window.
-    double delay_ms_mean = 55.0;
-    double delay_ms_stddev = 12.0;
-    double delay_ms_min = 35.0;
-    double delay_ms_max = 92.0;
+    // state write, so much less of the reaction is spent outside this timer than before. 48 ms
+    // keeps the typical press fast while the log-normal 15 ms spread (clamped to 30-140)
+    // leaves a long right tail, so the occasional slow reaction still looks human.
+    double delay_ms_mean = 48.0;
+    double delay_ms_stddev = 15.0;
+    double delay_ms_min = 30.0;
+    double delay_ms_max = 140.0;
 
     double hold_ms_mean = 65.0;
     double hold_ms_stddev = 7.0;
