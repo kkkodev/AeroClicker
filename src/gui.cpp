@@ -121,7 +121,8 @@ static const char* pause_reason_text(uint32_t mask) {
 
 // The L/R pills in the top bar are live switches: clicking one toggles that clicker just like
 // its bound key would. Mouse mode only arms/disarms, because it clicks while the real button
-// is held and has no independent on/off state.
+// is held and has no independent on/off state. A clicker held back by a pause is still
+// switched off by its pill; the pause itself is left to the menu, so an open screen stays safe.
 static void toggle_clicker_pill(GuiState& state, bool left_side) {
     Clicker& clicker = left_side ? state.left : state.right;
     const ActivationMode mode = left_side ? state.config.left_mode : state.config.right_mode;
@@ -130,24 +131,13 @@ static void toggle_clicker_pill(GuiState& state, bool left_side) {
     // clicker only runs while the physical button is held), so beep on arming rather than
     // on the transient enabled flag.
     const bool was = (mode == ActivationMode::MOUSE) ? armed : clicker.is_enabled();
-    // Same rule as the bound key: a switch that is on but held back by a pause is un-paused
-    // rather than switched off, so one click brings it back to clicking.
-    const bool unpause_only = was && (clicker.pause_mask() & Clicker::PAUSE_AUTO);
-    if (!unpause_only) {
-        if (mode == ActivationMode::MOUSE) {
-            armed = !armed;
-            if (!armed) clicker.set_enabled(false);
-        } else {
-            clicker.toggle();
-        }
+    if (mode == ActivationMode::MOUSE) {
+        armed = !armed;
+        if (!armed) clicker.set_enabled(false);
+    } else {
+        clicker.toggle();
     }
     const bool now = (mode == ActivationMode::MOUSE) ? armed : clicker.is_enabled();
-    if (now) {
-        // Coming on (or being un-paused) beats the pause from an open game screen; the next
-        // slot change hands control back to the slot rules.
-        state.in_menu = false;
-        clicker.set_pause(Clicker::PAUSE_INVENTORY, false);
-    }
     if (state.config.audio_enabled && now != was) {
         if (now) Audio::beep_on();
         else Audio::beep_off();

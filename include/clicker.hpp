@@ -75,8 +75,6 @@ public:
         PAUSE_OTHER_WINDOW = 1u << 7,   // "only click inside Minecraft" is on and it lost focus
         PAUSE_INTERACTIVE = 1u << 8,    // right clicker: the crosshair block reacts to a use
     };
-    // Pauses an explicit key press may override: the user asked to run now.
-    static constexpr uint32_t PAUSE_AUTO = PAUSE_INVENTORY;
     // Pauses that must keep a physical MOUSE press out of the clicker. If it would not click,
     // the press belongs to the game, and swallowing it would break normal use: mining with the
     // left button, or placing water and throwing pearls with the right one.

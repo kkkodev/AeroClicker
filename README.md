@@ -212,9 +212,10 @@ and an amber dot instead of a running CPS figure:
 | `no target in crosshair` | the left gate is set to target in crosshair (or sword + target) and you are not looking at a mob, player or fireball |
 | `no sword in hand` | the left gate is set to holding a sword (or sword + target) and the held item is not a sword |
 
-The on/off state is kept, so closing the menu resumes clicking on its own. To force it, press the
-clicker's hotkey (or its **L/R** pill): an explicit press un-pauses a paused clicker instead of
-switching it off and lifts the menu pause until a menu opens again.
+The on/off state is kept, so closing the menu resumes clicking on its own. The clicker's hotkey
+(or its **L/R** pill) is a normal master switch: pressing it while a menu is open switches that
+clicker off like at any other time, and pressing it again switches it back on but leaves it paused
+until the menu closes.
 
 ---
 

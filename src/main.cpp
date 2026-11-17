@@ -324,43 +324,32 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
         chime_on = chime_on || on;
     };
 
-    // A clicker's bound key is its master control: it acts even while a game screen is open, and
-    // it overrides the automatic pause. The next slot change hands control back to the slot
-    // rules. Shared by the keyboard and mouse paths, since the same key can be bound on either
-    // device.
-    //
-    // A clicker that is switched on but held back by a pause is *not* switched off by its own
-    // key: the press means "run now", so it clears the pause and a second press stops it as
-    // usual.
+    // A clicker's bound key is its master control: it acts even while a game screen is open.
+    // It flips the same on/off state the UI shows, whether or not an automatic pause is
+    // currently holding the clicker back; the pause option itself is left alone, so an
+    // inventory that is still open keeps clicking stopped. Shared by the keyboard and mouse
+    // paths, since the same key can be bound on either device.
     auto handle_clicker_key = [&](bool left_side, int value) {
         Clicker& clicker = left_side ? left_clicker : right_clicker;
         bool& armed = left_side ? gui_state.left_armed : gui_state.right_armed;
         const ActivationMode mode = left_side ? config.left_mode : config.right_mode;
 
         const bool was = clicker_master_on(clicker, armed, mode);
-        const bool unpause_only = value == 1 && was && (clicker.pause_mask() & Clicker::PAUSE_AUTO);
 
-        if (!unpause_only) {
-            if (mode == ActivationMode::TOGGLE) {
-                if (value == 1) clicker.toggle();
-            } else if (mode == ActivationMode::HOLD) {
-                clicker.set_enabled(value != 0);
-            } else {
-                if (value == 1) {
-                    armed = !armed;
-                    const bool button_held = left_side ? mouse_left_held : mouse_right_held;
-                    if (!armed) clicker.set_enabled(false);
-                    else if (button_held) clicker.set_enabled_gated(true);
-                }
+        if (mode == ActivationMode::TOGGLE) {
+            if (value == 1) clicker.toggle();
+        } else if (mode == ActivationMode::HOLD) {
+            clicker.set_enabled(value != 0);
+        } else {
+            if (value == 1) {
+                armed = !armed;
+                const bool button_held = left_side ? mouse_left_held : mouse_right_held;
+                if (!armed) clicker.set_enabled(false);
+                else if (button_held) clicker.set_enabled_gated(true);
             }
         }
 
         const bool now = clicker_master_on(clicker, armed, mode);
-        if (now) {
-            // Coming on (or being un-paused) beats the pause from an open game screen.
-            gui_state.in_menu = false;
-            clicker.set_pause(Clicker::PAUSE_INVENTORY, false);
-        }
         if (now != was) request_chime(now);
     };
 
