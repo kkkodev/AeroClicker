@@ -103,13 +103,13 @@ inline const ClickerPreset LEFT_PRESETS[] = {
         0.02, 8.0, 20.0,
         1.2, 0.06, 0.0, 0.03, 20.0, 55.0, true, 30.0, 70.0, 0.25, 0.6, BTN_LEFT
     }},
-    {"Drag Click (25+ CPS)", {
-        28.0, 3.0, 22.0, 35.0, 1.5,
-        0.10, 3.0, 6.0,
-        0.03, 4.0, 7.0,
-        17.0, 4.0, 9.0, 33.0,
-        0.01, 5.0, 15.0,
-        1.4, 0.08, 0.0, 0.05, 16.0, 45.0, true, 25.0, 60.0, 0.2, 0.5, BTN_LEFT
+    {"Fast (14-20 CPS)", {
+        17.0, 2.0, 14.0, 20.0, 1.0,
+        0.07, 1.5, 4.0,
+        0.04, 3.0, 7.0,
+        32.0, 7.0, 14.0, 55.0,
+        0.02, 8.0, 20.0,
+        1.1, 0.05, 0.0, 0.02, 20.0, 50.0, true, 30.0, 75.0, 0.25, 0.6, BTN_LEFT
     }},
 };
 
@@ -138,13 +138,13 @@ inline const ClickerPreset RIGHT_PRESETS[] = {
         0.02, 8.0, 20.0,
         1.2, 0.06, 0.0, 0.03, 20.0, 55.0, true, 30.0, 70.0, 0.25, 0.6, BTN_RIGHT
     }},
-    {"Drag Click (25+ CPS)", {
-        28.0, 3.0, 22.0, 35.0, 1.5,
-        0.10, 3.0, 6.0,
-        0.03, 4.0, 7.0,
-        17.0, 4.0, 9.0, 33.0,
-        0.01, 5.0, 15.0,
-        1.4, 0.08, 0.0, 0.05, 16.0, 45.0, true, 25.0, 60.0, 0.2, 0.5, BTN_RIGHT
+    {"Fast (14-20 CPS)", {
+        17.0, 2.0, 14.0, 20.0, 1.0,
+        0.07, 1.5, 4.0,
+        0.04, 3.0, 7.0,
+        32.0, 7.0, 14.0, 55.0,
+        0.02, 8.0, 20.0,
+        1.1, 0.05, 0.0, 0.02, 20.0, 50.0, true, 30.0, 75.0, 0.25, 0.6, BTN_RIGHT
     }},
 };
 
@@ -178,10 +178,10 @@ struct JumpResetProfile {
     // what a person looks like. Sprint reset keeps its own default.
     double chance = 0.92;
     // The bridge reports a damage tick within one 10 ms fast pass and the app wakes on the
-    // state write, so much less of the reaction is spent outside this timer than before. 48 ms
+    // state write, so much less of the reaction is spent outside this timer than before. 45 ms
     // keeps the typical press fast while the log-normal 15 ms spread (clamped to 30-140)
     // leaves a long right tail, so the occasional slow reaction still looks human.
-    double delay_ms_mean = 48.0;
+    double delay_ms_mean = 45.0;
     double delay_ms_stddev = 15.0;
     double delay_ms_min = 30.0;
     double delay_ms_max = 140.0;

@@ -41,7 +41,7 @@ See [Credits](#credits).
 **Clicking**
 - **Two independent clickers** — separate left/right CPS, humanization, activation mode and keybind
 - **Humanization** — Gaussian and uniform timing, spikes and stutters, heavy holds, grip drift, rhythm volatility and tension, a start delay in Mouse mode, and fatigue breaks
-- **Presets** — Normal, Jitter (the default), Butterfly and Drag Click, ready to tweak
+- **Presets** — Normal, Jitter (the default), Butterfly and Fast (14-20 CPS), ready to tweak
 - **Double-clicks** — optional, with a randomized delay; they land inside the current beat, so they never lower the average CPS
 
 **Control**
@@ -71,7 +71,7 @@ restarts whenever clicking is paused, so resuming never begins with a break. Hol
 rate and drift slowly around their mean, as a real hand's grip does, rather than being independent
 random draws. Every value is editable in the **Advanced** tab's **Left clicker** and
 **Right clicker** dropdowns, and **Normal**, **Butterfly**
-and **Drag Click** raise the double-click chance as the click rate rises.
+and **Fast (14-20 CPS)** raise the double-click chance as the click rate rises.
 
 ---
 
@@ -395,7 +395,7 @@ reports the counters (the jar in `tools/mc-bridge` does).
   a jump. Projectiles are judged by the direction they were flying, so an arrow from behind is
   still a backstab. The defaults are
   tuned for a fast but human-looking
-  reaction: 92 % chance, a 48 ms reaction drawn from a right-skewed 15 ms spread (clamped to
+  reaction: 92 % chance, a 45 ms reaction drawn from a right-skewed 15 ms spread (clamped to
   30–140 ms), a 65 ms hold with a 7 ms spread (48–85 ms), and a 450 ms cooldown. It only fires
   while moving with any WASD key (**Only while moving (WASD)**, on by default); the stricter
   **Only while moving forward (W)** option narrows that to W. The two are alternatives: ticking
@@ -448,7 +448,7 @@ events makes them far less mechanical than pressing Space on every click. The ju
 right-skewed like a real reaction: most presses land just after the minimum and a few are slower.
 They are still not undetectable: a server sees the resulting movement and attack timing, and can
 compare it against what a human can react to. A 100 ms jump reaction is already fast for a
-person who is anticipating a hit; the 48 ms default is deliberately on the quick side, and a
+person who is anticipating a hit; the 45 ms default is deliberately on the quick side, and a
 20 ms one would be impossible. Choose values you would plausibly produce yourself, and accept
 that using any automation can still be against a server's rules.
 

@@ -1118,11 +1118,18 @@ void gui_run(GuiState& state) {
     // The home page stacks both clicker cards, the slot strip and both reset cards; at 700 px
     // it scrolled on first launch. 820 shows all of it, capped to the monitor's work area so a
     // short screen cannot open a window taller than the display.
-    int launch_w = 760, launch_h = 820;
+    int launch_w = 760, launch_h = 760;
     if (GLFWmonitor* monitor = glfwGetPrimaryMonitor()) {
         int mx = 0, my = 0, mw = 0, mh = 0;
         glfwGetMonitorWorkarea(monitor, &mx, &my, &mw, &mh);
-        if (mh > 0 && launch_h > mh) launch_h = mh;
+        // The workarea excludes the panel but not the window decoration, so leave room for
+        // the titlebar as well. At 125 % scaling the old 820 px client area (plus decorations)
+        // could land below the screen and hide the bottom of the Advanced tab.
+        if (mh > 0) {
+            const int room = mh - 72;
+            if (launch_h > room) launch_h = room;
+            if (launch_h < 520) launch_h = 520;
+        }
     }
     GLFWwindow* window = glfwCreateWindow(launch_w, launch_h, "AeroClicker", nullptr, nullptr);
     if (GLFWcursor* cur = glfwCreateStandardCursor(GLFW_ARROW_CURSOR))
