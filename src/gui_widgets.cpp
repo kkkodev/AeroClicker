@@ -1671,7 +1671,11 @@ bool click_indicator(const char* label, bool on, bool paused) {
 void stat_readout(bool on, float cps, uint32_t clicks, float inner_w, const char* note) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImFont* font = g_font_big ? g_font_big : ImGui::GetFont();   // real 30px atlas font = crisp
-    float big = font->LegacySize;
+    // The scale pass loads this font at 30 px times the UI scale, so LegacySize alone is a
+    // physical size: at 125 % it is 37.5 and the readout came out a quarter too large.
+    // Divide the scale back out to keep it 30 logical pixels at any scaling.
+    float big = g_font_big ? g_font_big->LegacySize / fb_scale()
+                           : ImGui::GetFontSize() * (30.0f / 18.0f);
     ImVec2 mn = ImGui::GetCursorScreenPos();
     // "0.0 CPS" while the clicker is deliberately idle (cursor on AeroClicker, Mouse mode
     // waiting for the button) reads as broken, so say why instead of showing an empty rate.
