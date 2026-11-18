@@ -391,7 +391,9 @@ void setup_oxygen_theme(int preset, float custom_r, float custom_g, float custom
     } else if (preset == 4) {
         g_accent_color = ImVec4(0.60f, 0.30f, 0.90f, 1.0f);   // Purple
     } else if (preset == 5) {
-        g_accent_color = ImVec4(0.93f, 0.53f, 0.13f, 1.0f);   // Orange
+        // Fully saturated orange. The old amber (0.93, 0.53, 0.13) turned pastel on dark
+        // themes, because accents are brightened by 1.3x when drawn on a dark surface.
+        g_accent_color = ImVec4(1.00f, 0.42f, 0.00f, 1.0f);   // Orange
     } else {
         g_accent_color = ImVec4(custom_r, custom_g, custom_b, 1.0f);   // Custom
     }

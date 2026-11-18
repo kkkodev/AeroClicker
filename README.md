@@ -41,7 +41,7 @@ See [Credits](#credits).
 **Clicking**
 - **Two independent clickers** — separate left/right CPS, humanization, activation mode and keybind
 - **Humanization** — Gaussian and uniform timing, spikes and stutters, heavy holds, grip drift, rhythm volatility and tension, a start delay in Mouse mode, and fatigue breaks
-- **Presets** — Normal, Jitter (the default), Butterfly and Fast (14-20 CPS), ready to tweak
+- **Presets** — Normal, Jitter (the default), Fast (14-20 CPS) and Butterfly, ready to tweak
 - **Double-clicks** — optional, with a randomized delay; they land inside the current beat, so they never lower the average CPS
 
 **Control**
@@ -70,8 +70,8 @@ Fatigue breaks are short and infrequent: 0.25–0.6 s of rest every 30–75 s, a
 restarts whenever clicking is paused, so resuming never begins with a break. Hold times follow the
 rate and drift slowly around their mean, as a real hand's grip does, rather than being independent
 random draws. Every value is editable in the **Advanced** tab's **Left clicker** and
-**Right clicker** dropdowns, and **Normal**, **Butterfly**
-and **Fast (14-20 CPS)** raise the double-click chance as the click rate rises.
+**Right clicker** dropdowns, and **Normal**, **Fast (14-20 CPS)** and
+**Butterfly** raise the double-click chance as the click rate rises.
 
 ---
 
