@@ -365,10 +365,12 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
         if (jump_key) {
             config.jump_reset_enabled = !config.jump_reset_enabled;
             combat->jump.set_enabled(config.jump_reset_enabled);
+            last_jump_enabled = config.jump_reset_enabled;   // the poll below need not repeat it
         }
         if (sprint_key) {
             config.sprint_reset_enabled = !config.sprint_reset_enabled;
             combat->sprint.set_enabled(config.sprint_reset_enabled);
+            last_sprint_enabled = config.sprint_reset_enabled;
         }
         // Collected with any clicker chime from the same press: one sound, not four.
         request_chime(config.jump_reset_enabled || config.sprint_reset_enabled);

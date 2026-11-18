@@ -463,10 +463,12 @@ public:
     JumpReset(const JumpResetProfile& p, VirtualKeyboard& kb) : p_(p), kb_(kb) {}
 
     bool is_enabled() const { return enabled_; }
+    // Switching on does not reset the tallies. One shared hotkey turns every module off and on
+    // again in a single press, and losing the session's counts to that looked exactly like the
+    // analytics resetting by themselves. Clear Data is the only reset (plus a restart).
     void set_enabled(bool v) {
         enabled_ = v;
-        if (v) clear_stats();
-        else sched_.cancel();
+        if (!v) sched_.cancel();
     }
     void toggle() { set_enabled(!enabled_.load()); }
     bool busy() { return !sched_.idle(); }
@@ -559,10 +561,10 @@ public:
     SprintReset(const SprintResetProfile& p, VirtualKeyboard& kb) : p_(p), kb_(kb) {}
 
     bool is_enabled() const { return enabled_; }
+    // See JumpReset::set_enabled: the tallies survive an off/on cycle.
     void set_enabled(bool v) {
         enabled_ = v;
-        if (v) clear_stats();
-        else {
+        if (!v) {
             sched_.cancel();
             // A W-Tap in flight may already have hidden W. Restore it on the calling thread
             // instead of waiting for the cancelled job to wake: otherwise the game keeps

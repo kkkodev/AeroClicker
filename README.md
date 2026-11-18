@@ -57,7 +57,7 @@ See [Credits](#credits).
 
 **Interface**
 - **Paused readout** — a switched-on clicker that is held back shows `Paused` and the reason, with an amber dot, instead of a misleading green `ON`
-- **Live analytics** — real-time CPS graphs, session averages and peaks, how often each combat reset fired, optional recording and CSV export; **Clear Data** resets the graphs, session stats and reset counts together
+- **Live analytics** — real-time CPS graphs, session averages and peaks, how often each combat reset fired, optional recording and CSV export; **Clear Data** (press it twice) resets the graphs, session stats and reset counts together
 - **Profiles** — save and load complete configurations; the `config` profile loads at startup
 - **Theming** — follows the KDE colour scheme and accent; the accent can also be fixed to Blue, Red, Green, Purple or Orange, or a custom colour
 - **Sound feedback** — a short two-note chime when a module toggles, at most once per key press even if that key toggles several of them, via `paplay`
@@ -497,6 +497,13 @@ keybinds survive the rename.
 **Slot activation does nothing in Minecraft**
 - It needs the bridge mod; without it the app does not guess. Install it as described in
   [Minecraft mod](#minecraft-mod), then restart Minecraft.
+
+**A clicker switched itself off during a long session**
+- A mouse button bound as a toggle is also a button the game uses (middle click is pick
+  block), so binding all four modules to one mouse button means every pick block turns them all
+  off. Bind the toggle keys to keys the game does not use (the defaults are F6–F10).
+- Switching a module off and on no longer clears its Analytics tallies; only **Clear Data**
+  (which needs a second press within three seconds) or a restart does that.
 
 **The right clicker stops with `held item is not a block`**
 - That is **Placeable blocks only**: the held item cannot be placed. Hold a block, or switch

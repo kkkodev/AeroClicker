@@ -1030,11 +1030,13 @@ static void draw_analytics_tab(GuiState& state, char* status_msg, float& status_
         int s_min = (int)session_secs / 60, s_sec = (int)session_secs % 60;
         int a_min = (int)state.active_time_s / 60, a_sec = (int)state.active_time_s % 60;
         double pct = session_secs > 0 ? state.active_time_s / session_secs * 100.0 : 0;
-        uint32_t total = state.left.click_count() + state.right.click_count();
-        double avg = state.active_time_s > 0 ? total / state.active_time_s : 0;
+        uint64_t total = static_cast<uint64_t>(state.left.click_count()) +
+                         static_cast<uint64_t>(state.right.click_count());
+        double avg = state.active_time_s > 0 ? (double)total / state.active_time_s : 0;
         ImGui::Text("Duration: %dm %02ds", s_min, s_sec);
         ImGui::Text("Active: %dm %02ds (%.0f%%)", a_min, a_sec, pct);
-        ImGui::Text("Total Clicks: %u (L: %u | R: %u)", total, state.left.click_count(), state.right.click_count());
+        ImGui::Text("Total Clicks: %llu (L: %u | R: %u)",
+                    (unsigned long long)total, state.left.click_count(), state.right.click_count());
         ImGui::Text("Session Avg CPS: %.1f", avg);
         ImGui::Text("Peak CPS - L: %.1f | R: %.1f", state.peak_cps_left, state.peak_cps_right);
     }
@@ -1069,22 +1071,36 @@ static void draw_analytics_tab(GuiState& state, char* status_msg, float& status_
         else { snprintf(status_msg, 128, "No data to export. Enable recording first."); status_timer = 3.0f; }
     }
     ImGui::SameLine();
-    if (oxygen_button("Clear Data", ImVec2(120, 0), 0, 0, false, OxIcon::Trash)) {
-        // Clear the live averages and graphs too, not just the CSV history: otherwise the CPS
-        // cards keep their old numbers and the Session block keeps the old duration and peak.
-        state.left.tracker().reset();
-        state.right.tracker().reset();
-        state.left.reset_click_count();
-        state.right.reset_click_count();
-        state.session_start = std::chrono::steady_clock::now();
-        state.active_time_s = 0.0;
-        state.peak_cps_left = 0.0;
-        state.peak_cps_right = 0.0;
-        if (state.combat) {
-            state.combat->jump.clear_stats();
-            state.combat->sprint.clear_stats();
+    // Two-step, because this wipes the session clock, both click totals and both reset tallies
+    // with no undo: a single stray click on this button used to look like the app losing its
+    // analytics by itself.
+    static double clear_confirm_until = 0.0;
+    const double now_s = ImGui::GetTime();
+    const bool confirm = now_s < clear_confirm_until;
+    if (oxygen_button(confirm ? "Confirm clear" : "Clear Data", ImVec2(120, 0), 0, 0, false,
+                      OxIcon::Trash)) {
+        if (!confirm) {
+            clear_confirm_until = now_s + 3.0;
+            snprintf(status_msg, 128, "Click again to clear all analytics"); status_timer = 3.0f;
+        } else {
+            clear_confirm_until = 0.0;
+            // Clear the live averages and graphs too, not just the CSV history: otherwise the
+            // CPS cards keep their old numbers and the Session block keeps the old duration
+            // and peak.
+            state.left.tracker().reset();
+            state.right.tracker().reset();
+            state.left.reset_click_count();
+            state.right.reset_click_count();
+            state.session_start = std::chrono::steady_clock::now();
+            state.active_time_s = 0.0;
+            state.peak_cps_left = 0.0;
+            state.peak_cps_right = 0.0;
+            if (state.combat) {
+                state.combat->jump.clear_stats();
+                state.combat->sprint.clear_stats();
+            }
+            snprintf(status_msg, 128, "Analytics data cleared"); status_timer = 3.0f;
         }
-        snprintf(status_msg, 128, "Analytics data cleared"); status_timer = 3.0f;
     }
     if (status_timer > 0) ImGui::TextColored(ok_text_color(), "%s", status_msg);
     end_panel();
