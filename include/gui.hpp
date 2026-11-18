@@ -69,6 +69,13 @@ struct GuiState {
     int selected_macro = 0;
 
     std::chrono::steady_clock::time_point session_start = std::chrono::steady_clock::now();
+    // Wall-clock start of the process and of the last Clear Data. The steady-clock duration
+    // above cannot tell "the session was cleared" from "the app was restarted", and those are
+    // the only two ways the Session block can go back to zero. Showing both makes the answer
+    // visible in the UI instead of a guess.
+    std::chrono::system_clock::time_point app_started_at = std::chrono::system_clock::now();
+    bool session_cleared = false;
+    std::chrono::system_clock::time_point session_cleared_at{};
     double active_time_s = 0.0;
     double peak_cps_left = 0.0;
     double peak_cps_right = 0.0;

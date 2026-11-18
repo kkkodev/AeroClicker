@@ -503,7 +503,9 @@ keybinds survive the rename.
   block), so binding all four modules to one mouse button means every pick block turns them all
   off. Bind the toggle keys to keys the game does not use (the defaults are F6–F10).
 - Switching a module off and on no longer clears its Analytics tallies; only **Clear Data**
-  (which needs a second press within three seconds) or a restart does that.
+  (which needs a second press within three seconds) or a restart does that. The last line of the
+  Analytics **Session** block names which one: `cleared 11:20 with Clear Data`, or an
+  `App started` time that matches "just now".
 
 **The right clicker stops with `held item is not a block`**
 - That is **Placeable blocks only**: the held item cannot be placed. Hold a block, or switch

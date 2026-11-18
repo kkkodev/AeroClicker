@@ -1039,6 +1039,23 @@ static void draw_analytics_tab(GuiState& state, char* status_msg, float& status_
                     (unsigned long long)total, state.left.click_count(), state.right.click_count());
         ImGui::Text("Session Avg CPS: %.1f", avg);
         ImGui::Text("Peak CPS - L: %.1f | R: %.1f", state.peak_cps_left, state.peak_cps_right);
+        // The duration alone cannot say why it is small. These two stamps can: a fresh process
+        // start or the Clear Data button are the only ways this block goes back to zero.
+        auto clock_text = [](std::chrono::system_clock::time_point tp, char* out, size_t n) {
+            const std::time_t t = std::chrono::system_clock::to_time_t(tp);
+            std::tm tm{};
+            localtime_r(&t, &tm);
+            std::strftime(out, n, "%H:%M", &tm);
+        };
+        char started[16];
+        clock_text(state.app_started_at, started, sizeof(started));
+        if (state.session_cleared) {
+            char cleared[16];
+            clock_text(state.session_cleared_at, cleared, sizeof(cleared));
+            ImGui::TextDisabled("App started %s - cleared %s with Clear Data", started, cleared);
+        } else {
+            ImGui::TextDisabled("App started %s - not cleared since", started);
+        }
     }
     end_panel();
 
@@ -1095,6 +1112,8 @@ static void draw_analytics_tab(GuiState& state, char* status_msg, float& status_
             state.active_time_s = 0.0;
             state.peak_cps_left = 0.0;
             state.peak_cps_right = 0.0;
+            state.session_cleared = true;
+            state.session_cleared_at = std::chrono::system_clock::now();
             if (state.combat) {
                 state.combat->jump.clear_stats();
                 state.combat->sprint.clear_stats();
