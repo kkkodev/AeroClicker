@@ -346,10 +346,13 @@ clicker only clicks while the held item is a block that can be placed, and pause
 right-click equivalent of only bridging when you actually hold blocks, so a right click never
 throws a pearl, starts drinking a potion or wears down a tool by accident.
 
-The gate is driven by the same mod, so it needs a live link and a mod build that reports the held
-item. Without either it stays inert instead of blocking every right click. A physical right press
-is only taken over when the clicker would actually act on it; while the gate is blocking, the
-press and its release go to the game untouched.
+The gate is driven by the same mod, so it needs a mod build that reports the held item. Without
+one it stays inert instead of blocking every right click. A physical right press is only taken
+over when the clicker would actually act on it; while the gate is blocking, the press and its
+release go to the game untouched. The app rereads the bridge file on every right press and keeps
+the last reported item if the file goes briefly stale, so switching to a bow and firing at once
+cannot hand the press to the clicker, and a client that stalls for a moment cannot start a click
+train into whatever is in hand.
 
 **Skip beds** sits under the block gate and is on by default. A bed is a placeable block, so
 without it a right clicker would place the bed the moment you hold one; with it the clicker
@@ -511,6 +514,18 @@ keybinds survive the rename.
 - That is **Placeable blocks only**: the held item cannot be placed. Hold a block, or switch
   **Placeable blocks only** off. This also appears if the mod is an older build that does not
   export the held item; update the jar and restart Minecraft.
+
+**A bow draw or quick shot looks wrong**
+- The bridge mod never sends input — it only reads the game — so it cannot change how a bow
+  animates. The right clicker is the only part of the app that presses the button by itself.
+- With **Placeable blocks only** on, a bow is not a block, so the clicker pauses and your press
+  and release go to the game untouched. A quick tap really is a half-drawn shot: vanilla only
+  completes the draw while the button is held.
+- The press is now checked against the item in hand at that moment, so switching from blocks to
+  the bow and firing immediately is no longer taken over by the clicker. If it still happens,
+  check the right CPS readout on Home: a non-zero rate while you hold a bow means the clicker is
+  running, which points at a bridge that is not reporting the held item (Mod → Global shows the
+  link state).
 
 **The left clicker stops with `no target in crosshair`**
 - The left gate is on its default and the crosshair is not on a target. Look at a mob, another

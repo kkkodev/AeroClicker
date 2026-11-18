@@ -38,8 +38,11 @@
 // Reading is the whole contract: nothing is sent to the server and no input is touched.
 namespace McLink {
 
-// A game that crashed or was closed must not leave the clicker paused forever, so a line older
-// than this is treated as no mod at all and the key-based guesses take over again.
+// A game that crashed or was closed must not drive the slot rules or the combat resets with a
+// line from minutes ago, so a line older than this is treated as no live link: slot rules and
+// the event counters stop. Polling leaves `out` untouched, which lets a caller keep the last
+// reported item state (the right clicker's gates do, so a stalled client cannot unlock a click
+// into whatever is in hand).
 inline constexpr long long STALE_MS = 2500;
 
 inline const char* path() {

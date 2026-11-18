@@ -655,21 +655,30 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                                   mc.focus != 1;
         left_clicker.set_pause(Clicker::PAUSE_OTHER_WINDOW, other_window);
         right_clicker.set_pause(Clicker::PAUSE_OTHER_WINDOW, other_window);
-        // Item/target gates. Both read only what the bridge mod publishes, and a field the
-        // running mod build does not report (== -1) leaves that half of the gate inert rather
-        // than blocking every click. With no link at all they are inert too.
-        right_clicker.set_pause(Clicker::PAUSE_HELD_ITEM,
-                                config.right_placeable_only && mc_live && mc.block == 0);
-        right_clicker.set_pause(Clicker::PAUSE_HELD_BED,
-                                config.right_placeable_only && config.right_gate_no_bed &&
-                                mc_live && mc.bed == 1);
-        right_clicker.set_pause(Clicker::PAUSE_NO_BLOCK,
-                                config.right_look_block && mc_live && mc.look == 0);
-        // Interactive blocks: a right click here opens a chest / crafting table, or toggles a
-        // door / trapdoor, instead of placing the held block. Pausing keeps the clicker from
-        // interacting; a physical press is still forwarded, so using one by hand works.
-        right_clicker.set_pause(Clicker::PAUSE_INTERACTIVE,
-                                config.right_skip_interactive && mc_live && mc.interactive == 1);
+        // The right clicker's item gates read only what the bridge mod publishes. The last line
+        // it wrote stays authoritative until it writes another one: a client that stalls for a
+        // moment (a long GC pause, a frozen server tick) stops updating the file, and dropping
+        // these gates then would start a right click into whatever is in hand -- a bow, a pearl,
+        // food -- the instant the game resumes. A build that never reports a field leaves it at
+        // -1, so a missing mod keeps the gate inert instead of blocking every right click.
+        //
+        // One lambda so the same check can be run again from a physical press, which uses the
+        // item in hand right now instead of the sample from up to one bridge pass ago.
+        auto apply_right_gates = [&](const McLink::State& s) {
+            right_clicker.set_pause(Clicker::PAUSE_HELD_ITEM,
+                                    config.right_placeable_only && s.block == 0);
+            right_clicker.set_pause(Clicker::PAUSE_HELD_BED,
+                                    config.right_placeable_only && config.right_gate_no_bed &&
+                                    s.bed == 1);
+            right_clicker.set_pause(Clicker::PAUSE_NO_BLOCK,
+                                    config.right_look_block && s.look == 0);
+            // Interactive blocks: a right click here opens a chest / crafting table, or toggles
+            // a door / trapdoor, instead of placing the held block. Pausing keeps the clicker
+            // from interacting; a physical press is still forwarded, so using one by hand works.
+            right_clicker.set_pause(Clicker::PAUSE_INTERACTIVE,
+                                    config.right_skip_interactive && s.interactive == 1);
+        };
+        apply_right_gates(mc);
         const int left_gate = config.left_gate;
         left_clicker.set_pause(Clicker::PAUSE_NO_SWORD,
                                mc_live && (left_gate & 1) && mc.sword == 0);
@@ -850,6 +859,15 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                                 mouse_right_held = true;
                                 mouse_right_started = false;
                                 mouse_right_gate_blocked = false;
+                                // Switching from a block to a bow and pressing inside the
+                                // bridge's poll window used to decide ownership from the
+                                // previous item, so the clicker took the press and fired a
+                                // burst into the bow. Read the file once more first.
+                                if (config.right_placeable_only || config.right_look_block ||
+                                    config.right_skip_interactive) {
+                                    McLink::State fresh;
+                                    if (McLink::poll(fresh)) apply_right_gates(fresh);
+                                }
                                 const uint32_t pauses = right_clicker.pause_mask();
                                 mouse_right_owned = !over_app &&
                                                     !(pauses & Clicker::PAUSE_NO_TAKEOVER) &&
