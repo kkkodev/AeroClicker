@@ -217,14 +217,42 @@ static bool oxygen_high_threshold(const ImVec4& c) {
     return khcy_from(scheme_shade(c, ShadeLight, 0.5f)).y < khcy_from(c).y;
 }
 
-// Contrast used for the window background. This deliberately does NOT read [KDE] contrast
-// from the colour scheme: the Oxygen decoration and widget style build their Helper from
-// oxygenrc (KSharedConfig::openConfig("oxygenrc")), which has no [KDE] group, so KColorScheme
-// falls back to its default contrast of 7 (0.7) no matter what the scheme says. The background
-// shades must use the same value or the client gradient will not line up with the titlebar.
-// This is exactly why Oxygen schemes (which happen to set contrast=7) merged perfectly while
-// schemes such as Breeze Dark (contrast=4) showed a step at the seam.
-static const float OXYGEN_CONTRAST = 0.7f;
+// Amplitude of the window background's shading. Oxygen's Helper::loadConfig does
+//   contrast    = KColorScheme::contrastF(config)   // 0.1 * [KDE] contrast, default 7
+//   _bgcontrast = min(1, 0.9 * contrast / 0.7)
+// and the decoration opens its config as KSharedConfig::openConfig("oxygenrc", FullConfig),
+// which layers [KDE] contrast from kdeglobals over it. So this is not a fixed 0.7: Oxygen's
+// own schemes write 7, Breeze Dark writes 4. Hard-coding 0.7 made the client half of the
+// gradient overshoot the titlebar by a few levels whenever the scheme used another value.
+// Like the decoration, the value is taken once and then kept, so the gradient cannot change
+// shape under a running window.
+static float read_kde_contrast() {
+    int percent = 7;   // KColorScheme's fallback when [KDE] contrast is absent
+    const char* home = getenv("HOME");
+    if (home) {
+        std::string path = std::string(home) + "/.config/kdeglobals";
+        FILE* f = fopen(path.c_str(), "r");
+        if (f) {
+            char line[256];
+            bool in_kde = false;
+            while (fgets(line, sizeof(line), f)) {
+                if (line[0] == '[') {
+                    in_kde = strncmp(line, "[KDE]", 5) == 0;
+                    continue;
+                }
+                if (in_kde && strncmp(line, "contrast=", 9) == 0) {
+                    int v;
+                    if (sscanf(line + 9, "%d", &v) == 1) percent = v;
+                    break;
+                }
+            }
+            fclose(f);
+        }
+    }
+    if (percent < 0) percent = 0;
+    if (percent > 10) percent = 10;
+    return 0.1f * (float)percent;
+}
 
 static ImVec4 oxygen_bg_top(const ImVec4& c, float bgc) {
     if (oxygen_low_threshold(c))
@@ -252,7 +280,7 @@ static ImVec4 oxygen_bg_radial(const ImVec4& c, float bgc) {
 }
 
 OxygenBackground oxygen_background(float client_h) {
-    const float contrast = OXYGEN_CONTRAST;
+    static const float contrast = read_kde_contrast();
     const float bgc = fminf(1.0f, 0.9f * contrast / 0.7f);
 
     OxygenBackground bg;
