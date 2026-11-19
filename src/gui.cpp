@@ -1250,7 +1250,8 @@ void gui_run(GuiState& state) {
             // same KDE maths and the same yShift the Oxygen widget style uses, so the two
             // halves join seamlessly without re-creating (or drawing over) the decoration.
             bgdl->AddRectFilled(ImVec2(0, 0), ImVec2((float)win_w, (float)win_h), OxCol(g_body_color));
-            draw_oxygen_background(bgdl, (float)win_w, (float)win_h);
+            draw_oxygen_background(bgdl, (float)win_w, (float)win_h,
+                                   glfwGetWindowAttrib(window, GLFW_FOCUSED) != 0);
             // A 1px line at y=0 would cut the surface exactly where the decoration hands over.
             if (!g_tb_edge_valid)
                 bgdl->AddLineH(0.0f, (float)win_w, 0.0f,

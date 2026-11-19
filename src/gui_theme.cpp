@@ -173,6 +173,11 @@ static ImVec4 kdarken(const ImVec4& col, float ky, float kc = 1.0f) {
     c.c = kclamp01(c.c * kc);
     return khcy_to_rgb(c);
 }
+static ImVec4 klighten(const ImVec4& col, float ky) {
+    Khcy c = khcy_from(col);
+    c.y = kclamp01(1.0f - (1.0f - c.y) * (1.0f - ky));
+    return khcy_to_rgb(c);
+}
 
 enum ShadeRole { ShadeLight, ShadeMidlight, ShadeMid, ShadeDark, ShadeShadow };
 
@@ -279,12 +284,109 @@ static ImVec4 oxygen_bg_radial(const ImVec4& c, float bgc) {
     return scheme_shade(c, ShadeLight, bgc);
 }
 
-OxygenBackground oxygen_background(float client_h) {
+// KColorScheme::createApplicationPalette() runs the [ColorEffects:Inactive] group over the
+// Window set for the Inactive group, and KWin hands that palette to the decoration, which
+// paints its half of the gradient from palette.color(Inactive, Window). Our client half kept
+// using the Active base, so the join only broke while the window was unfocused. These are the
+// same state effects KColorScheme applies (its StateEffects class); like the contrast, they
+// are read once so the gradient cannot shift under a running window.
+struct KdeInactiveEffects {
+    bool   enabled = false;   // no Enable key -> off for Inactive; present but empty -> on
+    int    intensity = 0;     // IntensityNoEffect
+    float  intensity_amount = 0.0f;
+    int    color = 1;         // ColorDesaturate
+    float  color_amount = -0.9f;
+    ImVec4 tint = ImVec4(112.0f / 255.0f, 111.0f / 255.0f, 110.0f / 255.0f, 1.0f);
+};
+
+// KConfig treats a bool as false only for "false", "no", "off" and "0"; anything else
+// (including an empty "Enable=") reads as true.
+static bool kde_bool(const char* value) {
+    while (*value == ' ' || *value == '\t') ++value;
+    const size_t len = strcspn(value, " \t\r\n");
+    static const char* const falsy[] = { "false", "no", "off", "0" };
+    for (const char* f : falsy) {
+        if (strlen(f) == len && strncasecmp(value, f, len) == 0) return false;
+    }
+    return true;
+}
+
+static KdeInactiveEffects read_kde_inactive_effects() {
+    KdeInactiveEffects effects;
+    const char* home = getenv("HOME");
+    if (!home) return effects;
+    std::string path = std::string(home) + "/.config/kdeglobals";
+    FILE* f = fopen(path.c_str(), "r");
+    if (!f) return effects;
+    static const char header[] = "[ColorEffects:Inactive]";
+    char line[256];
+    bool in_group = false;
+    while (fgets(line, sizeof(line), f)) {
+        if (line[0] == '[') {
+            in_group = strncmp(line, header, sizeof(header) - 1) == 0;
+            continue;
+        }
+        if (!in_group) continue;
+        char* eq = strchr(line, '=');
+        if (!eq) continue;
+        *eq = '\0';
+        const char* key = line;
+        const char* value = eq + 1;
+        if      (strcmp(key, "Enable") == 0)          effects.enabled = kde_bool(value);
+        else if (strcmp(key, "IntensityEffect") == 0) effects.intensity = atoi(value);
+        else if (strcmp(key, "IntensityAmount") == 0) effects.intensity_amount = (float)atof(value);
+        else if (strcmp(key, "ColorEffect") == 0)     effects.color = atoi(value);
+        else if (strcmp(key, "ColorAmount") == 0)     effects.color_amount = (float)atof(value);
+        else if (strcmp(key, "Color") == 0) {
+            float r, g, b;
+            if (sscanf(value, "%f,%f,%f", &r, &g, &b) == 3)
+                effects.tint = ImVec4(r / 255.0f, g / 255.0f, b / 255.0f, 1.0f);
+        }
+    }
+    fclose(f);
+    return effects;
+}
+
+static const KdeInactiveEffects& kde_inactive_effects() {
+    static const KdeInactiveEffects effects = read_kde_inactive_effects();
+    return effects;
+}
+
+static ImVec4 kde_inactive_base(const ImVec4& active) {
+    const KdeInactiveEffects& e = kde_inactive_effects();
+    if (!e.enabled) return active;
+    ImVec4 c = active;
+    switch (e.intensity) {
+    case 1:  c = kshade(c, e.intensity_amount); break;    // IntensityShade
+    case 2:  c = kdarken(c, e.intensity_amount); break;   // IntensityDarken
+    case 3:  c = klighten(c, e.intensity_amount); break;  // IntensityLighten
+    default: break;
+    }
+    switch (e.color) {
+    case 1:  // ColorDesaturate
+        c = kdarken(c, 0.0f, 1.0f - e.color_amount);
+        break;
+    case 2:  // ColorFade
+        c = mix4(c, e.tint, e.color_amount);
+        break;
+    case 3: {  // ColorTint: KColorUtils::tint()'s KHCY step, minus its contrast-ratio loop
+        const Khcy base = khcy_from(active);
+        Khcy t = khcy_from(mix4(active, e.tint, powf(e.color_amount, 0.3f)));
+        t.y = base.y + (t.y - base.y) * e.color_amount;
+        c = khcy_to_rgb(t);
+        break;
+    }
+    default: break;
+    }
+    return c;
+}
+
+OxygenBackground oxygen_background(float client_h, bool focused) {
     static const float contrast = read_kde_contrast();
     const float bgc = fminf(1.0f, 0.9f * contrast / 0.7f);
 
     OxygenBackground bg;
-    bg.base    = g_body_color;
+    bg.base    = focused ? g_body_color : kde_inactive_base(g_body_color);
     bg.top     = oxygen_bg_top(bg.base, bgc);
     bg.bottom  = oxygen_bg_bottom(bg.base, bgc);
     bg.radial  = oxygen_bg_radial(bg.base, bgc);
@@ -306,9 +408,9 @@ static ImVec4 oxygen_mix(const ImVec4& a, const ImVec4& b, float t) {
                   a.z + (b.z - a.z) * t, 1.0f);
 }
 
-void draw_oxygen_background(ImDrawList* dl, float w, float h) {
+void draw_oxygen_background(ImDrawList* dl, float w, float h, bool focused) {
     if (w < 1.0f || h < 1.0f) return;
-    const OxygenBackground bg = oxygen_background(h);
+    const OxygenBackground bg = oxygen_background(h, focused);
     const float ys    = bg.y_shift;
     const float split = bg.split_y > 1.0f ? bg.split_y : 1.0f;
 

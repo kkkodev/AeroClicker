@@ -47,8 +47,9 @@ struct OxygenBackground {
     float  y_shift;   // -23, the Oxygen style default
 };
 
-OxygenBackground oxygen_background(float client_h);
-// Fill the client area with the continued gradient. Uses the current KDE contrast setting.
-void draw_oxygen_background(ImDrawList* dl, float w, float h);
+OxygenBackground oxygen_background(float client_h, bool focused = true);
+// Fill the client area with the continued gradient. Uses the current KDE contrast setting and,
+// like the decoration, the scheme's inactive palette while the window is unfocused.
+void draw_oxygen_background(ImDrawList* dl, float w, float h, bool focused = true);
 
 void setup_kde_cursor();
