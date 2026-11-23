@@ -20,6 +20,10 @@ import net.fabricmc.api.ClientModInitializer;
  * interactive (opens a menu, a door, a bed, ...) instead of accepting a placed block.
  * It only ever reads; nothing is sent to the server and no input is changed.
  *
+ * <p>Armor stands are excluded from every "living entity" test. Servers use them for floating
+ * text (holograms, chest timers, NPC name tags); the game counts them as living entities, but
+ * they are decor, so a click at one is neither a target nor a hit.</p>
+ *
  * <p>The state goes to {@code $XDG_RUNTIME_DIR/aeroclicker-mc.state} as one line:
  * {@code slot=<0-8 or -1> screen=<0|1> ms=<epoch milliseconds> block=<0|1|-1>
  * sword=<0|1|-1> target=<0|1|-1> bed=<0|1|-1> look=<0|1|-1> water=<0|1|-1>
@@ -1041,7 +1045,8 @@ public final class StateExport implements ClientModInitializer {
                 Object hit = hitResult.get(mc);
                 if (hit == null || !entityHitClass.isInstance(hit)) return 0;
                 Object entity = hitEntity.invoke(hit);
-                return entity != null && entity != self && livingClass.isInstance(entity) ? 1 : 0;
+                return entity != null && entity != self && !isArmorStand(entity) &&
+                       livingClass.isInstance(entity) ? 1 : 0;
             } catch (ReflectiveOperationException | RuntimeException e) {
                 return -1;
             }
@@ -1275,8 +1280,8 @@ public final class StateExport implements ClientModInitializer {
                 Object world = level.get(mc);
                 if (world == null) return null;
                 Object search = inflate.invoke(getBoundingBox.invoke(self), 6.0);
-                Predicate<Object> wanted = e -> e != self && livingClass.isInstance(e) &&
-                                                isAlive(e);
+                Predicate<Object> wanted = e -> e != self && !isArmorStand(e) &&
+                                                livingClass.isInstance(e) && isAlive(e);
                 return (List<?>) getEntitiesOfClass.invoke(world, entityClass, search, wanted);
             } catch (ReflectiveOperationException | RuntimeException e) {
                 return null;
@@ -1500,6 +1505,22 @@ public final class StateExport implements ClientModInitializer {
             return false;
         }
 
+        /**
+         * True for armor stands, which servers use for floating text: chest timers, holograms,
+         * NPC name tags. The game counts them as living entities, but they are decor, never a
+         * target or an attacker. Leaving them in made the left gate open while mining next to a
+         * chest that has a timer floating above it (Hypixel does this), so the clicker fired
+         * into a block. Subclasses match too: the base class name is checked along the chain.
+         */
+        private static boolean isArmorStand(Object e) {
+            for (Class<?> c = e.getClass(); c != null; c = c.getSuperclass()) {
+                String n = c.getName();
+                // ArmorStand (official), ArmorStandEntity (Yarn), EntityArmorStand (1.8).
+                if (n.endsWith("ArmorStand") || n.endsWith("ArmorStandEntity")) return true;
+            }
+            return false;
+        }
+
         /** Bitmask of what the gate can see: 1 = a mob/player, 2 = a fireball, 3 = both,
          *  0 = a block or nothing, -1 = cannot tell. Keeping the two apart lets the app's
          *  "Click at fireballs" option decide whether fireballs count. The ray keeps going
@@ -1514,6 +1535,7 @@ public final class StateExport implements ClientModInitializer {
                     if (entityHitClass.isInstance(hit)) {
                         Object entity = hitEntity.invoke(hit);
                         if (entity == null || entity == self) return 0;
+                        if (isArmorStand(entity)) return 0;
                         if (livingClass.isInstance(entity)) return 1;
                         return isFireball(entity) ? 2 : 0;
                     }
@@ -1558,7 +1580,7 @@ public final class StateExport implements ClientModInitializer {
                 // class filter would drop fireballs, which the app may or may not count.
                 Class<?> entityClass = livingClass.getSuperclass();
                 if (entityClass == null) return 0;
-                Predicate<Object> wanted = e -> e != self &&
+                Predicate<Object> wanted = e -> e != self && !isArmorStand(e) &&
                     (livingClass.isInstance(e) || isFireball(e));
                 List<?> entities = (List<?>) getEntitiesOfClass.invoke(
                     world, entityClass, search, wanted);

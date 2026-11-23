@@ -254,7 +254,10 @@ when it would accept the placement and `-1` when the build cannot tell; the righ
 **Pause on interactive blocks** option uses it. Sneaking is reported as `0`, because the game
 then places the held block instead of interacting. An older bridge jar reports the narrower
 `menu` field instead, which the app still reads. `target` is a bitmask: `1` for a mob or player, `2` for a fireball,
-`3` for both, `0` for neither and `-1` for unknown. They come after `ms` so an older app build still parses the
+`3` for both, `0` for neither and `-1` for unknown. Armor stands are left out of every
+living-entity check: servers float holograms, chest timers and NPC name tags on them, and
+counting them made the left gate start clicking while mining next to a chest with a timer
+above it. They come after `ms` so an older app build still parses the
 prefix, and an older mod build's `player` field is read as `target`. `hurt` goes up when an
 entity hurts the local player (melee, arrows and fireballs count; fall, fire and other
 environmental damage do not); `hit` goes up when a new swing starts while the exact crosshair
@@ -322,6 +325,8 @@ than exactly on them: the first clicks can miss, and moving onto a player fades 
 instead of switching it on at the frame the crosshair touches the box. That imperfection is
 deliberate. This is only the app's target lead; the game's own reach is not changed. A block in the
 crosshair still wins: the gate pauses while you mine even if a mob is just behind the block.
+Armor stands do not count: servers use them for floating text such as holograms, chest timers and
+NPC name tags, so a timer above a chest next to the block you are mining no longer opens the gate.
 Fireballs count as targets too: one flying at you is found by the same 3.5-block ray, so the
 clicker starts on it and the press is taken over just as it would be for a player. **Click at
 fireballs** under the gate is on by default; clear it to ignore them and let only mobs and players
@@ -417,8 +422,10 @@ reports the counters (the jar in `tools/mc-bridge` does).
   holding means forwarding every key through a virtual keyboard, and a key held across that
   switch would never deliver its release (the game would keep it stuck down), so the grab waits
   for a moment when nothing is pressed. Until then the panel says **Release every key once so
-  W-Tap can take over the keyboard**; after that it taps while you keep W held. S-Tap and
-  Shift-Tap never need the grab.
+  W-Tap can take over the keyboard**; after that it taps while you keep W held. W-Tap only fires
+  from hits made on the ground: a hit in mid-air is skipped, because releasing W there does not
+  break sprint and just leaves you falling without the key. S-Tap and Shift-Tap never need the
+  grab.
 
 Their toggle keys default to F9 and F10 and can be changed in the panels, to a keyboard key or a
 mouse button. Both may share one key, just like the two clickers: one press then toggles both

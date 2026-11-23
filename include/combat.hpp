@@ -308,6 +308,10 @@ struct CombatContext {
     bool slot_blocked;
     bool in_water;
     bool on_ground;
+    // Whether the player stands on the ground *now*. Unlike `on_ground`, which is the posture
+    // the bridge latched before a damage event, this is the live sample from the poll that
+    // carried the event, so a hit made in mid-air is recognised as one.
+    bool on_ground_now;
     // How long ago the bridge last reported the player on the ground. Large when no sample has
     // been seen, so a fresh link cannot grant a grace window it did not observe.
     double ms_since_ground;
@@ -601,6 +605,13 @@ public:
         }
         bool need_w = p_.forward_only || p_.mode == SprintResetMode::W_TAP;
         if (need_w && !kb_.physical(KEY_W)) { stats_.note(ResetOutcome::forward); return; }
+        // W-Tap only means something on the ground: releasing W in the air does not break
+        // sprint (the game checks it when you land) and it just leaves you falling without the
+        // key. Skip the event before the cooldown is claimed, so the next grounded hit works.
+        if (p_.mode == SprintResetMode::W_TAP && !ctx.on_ground_now) {
+            stats_.note(ResetOutcome::air);
+            return;
+        }
         if (!gate_.claim(p_.cooldown_ms)) { stats_.note(ResetOutcome::cooldown); return; }
 
         double probability = combat_clamp(p_.chance, 0, 1);

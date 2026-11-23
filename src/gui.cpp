@@ -809,6 +809,8 @@ static void draw_mod_tab(GuiState& state) {
     } else {
         ImGui::TextDisabled("Release every key once so W-Tap can take over the keyboard");
     }
+    if (state.combat && s.mode == SprintResetMode::W_TAP)
+        ImGui::TextDisabled("Hits made in mid-air are skipped");
     row_check("Only while moving forward (W)", &s.forward_only);
     row_check("Respect the slot filter", &s.use_slot_filter);
     // Only the tap tuning is advanced; the filters above stay visible because they change

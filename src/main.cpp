@@ -612,6 +612,11 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                 // permanently inert, so unknown reads as "safe to try" and "not in water".
                 const bool hit_in_water = mc.hwater >= 0 ? mc.hwater == 1 : mc.water == 1;
                 const bool hit_on_ground = mc.hground >= 0 ? mc.hground != 0 : mc.ground != 0;
+                // Sprint Reset's W-Tap wants the posture at the hit itself, not the one latched
+                // for the last damage: it must stay quiet while you jump and hit in the air.
+                // An older build that cannot report `ground` leaves it unknown, which reads as
+                // "on the ground" so the filter stays inert instead of blocking every tap.
+                const bool now_on_ground = mc.ground >= 0 ? mc.ground != 0 : hit_on_ground;
                 // Deliberately read before the history update below: this is the last sample
                 // from *before* the current poll, matching the posture the bridge latched.
                 const double ms_since_ground = ground_seen
@@ -623,6 +628,7 @@ static void input_thread(Config& config, Clicker& left_clicker, Clicker& right_c
                     config.slot_auto_enabled && (slot < 0 || !config.left_slots[slot]),
                     hit_in_water,
                     hit_on_ground,
+                    now_on_ground,
                     ms_since_ground,
                     backstab,
                 };
