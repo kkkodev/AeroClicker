@@ -144,7 +144,9 @@ static void jump_preset_grid(JumpResetProfile& p, float inner_w) {
                            ImVec2(tile_w, tile_h), jump_matches_preset(p, JUMP_RESET_PRESETS[i])))
             jump_apply_preset(p, JUMP_RESET_PRESETS[i]);
     }
-    ImGui::SetCursorPos(ImVec2(x0, grid_y + tile_h));
+    // The tiles are placed at a fixed position, so the next row would otherwise start right on
+    // their bottom edge. Leave the same gap the "Reaction preset" label has above them.
+    ImGui::SetCursorPos(ImVec2(x0, grid_y + tile_h + st.ItemSpacing.y));
 }
 
 static int mode_to_idx(ActivationMode m) { return m == ActivationMode::TOGGLE ? 0 : (m == ActivationMode::HOLD ? 1 : 2); }
