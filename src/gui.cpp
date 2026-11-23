@@ -124,7 +124,8 @@ static void jump_apply_preset(JumpResetProfile& p, const JumpResetPreset& q) {
     p.cooldown_ms = q.cooldown_ms;
 }
 
-// Three short names fit one row, so unlike the clicker grid there is no second row to balance.
+// The presets run tame to blatant and all names are short, so one row reads as a scale from
+// left to right; unlike the clicker grid there is no second row to balance.
 static void jump_preset_grid(JumpResetProfile& p, float inner_w) {
     const ImGuiStyle& st = ImGui::GetStyle();
     const float sp = st.ItemSpacing.x;

@@ -232,12 +232,16 @@ struct JumpResetPreset {
 };
 
 inline const JumpResetPreset JUMP_RESET_PRESETS[] = {
-    // A human reacting to a hit is slow and occasionally misses the jump entirely.
-    {"Legit", "80-190 ms", 0.80, 110.0, 30.0, 80.0, 190.0, 62.0, 8.0, 45.0, 85.0, 500.0},
+    // Slightly tamer than the default: a little slower and occasionally missing, for a fight
+    // where the reset should not be the thing that stands out.
+    {"Legit", "50-160 ms", 0.85, 70.0, 22.0, 50.0, 160.0, 60.0, 8.0, 45.0, 82.0, 500.0},
     // The shipped default: fast, but with a right-skewed tail so it is not frame-perfect.
     {"Balanced", "30-140 ms", 0.92, 45.0, 15.0, 30.0, 140.0, 65.0, 7.0, 48.0, 85.0, 450.0},
-    // Every hit, well under a human reaction, for when the reset itself matters more.
-    {"Blatant", "5-35 ms", 1.00, 15.0, 5.0, 5.0, 35.0, 62.0, 5.0, 50.0, 78.0, 300.0},
+    // Every hit, about half the default reaction, still with a few ms of spread.
+    {"Fast", "12-60 ms", 1.00, 22.0, 7.0, 12.0, 60.0, 63.0, 6.0, 50.0, 80.0, 350.0},
+    // Every hit, as close to the damage tick as the app can press, for when the reset matters
+    // more than looking human.
+    {"Blatant", "2-25 ms", 1.00, 8.0, 3.0, 2.0, 25.0, 62.0, 4.0, 52.0, 75.0, 250.0},
 };
 constexpr int JUMP_RESET_PRESET_COUNT =
     sizeof(JUMP_RESET_PRESETS) / sizeof(JUMP_RESET_PRESETS[0]);
