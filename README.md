@@ -70,8 +70,9 @@ Fatigue breaks are short and infrequent: 0.25–0.6 s of rest every 30–75 s, a
 restarts whenever clicking is paused, so resuming never begins with a break. Hold times follow the
 rate and drift slowly around their mean, as a real hand's grip does, rather than being independent
 random draws. Every value is editable in the **Advanced** tab's **Left clicker** and
-**Right clicker** dropdowns, and **Normal**, **Fast (14-20 CPS)** and
-**Butterfly** raise the double-click chance as the click rate rises.
+**Right clicker** dropdowns. **Fast (14-20 CPS)** and **Butterfly** keep a little more
+double-click chance than Normal, and Fast also widens the rate and hold spread and adds the
+occasional longer hold, so the extra speed keeps an irregular, hand-like rhythm.
 
 ---
 

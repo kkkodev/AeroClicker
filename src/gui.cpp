@@ -255,7 +255,6 @@ static void draw_clicker_card(const char* title, ClickerProfile& profile, Activa
     stacked_keybind("Toggle key", key, inner);
     int idx = mode_to_idx(mode);
     if (stacked_combo("Activation", &idx, "Toggle\0Hold\0Mouse\0", inner)) mode = idx_to_mode(idx);
-    stacked_slider("Speed (CPS)", &profile.cps_mean, CPS_MEAN_LO, CPS_MEAN_HI, "%.1f", inner);
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
     preset_grid(presets, profile, inner);
     end_panel();
@@ -1204,10 +1203,11 @@ void gui_run(GuiState& state) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
     glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
-    // The home page stacks both clicker cards, the slot strip and both reset cards; at 700 px
-    // it scrolled on first launch. 820 shows all of it, capped to the monitor's work area so a
-    // short screen cannot open a window taller than the display.
-    int launch_w = 760, launch_h = 760;
+    // The home page stacks both clicker cards, the slot strip and both reset cards. The cards no
+    // longer carry a speed slider, so a slightly narrower, shorter window still shows the whole
+    // page, capped to the monitor's work area so a short screen cannot open taller than the
+    // display.
+    int launch_w = 700, launch_h = 720;
     if (GLFWmonitor* monitor = glfwGetPrimaryMonitor()) {
         int mx = 0, my = 0, mw = 0, mh = 0;
         glfwGetMonitorWorkarea(monitor, &mx, &my, &mw, &mh);
