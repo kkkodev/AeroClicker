@@ -237,11 +237,12 @@ inline const JumpResetPreset JUMP_RESET_PRESETS[] = {
     {"Legit", "50-160 ms", 0.85, 70.0, 22.0, 50.0, 160.0, 60.0, 8.0, 45.0, 82.0, 500.0},
     // The shipped default: fast, but with a right-skewed tail so it is not frame-perfect.
     {"Balanced", "30-140 ms", 0.92, 45.0, 15.0, 30.0, 140.0, 65.0, 7.0, 48.0, 85.0, 450.0},
-    // Every hit, about half the default reaction, still with a few ms of spread.
-    {"Fast", "12-60 ms", 1.00, 22.0, 7.0, 12.0, 60.0, 63.0, 6.0, 50.0, 80.0, 350.0},
-    // Every hit, as close to the damage tick as the app can press, for when the reset matters
-    // more than looking human.
-    {"Blatant", "2-25 ms", 1.00, 8.0, 3.0, 2.0, 25.0, 62.0, 4.0, 52.0, 75.0, 250.0},
+    // Quicker than the default, but the floor and the long tail stay inside a reaction a person
+    // could plausibly have; one hit in twenty is still let go on purpose.
+    {"Fast", "25-110 ms", 0.95, 36.0, 12.0, 25.0, 110.0, 64.0, 7.0, 50.0, 84.0, 400.0},
+    // The most blatant step still keeps a human floor and the occasional miss, so it does not
+    // read as a script: roughly one press in fifty is skipped.
+    {"Blatant", "18-85 ms", 0.98, 28.0, 9.0, 18.0, 85.0, 63.0, 6.0, 50.0, 80.0, 320.0},
 };
 constexpr int JUMP_RESET_PRESET_COUNT =
     sizeof(JUMP_RESET_PRESETS) / sizeof(JUMP_RESET_PRESETS[0]);

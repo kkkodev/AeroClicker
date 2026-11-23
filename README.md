@@ -403,8 +403,9 @@ reports the counters (the jar in `tools/mc-bridge` does).
   a jump. Projectiles are judged by the direction they were flying, so an arrow from behind is
   still a backstab. The **Reaction preset** tiles pick the feel in one click, running from
   **Legit** (85 % chance, a 50–160 ms reaction) through **Balanced** (the defaults) and **Fast**
-  (every hit, 12–60 ms) to **Blatant** (every hit, 2–25 ms), so the last two are progressively
-  more blatant than the default. A preset only changes the timing sliders; the filters below keep
+  (95 % chance, 25–110 ms) to **Blatant** (98 % chance, 18–85 ms). The last two react faster than
+  the default but keep a human floor, a long tail and the occasional skipped hit, so they escalate
+  without looking frame-perfect. A preset only changes the timing sliders; the filters below keep
   their own settings. Balanced is tuned for a fast but human-looking reaction: 92 % chance, a
   45 ms reaction drawn from a right-skewed 15 ms spread (clamped to 30–140 ms), a 65 ms hold with
   a 7 ms spread (48–85 ms), and a 450 ms cooldown. It only fires
