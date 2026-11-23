@@ -401,10 +401,12 @@ reports the counters (the jar in `tools/mc-bridge` does).
   It does **not** count a nearby entity or the entity under the crosshair by itself, because both
   are present during an ordinary fight and they used to turn the occasional fall or burn tick into
   a jump. Projectiles are judged by the direction they were flying, so an arrow from behind is
-  still a backstab. The defaults are
-  tuned for a fast but human-looking
-  reaction: 92 % chance, a 45 ms reaction drawn from a right-skewed 15 ms spread (clamped to
-  30–140 ms), a 65 ms hold with a 7 ms spread (48–85 ms), and a 450 ms cooldown. It only fires
+  still a backstab. The **Reaction preset** tiles pick the feel in one click: **Legit** (80 %
+  chance, an 80–190 ms reaction), **Balanced** (the defaults) and **Blatant** (every hit, 5–35 ms).
+  A preset only changes the timing sliders; the filters below keep their own settings. Balanced is
+  tuned for a fast but human-looking reaction: 92 % chance, a 45 ms reaction drawn from a
+  right-skewed 15 ms spread (clamped to 30–140 ms), a 65 ms hold with a 7 ms spread (48–85 ms),
+  and a 450 ms cooldown. It only fires
   while moving with any WASD key (**Only while moving (WASD)**, on by default); the stricter
   **Only while moving forward (W)** option narrows that to W. The two are alternatives: ticking
   one clears the other, because forward already implies moving. It respects the slot filter, stays

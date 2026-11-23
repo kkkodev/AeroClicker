@@ -212,6 +212,36 @@ struct JumpResetProfile {
     double ground_grace_ms = 60.0;
 };
 
+// A preset only carries the reaction feel: chance, delay and hold. The filters (moving, water,
+// ground, slots) stay whatever the user set, because "legit" versus "blatant" describes how the
+// press looks, not when the module is allowed to run. Balanced is the default profile above, so
+// a fresh config shows that tile as the active one.
+struct JumpResetPreset {
+    const char* name;
+    const char* note;
+    double chance;
+    double delay_ms_mean;
+    double delay_ms_stddev;
+    double delay_ms_min;
+    double delay_ms_max;
+    double hold_ms_mean;
+    double hold_ms_stddev;
+    double hold_ms_min;
+    double hold_ms_max;
+    double cooldown_ms;
+};
+
+inline const JumpResetPreset JUMP_RESET_PRESETS[] = {
+    // A human reacting to a hit is slow and occasionally misses the jump entirely.
+    {"Legit", "80-190 ms", 0.80, 110.0, 30.0, 80.0, 190.0, 62.0, 8.0, 45.0, 85.0, 500.0},
+    // The shipped default: fast, but with a right-skewed tail so it is not frame-perfect.
+    {"Balanced", "30-140 ms", 0.92, 45.0, 15.0, 30.0, 140.0, 65.0, 7.0, 48.0, 85.0, 450.0},
+    // Every hit, well under a human reaction, for when the reset itself matters more.
+    {"Blatant", "5-35 ms", 1.00, 15.0, 5.0, 5.0, 35.0, 62.0, 5.0, 50.0, 78.0, 300.0},
+};
+constexpr int JUMP_RESET_PRESET_COUNT =
+    sizeof(JUMP_RESET_PRESETS) / sizeof(JUMP_RESET_PRESETS[0]);
+
 struct SprintResetProfile {
     SprintResetMode mode = SprintResetMode::W_TAP;
     double chance = 0.90;

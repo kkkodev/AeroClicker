@@ -100,6 +100,52 @@ static void preset_grid(const ClickerPreset* presets, ClickerProfile& profile, f
     ImGui::SetCursorPos(ImVec2(x0, grid_y + (float)rows * tile_h + (float)(rows - 1) * gap));
 }
 
+// A jump reset preset is active when the timing values still equal it; editing any slider in
+// Advanced clears the highlight, exactly like an edited clicker preset.
+static bool jump_matches_preset(const JumpResetProfile& p, const JumpResetPreset& q) {
+    auto eq = [](double x, double y) { const double d = x - y; return d < 5e-4 && d > -5e-4; };
+    return eq(p.chance, q.chance) && eq(p.delay_ms_mean, q.delay_ms_mean) &&
+           eq(p.delay_ms_stddev, q.delay_ms_stddev) && eq(p.delay_ms_min, q.delay_ms_min) &&
+           eq(p.delay_ms_max, q.delay_ms_max) && eq(p.hold_ms_mean, q.hold_ms_mean) &&
+           eq(p.hold_ms_stddev, q.hold_ms_stddev) && eq(p.hold_ms_min, q.hold_ms_min) &&
+           eq(p.hold_ms_max, q.hold_ms_max) && eq(p.cooldown_ms, q.cooldown_ms);
+}
+
+static void jump_apply_preset(JumpResetProfile& p, const JumpResetPreset& q) {
+    p.chance = q.chance;
+    p.delay_ms_mean = q.delay_ms_mean;
+    p.delay_ms_stddev = q.delay_ms_stddev;
+    p.delay_ms_min = q.delay_ms_min;
+    p.delay_ms_max = q.delay_ms_max;
+    p.hold_ms_mean = q.hold_ms_mean;
+    p.hold_ms_stddev = q.hold_ms_stddev;
+    p.hold_ms_min = q.hold_ms_min;
+    p.hold_ms_max = q.hold_ms_max;
+    p.cooldown_ms = q.cooldown_ms;
+}
+
+// Three short names fit one row, so unlike the clicker grid there is no second row to balance.
+static void jump_preset_grid(JumpResetProfile& p, float inner_w) {
+    const ImGuiStyle& st = ImGui::GetStyle();
+    const float sp = st.ItemSpacing.x;
+    const int cols = JUMP_RESET_PRESET_COUNT;
+    const float tile_w = (inner_w - sp * (float)(cols - 1)) / (float)cols;
+    const float tile_h = ImGui::GetFrameHeight() + 16.0f;
+    const float x0 = ImGui::GetCursorPosX();
+
+    ImGui::TextDisabled("Reaction preset");
+    const float grid_y = ImGui::GetCursorPosY();
+    for (int i = 0; i < cols; i++) {
+        ImGui::SetCursorPos(ImVec2(x0 + (float)i * (tile_w + sp), grid_y));
+        char id[32];
+        snprintf(id, sizeof(id), "##jump_preset%d", i);
+        if (ox_preset_tile(id, JUMP_RESET_PRESETS[i].name, JUMP_RESET_PRESETS[i].note,
+                           ImVec2(tile_w, tile_h), jump_matches_preset(p, JUMP_RESET_PRESETS[i])))
+            jump_apply_preset(p, JUMP_RESET_PRESETS[i]);
+    }
+    ImGui::SetCursorPos(ImVec2(x0, grid_y + tile_h));
+}
+
 static int mode_to_idx(ActivationMode m) { return m == ActivationMode::TOGGLE ? 0 : (m == ActivationMode::HOLD ? 1 : 2); }
 static ActivationMode idx_to_mode(int i) { return i == 0 ? ActivationMode::TOGGLE : (i == 1 ? ActivationMode::HOLD : ActivationMode::MOUSE); }
 
@@ -731,6 +777,9 @@ static void draw_mod_tab(GuiState& state) {
     // settings. Tuning something before turning it on is normal, and hiding it made the card
     // look empty whenever the module was off.
     JumpResetProfile& j = state.config.jump_reset;
+    // Presets change only the reaction timing; the filters below stay independent, so picking
+    // "Blatant" does not quietly enable jumps in water or with a game menu open.
+    jump_preset_grid(j, panel_inner());
     // A movement filter is an alternative, not a layer: "forward" already implies moving,
     // so ticking one clears the other instead of leaving a redundant pair checked.
     if (row_check("Only while moving (WASD)", &j.moving_only) && j.moving_only)
