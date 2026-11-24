@@ -1430,20 +1430,18 @@ void begin_panel(const char* label, float width, int status, OxIcon icon) {
     const float text_x = start.x + PANEL_PAD + (has_icon ? isz + igap : 0.0f);
     ImGui::SetCursorScreenPos(crisp_min(ImVec2(text_x, start.y + 12.0f)));
 
-    // Keep the title close to the normal text colour at full alpha. A strong accent tint at
-    // 200 alpha made the small caps look washed out and fuzzy; the icon carries the accent.
-    const ImVec4 icon_col = lerp4(g_text_color, g_accent_color, ox_is_light() ? 0.55f : 0.50f);
-    const ImVec4 hdr_col = lerp4(g_text_color, g_accent_color, ox_is_light() ? 0.20f : 0.18f);
+    // The title and its icon share one accent tint at full alpha. Matching them exactly keeps
+    // the header reading as one unit; the pixel snap above is what keeps the small caps sharp.
+    const ImVec4 hdr_col = lerp4(g_text_color, g_accent_color, ox_is_light() ? 0.55f : 0.50f);
     ImGui::PushStyleColor(ImGuiCol_Text, OxCol(hdr_col));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 4.0f));
     char up[128]; strtoupper(up, sizeof(up), label);
     ImGui::TextUnformatted(up);
     if (has_icon) {
         const ImVec2 tmn = ImGui::GetItemRectMin(), tmx = ImGui::GetItemRectMax();
-        // Full alpha, like the title: the header tint plus antialiasing made small glyphs fuzzy.
         ox_draw_icon(dl, icon,
                      ImVec2(start.x + PANEL_PAD + isz * 0.5f, (tmn.y + tmx.y) * 0.5f),
-                     isz, OxCol(icon_col));
+                     isz, OxCol(hdr_col));
     }
     ImGui::PopStyleColor();
 
