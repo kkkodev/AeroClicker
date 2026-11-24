@@ -1424,23 +1424,26 @@ void begin_panel(const char* label, float width, int status, OxIcon icon) {
 
     ImGui::BeginGroup();
 
-    if (has_icon)
-        ImGui::SetCursorScreenPos(ImVec2(start.x + PANEL_PAD + isz + igap, start.y + 12.0f));
+    // Header text sits after the icon, so its x can land on a half pixel at fractional scales
+    // (22 logical px * 1.25 = 27.5). Every glyph is then resampled and the whole title looks
+    // soft next to the body text. Snap the start to the physical pixel grid.
+    const float text_x = start.x + PANEL_PAD + (has_icon ? isz + igap : 0.0f);
+    ImGui::SetCursorScreenPos(crisp_min(ImVec2(text_x, start.y + 12.0f)));
 
-    // The panel header was a 45% accent tint at 200 alpha: pleasant on dark, washed out on
-    // a light panel. Deepen it in light mode instead of fading it out.
-    const ImVec4 hdr_col = lerp4(g_text_color, g_accent_color, ox_is_light() ? 0.55f : 0.45f);
-    const ImU32 hdr_ink = ox_is_light() ? OxCol(hdr_col) : OxCol(hdr_col, 200);
-    ImGui::PushStyleColor(ImGuiCol_Text, hdr_ink);
+    // Keep the title close to the normal text colour at full alpha. A strong accent tint at
+    // 200 alpha made the small caps look washed out and fuzzy; the icon carries the accent.
+    const ImVec4 icon_col = lerp4(g_text_color, g_accent_color, ox_is_light() ? 0.55f : 0.50f);
+    const ImVec4 hdr_col = lerp4(g_text_color, g_accent_color, ox_is_light() ? 0.20f : 0.18f);
+    ImGui::PushStyleColor(ImGuiCol_Text, OxCol(hdr_col));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 4.0f));
     char up[128]; strtoupper(up, sizeof(up), label);
     ImGui::TextUnformatted(up);
     if (has_icon) {
         const ImVec2 tmn = ImGui::GetItemRectMin(), tmx = ImGui::GetItemRectMax();
-        // Full alpha: the 200-alpha header tint plus antialiasing made small glyphs look fuzzy.
+        // Full alpha, like the title: the header tint plus antialiasing made small glyphs fuzzy.
         ox_draw_icon(dl, icon,
                      ImVec2(start.x + PANEL_PAD + isz * 0.5f, (tmn.y + tmx.y) * 0.5f),
-                     isz, OxCol(hdr_col));
+                     isz, OxCol(icon_col));
     }
     ImGui::PopStyleColor();
 

@@ -238,11 +238,11 @@ inline const JumpResetPreset JUMP_RESET_PRESETS[] = {
     // The shipped default: fast, but with a right-skewed tail so it is not frame-perfect.
     {"Balanced", "30-140 ms", 0.92, 45.0, 15.0, 30.0, 140.0, 65.0, 7.0, 48.0, 85.0, 450.0},
     // Quicker than the default, but the floor and the long tail stay inside a reaction a person
-    // could plausibly have; one hit in twenty is still let go on purpose.
-    {"Fast", "25-110 ms", 0.95, 36.0, 12.0, 25.0, 110.0, 64.0, 7.0, 50.0, 84.0, 400.0},
+    // could plausibly have; roughly one hit in fourteen is still let go on purpose.
+    {"Fast", "25-110 ms", 0.93, 36.0, 12.0, 25.0, 110.0, 64.0, 7.0, 50.0, 84.0, 400.0},
     // The most blatant step still keeps a human floor and the occasional miss, so it does not
-    // read as a script: roughly one press in fifty is skipped.
-    {"Blatant", "18-85 ms", 0.98, 28.0, 9.0, 18.0, 85.0, 63.0, 6.0, 50.0, 80.0, 320.0},
+    // read as a script: one press in twenty is skipped.
+    {"Blatant", "18-85 ms", 0.95, 28.0, 9.0, 18.0, 85.0, 63.0, 6.0, 50.0, 80.0, 320.0},
 };
 constexpr int JUMP_RESET_PRESET_COUNT =
     sizeof(JUMP_RESET_PRESETS) / sizeof(JUMP_RESET_PRESETS[0]);
